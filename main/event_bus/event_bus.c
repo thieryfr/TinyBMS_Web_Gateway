@@ -1,189 +1,21 @@
 #include "event_bus.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
-#include "freertos/portmacro.h"
-
-typedef struct event_bus_subscription {
-    QueueHandle_t queue;
-    event_bus_subscriber_cb_t callback;
-    void *context;
-    struct event_bus_subscription *next;
-} event_bus_subscription_t;
-
-static event_bus_subscription_t *s_subscribers = NULL;
-static SemaphoreHandle_t s_bus_lock = NULL;
-static portMUX_TYPE s_init_spinlock = portMUX_INITIALIZER_UNLOCKED;
-
-static void event_bus_ensure_init(void)
+esp_err_t event_bus_init(void)
 {
-    if (s_bus_lock != NULL) {
-        return;
-    }
-
-    portENTER_CRITICAL(&s_init_spinlock);
-    if (s_bus_lock == NULL) {
-        s_bus_lock = xSemaphoreCreateMutex();
-    }
-    portEXIT_CRITICAL(&s_init_spinlock);
+    return ESP_OK;
 }
 
-void event_bus_init(void)
+esp_err_t event_bus_register(event_bus_callback_t cb, void *context)
 {
-    event_bus_ensure_init();
+    (void)cb;
+    (void)context;
+    return ESP_OK;
 }
 
-void event_bus_deinit(void)
+esp_err_t event_bus_post(event_bus_callback_t cb, void *context)
 {
-    if (s_bus_lock == NULL) {
-        return;
+    if (cb) {
+        cb(context);
     }
-
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
-        return;
-    }
-
-    event_bus_subscription_t *iter = s_subscribers;
-    s_subscribers = NULL;
-    xSemaphoreGive(s_bus_lock);
-
-    while (iter != NULL) {
-        event_bus_subscription_t *next = iter->next;
-        if (iter->queue != NULL) {
-            vQueueDelete(iter->queue);
-        }
-        vPortFree(iter);
-        iter = next;
-    }
-
-    SemaphoreHandle_t lock = s_bus_lock;
-    s_bus_lock = NULL;
-    vSemaphoreDelete(lock);
-}
-
-event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
-                                                     event_bus_subscriber_cb_t callback,
-                                                     void *context)
-{
-    if (queue_length == 0) {
-        return NULL;
-    }
-
-    event_bus_ensure_init();
-    if (s_bus_lock == NULL) {
-        return NULL;
-    }
-
-    QueueHandle_t queue = xQueueCreate(queue_length, sizeof(event_bus_event_t));
-    if (queue == NULL) {
-        return NULL;
-    }
-
-    event_bus_subscription_t *subscription = pvPortMalloc(sizeof(event_bus_subscription_t));
-    if (subscription == NULL) {
-        vQueueDelete(queue);
-        return NULL;
-    }
-
-    subscription->queue = queue;
-    subscription->callback = callback;
-    subscription->context = context;
-    subscription->next = NULL;
-
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
-        vQueueDelete(queue);
-        vPortFree(subscription);
-        return NULL;
-    }
-
-    subscription->next = s_subscribers;
-    s_subscribers = subscription;
-
-    xSemaphoreGive(s_bus_lock);
-
-    return subscription;
-}
-
-void event_bus_unsubscribe(event_bus_subscription_handle_t handle)
-{
-    if (handle == NULL || s_bus_lock == NULL) {
-        return;
-    }
-
-    event_bus_subscription_t *to_free = NULL;
-
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
-        return;
-    }
-
-    event_bus_subscription_t **link = &s_subscribers;
-    while (*link != NULL) {
-        if (*link == handle) {
-            *link = handle->next;
-            to_free = handle;
-            break;
-        }
-        link = &(*link)->next;
-    }
-
-    xSemaphoreGive(s_bus_lock);
-
-    if (to_free == NULL) {
-        return;
-    }
-
-    if (to_free->queue != NULL) {
-        vQueueDelete(to_free->queue);
-    }
-    vPortFree(to_free);
-}
-
-bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
-{
-    if (event == NULL || s_bus_lock == NULL) {
-        return false;
-    }
-
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
-        return false;
-    }
-
-    bool success = true;
-    event_bus_subscription_t *subscriber = s_subscribers;
-    while (subscriber != NULL) {
-        if (xQueueSend(subscriber->queue, event, timeout) != pdTRUE) {
-            success = false;
-        }
-        subscriber = subscriber->next;
-    }
-
-    xSemaphoreGive(s_bus_lock);
-    return success;
-}
-
-bool event_bus_receive(event_bus_subscription_handle_t handle,
-                       event_bus_event_t *out_event,
-                       TickType_t timeout)
-{
-    if (handle == NULL || out_event == NULL) {
-        return false;
-    }
-
-    return xQueueReceive(handle->queue, out_event, timeout) == pdTRUE;
-}
-
-bool event_bus_dispatch(event_bus_subscription_handle_t handle, TickType_t timeout)
-{
-    if (handle == NULL || handle->callback == NULL) {
-        return false;
-    }
-
-    event_bus_event_t event = {0};
-    if (!event_bus_receive(handle, &event, timeout)) {
-        return false;
-    }
-
-    handle->callback(&event, handle->context);
-    return true;
+    return ESP_OK;
 }

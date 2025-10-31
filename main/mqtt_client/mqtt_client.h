@@ -1,6 +1,5 @@
 #pragma once
 
-#include "event_bus.h"
+#include "esp_err.h"
 
-void mqtt_client_init(void);
-void mqtt_client_set_event_publisher(event_bus_publish_fn_t publisher);
+esp_err_t mqtt_client_init(void);

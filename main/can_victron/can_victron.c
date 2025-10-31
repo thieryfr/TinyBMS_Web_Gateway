@@ -1,14 +1,11 @@
 #include "can_victron.h"
 
-static event_bus_publish_fn_t s_event_publisher = NULL;
+#include "esp_log.h"
 
-void can_victron_set_event_publisher(event_bus_publish_fn_t publisher)
-{
-    s_event_publisher = publisher;
-}
+static const char *TAG = "can_victron";
 
-void can_victron_init(void)
+esp_err_t can_victron_init(void)
 {
-    (void)s_event_publisher;
-    // TODO: Initialize CAN peripheral and configure Victron-specific settings
+    ESP_LOGI(TAG, "CAN Victron stub initialized");
+    return ESP_OK;
 }

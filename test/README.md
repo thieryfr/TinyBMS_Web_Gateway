@@ -1,3 +1,3 @@
-# Tests unitaires
+# TinyBMS Web Gateway Tests
 
-Ce répertoire accueillera les tests unitaires et d'intégration pour chaque module.
+Placeholder for future unit and integration tests.

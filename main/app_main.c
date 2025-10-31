@@ -1,5 +1,4 @@
 #include "app_config.h"
-
 #include "event_bus.h"
 #include "uart_bms.h"
 #include "can_victron.h"
@@ -11,26 +10,22 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
+
+static const char *TAG = "app_main";
 
 void app_main(void)
 {
-    event_bus_init();
-    event_bus_publish_fn_t publish_hook = event_bus_get_publish_hook();
-    uart_bms_set_event_publisher(publish_hook);
-    can_victron_set_event_publisher(publish_hook);
-    pgn_mapper_set_event_publisher(publish_hook);
-    web_server_set_event_publisher(publish_hook);
-    config_manager_set_event_publisher(publish_hook);
-    mqtt_client_set_event_publisher(publish_hook);
-    monitoring_set_event_publisher(publish_hook);
+    ESP_LOGI(TAG, "TinyBMS Web Gateway skeleton initialized");
 
-    config_manager_init();
-    uart_bms_init();
-    can_victron_init();
-    pgn_mapper_init();
-    web_server_init();
-    mqtt_client_init();
-    monitoring_init();
+    (void)event_bus_init();
+    (void)uart_bms_init();
+    (void)can_victron_init();
+    (void)pgn_mapper_init();
+    (void)web_server_init();
+    (void)config_manager_init();
+    (void)mqtt_client_init();
+    (void)monitoring_init();
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));

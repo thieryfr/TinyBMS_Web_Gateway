@@ -1,28 +1,25 @@
-:root {
-    color-scheme: light dark;
-    font-family: "Segoe UI", Roboto, sans-serif;
-}
-
 body {
+    font-family: Arial, sans-serif;
     margin: 0;
-    background: #f5f7fa;
-    color: #1f2933;
-}
-
-#app {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2rem;
+    padding: 0;
+    background-color: #f2f4f8;
+    color: #1f2937;
 }
 
 header {
+    background-color: #1d4ed8;
+    color: #ffffff;
+    padding: 1rem;
     text-align: center;
-    margin-bottom: 2rem;
 }
 
-section {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+main {
+    padding: 2rem;
+}
+
+#dashboard {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
 }

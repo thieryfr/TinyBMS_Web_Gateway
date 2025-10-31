@@ -1,20 +1,5 @@
-idf_component_register(SRCS
-    "app_main.c"
-    "event_bus/event_bus.c"
-    "uart_bms/uart_bms.c"
-    "can_victron/can_victron.c"
-    "pgn_mapper/pgn_mapper.c"
-    "web_server/web_server.c"
-    "config_manager/config_manager.c"
-    "mqtt_client/mqtt_client.c"
-    "monitoring/monitoring.c"
+idf_component_register(
+    SRCS "app_main.c"
     INCLUDE_DIRS "include"
-                 "event_bus"
-                 "uart_bms"
-                 "can_victron"
-                 "pgn_mapper"
-                 "web_server"
-                 "config_manager"
-                 "mqtt_client"
-                 "monitoring"
+    REQUIRES event_bus uart_bms can_victron pgn_mapper web_server config_manager mqtt_client monitoring
 )

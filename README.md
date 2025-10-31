@@ -1,53 +1,23 @@
 # TinyBMS Web Gateway
 
-Squelette de projet ESP-IDF pour la passerelle TinyBMS ↔ Victron avec interface web embarquée. Cette arborescence prépare l'intégration des différents modules (UART BMS, CAN Victron, MQTT, monitoring, etc.) ainsi que la partie front-end servie depuis l'ESP32.
+This repository hosts the TinyBMS Web Gateway firmware and web assets. The current snapshot provides the project structure and stub modules that will be fleshed out in future iterations.
 
-## Structure du projet
-```
-TinyBMS-WebGateway/
-├── CMakeLists.txt
-├── sdkconfig.defaults
-├── partitions.csv
-├── main/
-│   ├── CMakeLists.txt
-│   ├── app_main.c
-│   ├── include/
-│   │   └── app_config.h
-│   ├── event_bus/
-│   ├── uart_bms/
-│   ├── can_victron/
-│   ├── pgn_mapper/
-│   ├── web_server/
-│   ├── config_manager/
-│   ├── mqtt_client/
-│   └── monitoring/
-├── web/
-├── test/
-├── docs/
-├── .gitignore
-├── README.md
-└── idf_component.yml
-```
+## Project Layout
 
-Chaque sous-répertoire `main/<module>` contient un `CMakeLists.txt` dédié et des stubs C/C++ prêts à être complétés.
+- `CMakeLists.txt` – Root build file for ESP-IDF.
+- `sdkconfig.defaults` – Default SDK configuration template.
+- `partitions.csv` – Partition table with OTA and SPIFFS slots.
+- `main/` – Application source tree split by functional domain.
+- `web/` – Static web dashboard assets served by the gateway.
+- `test/` – Placeholder for upcoming unit tests.
+- `docs/` – Reference documentation and design artifacts.
 
-## Premiers pas
-1. Installer l'ESP-IDF v5.x.
-2. Configurer le projet :
-   ```bash
-   idf.py set-target esp32
-   idf.py menuconfig
-   ```
-3. Compiler et flasher :
-   ```bash
-   idf.py build
-   idf.py flash monitor
-   ```
+## Getting Started
 
-## Documentation
-- `docs/architecture.md` : description de l'architecture logicielle.
-- `docs/pgn_mapping.xlsx` : table de correspondance PGN (à compléter).
-- `docs/api_endpoints.md` : documentation des endpoints REST/WebSocket.
+1. Install the [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html) toolchain.
+2. Configure the project: `idf.py set-target esp32 && idf.py menuconfig`.
+3. Build and flash: `idf.py build flash`.
 
-## Interface web
-Les assets statiques sont disponibles dans `web/`. Ils seront intégrés dans une partition SPIFFS et servis via le module `web_server`.
+## License
+
+See individual files for license information.

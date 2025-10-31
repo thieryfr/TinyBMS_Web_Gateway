@@ -1,11 +1,15 @@
-# Build artifacts
+# ESP-IDF build artifacts
 build/
- sdkconfig
- sdkconfig.old
- *.bin
- *.elf
- *.map
- *.log
+sdkconfig
+sdkconfig.old
+*.bin
+*.elf
+*.map
+*.log
+
+# Python cache
 *.pyc
 __pycache__/
+
+# macOS metadata
 .DS_Store

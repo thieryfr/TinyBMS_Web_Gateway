@@ -1,6 +1,5 @@
 #pragma once
 
-#include "event_bus.h"
+#include "esp_err.h"
 
-void pgn_mapper_init(void);
-void pgn_mapper_set_event_publisher(event_bus_publish_fn_t publisher);
+esp_err_t pgn_mapper_init(void);

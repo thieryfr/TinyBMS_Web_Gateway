@@ -1,6 +1,5 @@
 #pragma once
 
-#include "event_bus.h"
+#include "esp_err.h"
 
-void can_victron_init(void);
-void can_victron_set_event_publisher(event_bus_publish_fn_t publisher);
+esp_err_t can_victron_init(void);

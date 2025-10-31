@@ -1,14 +1,11 @@
 #include "pgn_mapper.h"
 
-static event_bus_publish_fn_t s_event_publisher = NULL;
+#include "esp_log.h"
 
-void pgn_mapper_set_event_publisher(event_bus_publish_fn_t publisher)
-{
-    s_event_publisher = publisher;
-}
+static const char *TAG = "pgn_mapper";
 
-void pgn_mapper_init(void)
+esp_err_t pgn_mapper_init(void)
 {
-    (void)s_event_publisher;
-    // TODO: Load mapping rules and prepare conversion logic between TinyBMS and Victron PGNs
+    ESP_LOGI(TAG, "PGN mapper stub initialized");
+    return ESP_OK;
 }

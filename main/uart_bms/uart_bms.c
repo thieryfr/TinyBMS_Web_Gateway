@@ -1,14 +1,11 @@
 #include "uart_bms.h"
 
-static event_bus_publish_fn_t s_event_publisher = NULL;
+#include "esp_log.h"
 
-void uart_bms_set_event_publisher(event_bus_publish_fn_t publisher)
-{
-    s_event_publisher = publisher;
-}
+static const char *TAG = "uart_bms";
 
-void uart_bms_init(void)
+esp_err_t uart_bms_init(void)
 {
-    (void)s_event_publisher;
-    // TODO: Configure UART driver and start TinyBMS polling task
+    ESP_LOGI(TAG, "UART BMS stub initialized");
+    return ESP_OK;
 }

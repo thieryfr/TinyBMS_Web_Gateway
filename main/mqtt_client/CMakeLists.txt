@@ -1,1 +1,5 @@
-idf_component_register(SRCS "mqtt_client.c" INCLUDE_DIRS "." REQUIRES)
+idf_component_register(
+    SRCS "mqtt_client.c"
+    INCLUDE_DIRS "."
+    REQUIRES event_bus
+)
