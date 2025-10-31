@@ -15,6 +15,7 @@ extern "C" {
 #define UART_BMS_MIN_POLL_INTERVAL_MS    100U
 #define UART_BMS_MAX_POLL_INTERVAL_MS   1000U
 #define UART_BMS_DEFAULT_POLL_INTERVAL_MS 250U
+#define UART_BMS_RESPONSE_TIMEOUT_MS     200U
 
 #define UART_BMS_MAX_REGISTERS UART_BMS_REGISTER_WORD_COUNT
 
@@ -81,6 +82,11 @@ void uart_bms_unregister_listener(uart_bms_data_callback_t callback, void *conte
 esp_err_t uart_bms_process_frame(const uint8_t *frame, size_t length);
 esp_err_t uart_bms_decode_frame(const uint8_t *frame, size_t length, uart_bms_live_data_t *out_data);
 void uart_bms_get_parser_diagnostics(uart_bms_parser_diagnostics_t *out_diagnostics);
+
+esp_err_t uart_bms_write_register(uint16_t address,
+                                  uint16_t raw_value,
+                                  uint16_t *readback_raw,
+                                  uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

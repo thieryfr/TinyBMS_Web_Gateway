@@ -17,6 +17,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "app_events.h"
 #include "uart_frame_builder.h"
@@ -65,6 +66,7 @@ size_t s_rx_length = 0;
 portMUX_TYPE s_poll_interval_lock = portMUX_INITIALIZER_UNLOCKED;
 #endif
 uint32_t s_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+SemaphoreHandle_t s_command_mutex = nullptr;
 
 TinyBMS_LiveData s_shared_snapshot{};
 bool s_shared_snapshot_valid = false;
@@ -272,6 +274,137 @@ static void uart_bms_reset_buffer(void)
     s_rx_length = 0;
 }
 
+#ifdef ESP_PLATFORM
+static esp_err_t uart_bms_read_frame_blocking(uint8_t* buffer,
+                                              size_t buffer_size,
+                                              uint32_t timeout_ms,
+                                              size_t* out_length)
+{
+    if (buffer == nullptr || buffer_size < 5) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (timeout_ms == 0U) {
+        timeout_ms = UART_BMS_RESPONSE_TIMEOUT_MS;
+    }
+
+    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    size_t offset = 0;
+
+    while (true) {
+        TickType_t now = xTaskGetTickCount();
+        if ((int32_t)(deadline - now) <= 0) {
+            return ESP_ERR_TIMEOUT;
+        }
+
+        int bytes_read = uart_read_bytes(UART_BMS_UART_PORT,
+                                         buffer + offset,
+                                         1,
+                                         pdMS_TO_TICKS(20));
+        if (bytes_read < 0) {
+            return ESP_FAIL;
+        }
+        if (bytes_read == 0) {
+            continue;
+        }
+
+        offset += (size_t)bytes_read;
+
+        while (offset > 0 && buffer[0] != 0xAA) {
+            memmove(buffer, buffer + 1, offset - 1);
+            --offset;
+        }
+
+        if (offset >= 3) {
+            size_t payload_len = buffer[2];
+            size_t total_len = payload_len + 5;
+            if (total_len > buffer_size) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+            if (offset >= total_len) {
+                uint16_t crc_expected = static_cast<uint16_t>(buffer[total_len - 2]) |
+                                        static_cast<uint16_t>(buffer[total_len - 1] << 8);
+                uint16_t crc_computed = uart_frame_builder_crc16(buffer, total_len - 2);
+                if (crc_expected != crc_computed) {
+                    return ESP_ERR_INVALID_CRC;
+                }
+                if (out_length != nullptr) {
+                    *out_length = total_len;
+                }
+                return ESP_OK;
+            }
+        }
+    }
+}
+
+static esp_err_t uart_bms_wait_for_ack(uint32_t timeout_ms)
+{
+    uint8_t frame[UART_BMS_MAX_FRAME_SIZE] = {0};
+    size_t frame_len = 0;
+    esp_err_t err = uart_bms_read_frame_blocking(frame, sizeof(frame), timeout_ms, &frame_len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (frame_len < 5 || frame[1] == 0x09) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (frame[1] == 0x01U) {
+        return ESP_OK;
+    }
+
+    if (frame[1] == 0x81U) {
+        uint8_t error_code = (frame_len > 3) ? frame[3] : 0U;
+        ESP_LOGW(kTag, "TinyBMS negative ACK (0x%02X)", (unsigned)error_code);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGW(kTag, "Unexpected TinyBMS opcode 0x%02X while awaiting ACK", (unsigned)frame[1]);
+    return ESP_ERR_INVALID_STATE;
+}
+
+static esp_err_t uart_bms_read_register_blocking(uint16_t address,
+                                                 uint32_t timeout_ms,
+                                                 uint16_t* out_value)
+{
+    uint8_t request[UART_BMS_MAX_FRAME_SIZE] = {0};
+    size_t request_len = 0;
+    esp_err_t err = uart_frame_builder_build_read_register(request,
+                                                           sizeof(request),
+                                                           address,
+                                                           &request_len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    int written = uart_write_bytes(UART_BMS_UART_PORT, reinterpret_cast<const char*>(request), request_len);
+    if (written < 0 || (size_t)written != request_len) {
+        ESP_LOGW(kTag, "Failed to send read request for 0x%04X", (unsigned)address);
+        return ESP_FAIL;
+    }
+
+    uint8_t response[UART_BMS_MAX_FRAME_SIZE] = {0};
+    size_t response_len = 0;
+    err = uart_bms_read_frame_blocking(response, sizeof(response), timeout_ms, &response_len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (response_len < 5 || response[1] != 0x07U || response[2] < 2U) {
+        ESP_LOGW(kTag, "Invalid read response opcode 0x%02X", (unsigned)response[1]);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint16_t raw = static_cast<uint16_t>(response[3]) |
+                   static_cast<uint16_t>(response[4] << 8);
+    if (out_value != nullptr) {
+        *out_value = raw;
+    }
+    return ESP_OK;
+}
+#endif  // ESP_PLATFORM
+
 static void uart_bms_consume_bytes(const uint8_t *data, size_t length)
 {
     for (size_t i = 0; i < length; ++i) {
@@ -463,15 +596,23 @@ void uart_bms_init(void)
         return;
     }
 
-    s_uart_initialised = true;
-
     esp_err_t frame_err = uart_bms_prepare_poll_request();
     if (frame_err != ESP_OK) {
         ESP_LOGE(kTag, "Unable to initialise TinyBMS poll frame: %s", esp_err_to_name(frame_err));
         uart_driver_delete(UART_BMS_UART_PORT);
-        s_uart_initialised = false;
         return;
     }
+
+    if (s_command_mutex == nullptr) {
+        s_command_mutex = xSemaphoreCreateMutex();
+        if (s_command_mutex == nullptr) {
+            ESP_LOGE(kTag, "Unable to allocate TinyBMS command mutex");
+            uart_driver_delete(UART_BMS_UART_PORT);
+            return;
+        }
+    }
+
+    s_uart_initialised = true;
 
     if (xTaskCreate(uart_poll_task,
                     "uart_poll",
@@ -559,6 +700,94 @@ esp_err_t uart_bms_process_frame(const uint8_t *frame, size_t length)
     uart_bms_publish_live_data(&legacy_data);
     uart_bms_notify_shared_listeners(shared);
     return ESP_OK;
+}
+
+esp_err_t uart_bms_write_register(uint16_t address,
+                                  uint16_t raw_value,
+                                  uint16_t *readback_raw,
+                                  uint32_t timeout_ms)
+{
+#ifdef ESP_PLATFORM
+    if (readback_raw != nullptr) {
+        *readback_raw = raw_value;
+    }
+
+    if (!s_uart_initialised || s_command_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (timeout_ms == 0U) {
+        timeout_ms = UART_BMS_RESPONSE_TIMEOUT_MS;
+    }
+
+    TickType_t semaphore_timeout = pdMS_TO_TICKS(timeout_ms);
+    if (semaphore_timeout == 0) {
+        semaphore_timeout = 1;
+    }
+
+    if (xSemaphoreTake(s_command_mutex, semaphore_timeout) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    if (s_uart_poll_task_handle != nullptr) {
+        vTaskSuspend(s_uart_poll_task_handle);
+    }
+
+    uart_flush_input(UART_BMS_UART_PORT);
+    uart_bms_reset_buffer();
+
+    esp_err_t result = ESP_OK;
+    uint8_t frame[UART_BMS_MAX_FRAME_SIZE] = {0};
+    size_t frame_len = 0;
+
+    esp_err_t build_err = uart_frame_builder_build_write_single(frame,
+                                                                 sizeof(frame),
+                                                                 address,
+                                                                 raw_value,
+                                                                 &frame_len);
+    if (build_err != ESP_OK) {
+        result = build_err;
+        goto cleanup;
+    }
+
+    int written = uart_write_bytes(UART_BMS_UART_PORT,
+                                   reinterpret_cast<const char *>(frame),
+                                   frame_len);
+    if (written < 0 || (size_t)written != frame_len) {
+        ESP_LOGW(kTag, "Failed to send write frame for 0x%04X", (unsigned)address);
+        result = ESP_FAIL;
+        goto cleanup;
+    }
+
+    result = uart_bms_wait_for_ack(timeout_ms);
+    if (result != ESP_OK) {
+        goto cleanup;
+    }
+
+    {
+        uint16_t confirmed = raw_value;
+        esp_err_t read_err = uart_bms_read_register_blocking(address, timeout_ms, &confirmed);
+        if (read_err != ESP_OK) {
+            result = read_err;
+        } else if (readback_raw != nullptr) {
+            *readback_raw = confirmed;
+        }
+    }
+
+cleanup:
+    if (s_uart_poll_task_handle != nullptr) {
+        vTaskResume(s_uart_poll_task_handle);
+    }
+    xSemaphoreGive(s_command_mutex);
+    return result;
+#else
+    (void)address;
+    (void)timeout_ms;
+    if (readback_raw != nullptr) {
+        *readback_raw = raw_value;
+    }
+    return ESP_OK;
+#endif
 }
 
 void uart_bms_get_parser_diagnostics(uart_bms_parser_diagnostics_t *out_diagnostics)
