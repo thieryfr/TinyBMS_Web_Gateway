@@ -1,0 +1,57 @@
+TinyBMS-WebGateway/
+├── CMakeLists.txt                  # CMake principal
+├── sdkconfig.defaults              # Config par défaut (menuconfig)
+├── partitions.csv                  # Partition table (OTA + SPIFFS)
+├── main/
+│   ├── CMakeLists.txt              # CMake du composant main
+│   ├── app_main.c                  # Point d'entrée
+│   ├── include/
+│   │   └── app_config.h            # Macros et configs globales
+│   ├── event_bus/
+│   │   ├── event_bus.c
+│   │   ├── event_bus.h
+│   │   └── CMakeLists.txt
+│   ├── uart_bms/
+│   │   ├── uart_bms.c
+│   │   ├── uart_bms.h
+│   │   └── CMakeLists.txt
+│   ├── can_victron/
+│   │   ├── can_victron.c
+│   │   ├── can_victron.h
+│   │   └── CMakeLists.txt
+│   ├── pgn_mapper/
+│   │   ├── pgn_mapper.c
+│   │   ├── pgn_mapper.h
+│   │   └── CMakeLists.txt
+│   ├── web_server/
+│   │   ├── web_server.c
+│   │   ├── web_server.h
+│   │   └── CMakeLists.txt
+│   ├── config_manager/
+│   │   ├── config_manager.c
+│   │   ├── config_manager.h
+│   │   └── CMakeLists.txt
+│   └── mqtt_client/        
+│   │   ├── mqtt_client.c
+│   │   ├── mqtt_client.h
+│   │   ├── mqtt_topics.h
+│   │   └── CMakeLists.txt 
+│   └── monitoring/
+│       ├── monitoring.c
+│       ├── monitoring.h
+│       └── CMakeLists.txt
+├── web/
+│   ├── index.html
+│   ├── dashboard.js
+│   ├── style.css
+│   └── assets/
+│       └── favicon.ico
+├── test/
+│   └── (tests unitaires futurs)
+├── docs/
+│   ├── architecture.md
+│   ├── pgn_mapping.xlsx
+│   └── api_endpoints.md
+├── .gitignore
+├── README.md
+└── idf_component.yml              # Optionnel (pour IDF Component Manager)
