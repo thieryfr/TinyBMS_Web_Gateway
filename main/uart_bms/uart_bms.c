@@ -36,67 +36,30 @@
 
 static const char *TAG = "uart_bms";
 
-static const uint16_t s_poll_addresses[UART_BMS_MAX_REGISTERS] = {
-    0x0020, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x0027, 0x0028,
-    0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, 0x0030, 0x0031,
-    0x0032, 0x0033, 0x0034, 0x0066, 0x0067, 0x0071, 0x0072, 0x0131, 0x0132,
-    0x0133, 0x013B, 0x013C, 0x013D, 0x013E, 0x013F, 0x01F4, 0x01F5, 0x01F6,
-    0x01F7, 0x01F8, 0x01F9,
-};
+static uint8_t s_poll_request[5 + 2 * UART_BMS_REGISTER_WORD_COUNT] = {0};
+static size_t s_poll_request_length = 0;
 
-static const uint8_t s_poll_request[] = {
-    0xAA, 0x09, 0x4E, 0x20, 0x00, 0x21, 0x00, 0x22, 0x00, 0x23, 0x00, 0x24, 0x00,
-    0x25, 0x00, 0x26, 0x00, 0x27, 0x00, 0x28, 0x00, 0x29, 0x00, 0x2A, 0x00,
-    0x2B, 0x00, 0x2C, 0x00, 0x2D, 0x00, 0x2E, 0x00, 0x2F, 0x00, 0x30, 0x00,
-    0x31, 0x00, 0x32, 0x00, 0x33, 0x00, 0x34, 0x00, 0x66, 0x00, 0x67, 0x00,
-    0x71, 0x00, 0x72, 0x00, 0x31, 0x01, 0x32, 0x01, 0x33, 0x01, 0x3B, 0x01,
-    0x3C, 0x01, 0x3D, 0x01, 0x3E, 0x01, 0x3F, 0x01, 0xF4, 0x01, 0xF5, 0x01,
-    0xF6, 0x01, 0xF7, 0x01, 0xF8, 0x01, 0xF9, 0x01, 0xBB, 0x55,
-};
+static void uart_bms_prepare_poll_request(void)
+{
+    if (s_poll_request_length != 0) {
+        return;
+    }
 
-typedef enum {
-    UART_BMS_FIELD_NONE = 0,
-    UART_BMS_FIELD_PACK_VOLTAGE,
-    UART_BMS_FIELD_PACK_CURRENT,
-    UART_BMS_FIELD_MIN_CELL_MV,
-    UART_BMS_FIELD_MAX_CELL_MV,
-    UART_BMS_FIELD_SOC_PERCENT,
-    UART_BMS_FIELD_SOH_PERCENT,
-    UART_BMS_FIELD_AVERAGE_TEMP,
-    UART_BMS_FIELD_MOS_TEMP,
-    UART_BMS_FIELD_BALANCING_BITS,
-    UART_BMS_FIELD_ALARM_BITS,
-    UART_BMS_FIELD_WARNING_BITS,
-    UART_BMS_FIELD_UPTIME_LOW,
-    UART_BMS_FIELD_UPTIME_HIGH,
-    UART_BMS_FIELD_CYCLE_LOW,
-    UART_BMS_FIELD_CYCLE_HIGH,
-} uart_bms_field_t;
+    s_poll_request[0] = 0xAA;
+    s_poll_request[1] = 0x09;
+    s_poll_request[2] = (uint8_t)(UART_BMS_REGISTER_WORD_COUNT * sizeof(uint16_t));
 
-typedef struct {
-    uint16_t address;
-    bool is_signed;
-    float scale;
-    uart_bms_field_t field;
-} uart_bms_register_descriptor_t;
+    for (size_t i = 0; i < UART_BMS_REGISTER_WORD_COUNT; ++i) {
+        uint16_t address = g_uart_bms_poll_addresses[i];
+        s_poll_request[3 + i * 2] = (uint8_t)(address & 0xFF);
+        s_poll_request[4 + i * 2] = (uint8_t)((address >> 8) & 0xFF);
+    }
 
-static const uart_bms_register_descriptor_t s_register_descriptors[] = {
-    {0x0020, false, 0.01f, UART_BMS_FIELD_PACK_VOLTAGE},
-    {0x0021, true, 0.1f, UART_BMS_FIELD_PACK_CURRENT},
-    {0x0022, false, 1.0f, UART_BMS_FIELD_MIN_CELL_MV},
-    {0x0023, false, 1.0f, UART_BMS_FIELD_MAX_CELL_MV},
-    {0x0024, false, 0.01f, UART_BMS_FIELD_SOC_PERCENT},
-    {0x0025, false, 0.01f, UART_BMS_FIELD_SOH_PERCENT},
-    {0x0026, true, 0.1f, UART_BMS_FIELD_AVERAGE_TEMP},
-    {0x0027, true, 0.1f, UART_BMS_FIELD_MOS_TEMP},
-    {0x0028, false, 1.0f, UART_BMS_FIELD_BALANCING_BITS},
-    {0x0029, false, 1.0f, UART_BMS_FIELD_ALARM_BITS},
-    {0x002A, false, 1.0f, UART_BMS_FIELD_WARNING_BITS},
-    {0x0066, false, 1.0f, UART_BMS_FIELD_UPTIME_LOW},
-    {0x0067, false, 1.0f, UART_BMS_FIELD_UPTIME_HIGH},
-    {0x0071, false, 1.0f, UART_BMS_FIELD_CYCLE_LOW},
-    {0x0072, false, 1.0f, UART_BMS_FIELD_CYCLE_HIGH},
-};
+    size_t footer_index = 3 + UART_BMS_REGISTER_WORD_COUNT * 2;
+    s_poll_request[footer_index] = 0xBB;
+    s_poll_request[footer_index + 1] = 0x55;
+    s_poll_request_length = footer_index + 2;
+}
 
 typedef struct {
     uart_bms_data_callback_t callback;
@@ -129,17 +92,6 @@ static uint16_t uart_bms_compute_crc(const uint8_t *data, size_t length)
         }
     }
     return crc;
-}
-
-static const uart_bms_register_descriptor_t *
-find_descriptor(uint16_t address)
-{
-    for (size_t i = 0; i < sizeof(s_register_descriptors) / sizeof(s_register_descriptors[0]); ++i) {
-        if (s_register_descriptors[i].address == address) {
-            return &s_register_descriptors[i];
-        }
-    }
-    return NULL;
 }
 
 static uint64_t uart_bms_timestamp_ms(void)
@@ -378,8 +330,12 @@ static void uart_bms_task(void *arg)
     (void)arg;
     uint8_t read_buffer[64];
 
+    uart_bms_prepare_poll_request();
+
     while (true) {
-        int written = uart_write_bytes(UART_BMS_UART_PORT, (const char *)s_poll_request, sizeof(s_poll_request));
+        int written = uart_write_bytes(UART_BMS_UART_PORT,
+                                       (const char *)s_poll_request,
+                                       s_poll_request_length);
         if (written < 0) {
             ESP_LOGW(TAG, "Failed to send poll request");
         }
@@ -411,6 +367,8 @@ void uart_bms_init(void)
     if (s_uart_initialised) {
         return;
     }
+
+    uart_bms_prepare_poll_request();
 
     uart_config_t config = {
         .baud_rate = UART_BMS_BAUD_RATE,
@@ -539,96 +497,184 @@ esp_err_t uart_bms_decode_frame(const uint8_t *frame, size_t length, uart_bms_li
     out_data->timestamp_ms = uart_bms_timestamp_ms();
     out_data->register_count = register_count;
 
-    uint16_t uptime_low = 0;
-    uint16_t uptime_high = 0;
-    bool uptime_low_valid = false;
-    bool uptime_high_valid = false;
-    uint16_t cycle_low = 0;
-    uint16_t cycle_high = 0;
-    bool cycle_low_valid = false;
-    bool cycle_high_valid = false;
-
-    size_t addresses_available = sizeof(s_poll_addresses) / sizeof(s_poll_addresses[0]);
+    uint16_t raw_words[UART_BMS_MAX_REGISTERS] = {0};
 
     for (size_t i = 0; i < register_count; ++i) {
         uint16_t raw_value = (uint16_t)frame[3 + i * 2] | (uint16_t)(frame[4 + i * 2] << 8);
-        if (i < addresses_available) {
-            uint16_t address = s_poll_addresses[i];
+        raw_words[i] = raw_value;
+
+        if (i < UART_BMS_REGISTER_WORD_COUNT) {
+            uint16_t address = g_uart_bms_poll_addresses[i];
             out_data->registers[i].address = address;
             out_data->registers[i].raw_value = raw_value;
-
-            const uart_bms_register_descriptor_t *descriptor = find_descriptor(address);
-            if (descriptor != NULL) {
-                int32_t signed_value = descriptor->is_signed ? (int32_t)(int16_t)raw_value : (int32_t)raw_value;
-                float scaled_value = (float)signed_value * descriptor->scale;
-
-                switch (descriptor->field) {
-                    case UART_BMS_FIELD_PACK_VOLTAGE:
-                        out_data->pack_voltage_v = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_PACK_CURRENT:
-                        out_data->pack_current_a = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_MIN_CELL_MV:
-                        out_data->min_cell_mv = (uint16_t)signed_value;
-                        break;
-                    case UART_BMS_FIELD_MAX_CELL_MV:
-                        out_data->max_cell_mv = (uint16_t)signed_value;
-                        break;
-                    case UART_BMS_FIELD_SOC_PERCENT:
-                        out_data->state_of_charge_pct = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_SOH_PERCENT:
-                        out_data->state_of_health_pct = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_AVERAGE_TEMP:
-                        out_data->average_temperature_c = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_MOS_TEMP:
-                        out_data->mosfet_temperature_c = scaled_value;
-                        break;
-                    case UART_BMS_FIELD_BALANCING_BITS:
-                        out_data->balancing_bits = (uint16_t)signed_value;
-                        break;
-                    case UART_BMS_FIELD_ALARM_BITS:
-                        out_data->alarm_bits = (uint16_t)signed_value;
-                        break;
-                    case UART_BMS_FIELD_WARNING_BITS:
-                        out_data->warning_bits = (uint16_t)signed_value;
-                        break;
-                    case UART_BMS_FIELD_UPTIME_LOW:
-                        uptime_low = (uint16_t)signed_value;
-                        uptime_low_valid = true;
-                        break;
-                    case UART_BMS_FIELD_UPTIME_HIGH:
-                        uptime_high = (uint16_t)signed_value;
-                        uptime_high_valid = true;
-                        break;
-                    case UART_BMS_FIELD_CYCLE_LOW:
-                        cycle_low = (uint16_t)signed_value;
-                        cycle_low_valid = true;
-                        break;
-                    case UART_BMS_FIELD_CYCLE_HIGH:
-                        cycle_high = (uint16_t)signed_value;
-                        cycle_high_valid = true;
-                        break;
-                    case UART_BMS_FIELD_NONE:
-                    default:
-                        break;
-                }
-            }
         } else {
             out_data->registers[i].address = 0;
             out_data->registers[i].raw_value = raw_value;
         }
     }
 
-    if (uptime_low_valid || uptime_high_valid) {
-        out_data->uptime_seconds = ((uint32_t)uptime_high << 16) | (uint32_t)uptime_low;
-    }
+    size_t word_index = 0;
+    for (size_t meta_index = 0; meta_index < g_uart_bms_register_count; ++meta_index) {
+        const uart_bms_register_metadata_t *meta = &g_uart_bms_registers[meta_index];
+        if (word_index + meta->word_count > register_count) {
+            break;
+        }
 
-    if (cycle_low_valid || cycle_high_valid) {
-        out_data->cycle_count = ((uint32_t)cycle_high << 16) | (uint32_t)cycle_low;
+        switch (meta->type) {
+            case UART_BMS_VALUE_UINT16: {
+                uint16_t raw = raw_words[word_index];
+                float scaled = (float)raw * meta->scale;
+
+                switch (meta->primary_field) {
+                    case UART_BMS_FIELD_MIN_CELL_MV:
+                        out_data->min_cell_mv = raw;
+                        break;
+                    case UART_BMS_FIELD_MAX_CELL_MV:
+                        out_data->max_cell_mv = raw;
+                        break;
+                    case UART_BMS_FIELD_STATE_OF_HEALTH:
+                        out_data->state_of_health_pct = scaled;
+                        break;
+                    case UART_BMS_FIELD_SYSTEM_STATUS:
+                        out_data->alarm_bits = raw;
+                        break;
+                    case UART_BMS_FIELD_NEED_BALANCING:
+                        out_data->warning_bits = raw;
+                        break;
+                    case UART_BMS_FIELD_BALANCING_BITS:
+                        out_data->balancing_bits = raw;
+                        break;
+                    case UART_BMS_FIELD_PEAK_DISCHARGE_CURRENT_LIMIT:
+                        out_data->peak_discharge_current_limit_a = scaled;
+                        break;
+                    case UART_BMS_FIELD_BATTERY_CAPACITY:
+                        out_data->battery_capacity_ah = scaled;
+                        break;
+                    case UART_BMS_FIELD_SERIES_CELL_COUNT:
+                        out_data->series_cell_count = raw;
+                        break;
+                    case UART_BMS_FIELD_OVERVOLTAGE_CUTOFF:
+                        out_data->overvoltage_cutoff_mv = raw;
+                        break;
+                    case UART_BMS_FIELD_UNDERVOLTAGE_CUTOFF:
+                        out_data->undervoltage_cutoff_mv = raw;
+                        break;
+                    case UART_BMS_FIELD_DISCHARGE_OVER_CURRENT_LIMIT:
+                        out_data->discharge_overcurrent_limit_a = scaled;
+                        break;
+                    case UART_BMS_FIELD_CHARGE_OVER_CURRENT_LIMIT:
+                        out_data->charge_overcurrent_limit_a = scaled;
+                        break;
+                    case UART_BMS_FIELD_OVERHEAT_CUTOFF:
+                        out_data->overheat_cutoff_c = scaled;
+                        break;
+                    case UART_BMS_FIELD_HARDWARE_VERSION:
+                        out_data->hardware_version = (uint8_t)(raw & 0xFF);
+                        if (meta->secondary_field == UART_BMS_FIELD_HARDWARE_CHANGES_VERSION) {
+                            out_data->hardware_changes_version = (uint8_t)((raw >> 8) & 0xFF);
+                        }
+                        break;
+                    case UART_BMS_FIELD_FIRMWARE_VERSION:
+                        out_data->firmware_version = (uint8_t)(raw & 0xFF);
+                        if (meta->secondary_field == UART_BMS_FIELD_FIRMWARE_FLAGS) {
+                            out_data->firmware_flags = (uint8_t)((raw >> 8) & 0xFF);
+                        }
+                        break;
+                    case UART_BMS_FIELD_INTERNAL_FIRMWARE_VERSION:
+                        out_data->internal_firmware_version = raw;
+                        break;
+                    default:
+                        break;
+                }
+
+                ++word_index;
+                break;
+            }
+            case UART_BMS_VALUE_INT16: {
+                int16_t raw = (int16_t)raw_words[word_index];
+                float scaled = (float)raw * meta->scale;
+
+                switch (meta->primary_field) {
+                    case UART_BMS_FIELD_AVERAGE_TEMPERATURE:
+                        out_data->average_temperature_c = scaled;
+                        break;
+                    case UART_BMS_FIELD_AUXILIARY_TEMPERATURE:
+                        out_data->auxiliary_temperature_c = scaled;
+                        break;
+                    case UART_BMS_FIELD_MOS_TEMPERATURE:
+                        out_data->mosfet_temperature_c = scaled;
+                        break;
+                    case UART_BMS_FIELD_OVERHEAT_CUTOFF:
+                        out_data->overheat_cutoff_c = scaled;
+                        break;
+                    default:
+                        break;
+                }
+
+                ++word_index;
+                break;
+            }
+            case UART_BMS_VALUE_UINT32: {
+                uint32_t raw = (uint32_t)raw_words[word_index] |
+                                ((uint32_t)raw_words[word_index + 1] << 16);
+                float scaled = (float)raw * meta->scale;
+
+                switch (meta->primary_field) {
+                    case UART_BMS_FIELD_STATE_OF_CHARGE:
+                        out_data->state_of_charge_pct = scaled;
+                        break;
+                    case UART_BMS_FIELD_UPTIME_SECONDS:
+                        out_data->uptime_seconds = raw;
+                        break;
+                    default:
+                        break;
+                }
+
+                word_index += meta->word_count;
+                break;
+            }
+            case UART_BMS_VALUE_FLOAT32: {
+                uint32_t raw = (uint32_t)raw_words[word_index] |
+                                ((uint32_t)raw_words[word_index + 1] << 16);
+                float value;
+                memcpy(&value, &raw, sizeof(value));
+                value *= meta->scale;
+
+                switch (meta->primary_field) {
+                    case UART_BMS_FIELD_PACK_VOLTAGE:
+                        out_data->pack_voltage_v = value;
+                        break;
+                    case UART_BMS_FIELD_PACK_CURRENT:
+                        out_data->pack_current_a = value;
+                        break;
+                    default:
+                        break;
+                }
+
+                word_index += meta->word_count;
+                break;
+            }
+            case UART_BMS_VALUE_INT8_PAIR: {
+                uint16_t raw = raw_words[word_index];
+                int8_t low = (int8_t)(raw & 0xFF);
+                int8_t high = (int8_t)((raw >> 8) & 0xFF);
+                float low_scaled = (float)low * meta->scale;
+                float high_scaled = (float)high * meta->scale;
+
+                if (meta->primary_field == UART_BMS_FIELD_PACK_TEMPERATURE_MIN) {
+                    out_data->pack_temperature_min_c = low_scaled;
+                }
+                if (meta->secondary_field == UART_BMS_FIELD_PACK_TEMPERATURE_MAX) {
+                    out_data->pack_temperature_max_c = high_scaled;
+                }
+
+                ++word_index;
+                break;
+            }
+            default:
+                ++word_index;
+                break;
+        }
     }
 
     return ESP_OK;
