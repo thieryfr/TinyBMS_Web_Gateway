@@ -1,0 +1,28 @@
+:root {
+    color-scheme: light dark;
+    font-family: "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+    margin: 0;
+    background: #f5f7fa;
+    color: #1f2933;
+}
+
+#app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+section {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
