@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 
 #include "app_events.h"
+#include "uart_bms.h"
 
 static const char *TAG = "monitoring";
 
@@ -22,6 +23,40 @@ static int8_t s_temperature_c = 25;
 static char s_last_snapshot[256] = {0};
 static size_t s_last_snapshot_len = 0;
 
+static void monitoring_on_bms_update(const uart_bms_live_data_t *data, void *context)
+{
+    (void)context;
+    if (data == NULL) {
+        return;
+    }
+
+    s_pack_voltage = data->pack_voltage_v;
+    s_pack_current = data->pack_current_a;
+
+    if (data->state_of_charge_pct >= 0.0f) {
+        float soc = data->state_of_charge_pct;
+        if (soc < 0.0f) {
+            soc = 0.0f;
+        } else if (soc > 100.0f) {
+            soc = 100.0f;
+        }
+        s_state_of_charge = (uint8_t)(soc + 0.5f);
+    }
+
+    float average_temp = data->average_temperature_c;
+    if (average_temp < -128.0f) {
+        average_temp = -128.0f;
+    } else if (average_temp > 127.0f) {
+        average_temp = 127.0f;
+    }
+    s_temperature_c = (int8_t)(average_temp + (average_temp >= 0 ? 0.5f : -0.5f));
+
+    esp_err_t err = monitoring_publish_telemetry_snapshot();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to publish telemetry snapshot after TinyBMS update: %s", esp_err_to_name(err));
+    }
+}
+
 void monitoring_set_event_publisher(event_bus_publish_fn_t publisher)
 {
     s_event_publisher = publisher;
@@ -29,6 +64,11 @@ void monitoring_set_event_publisher(event_bus_publish_fn_t publisher)
 
 void monitoring_init(void)
 {
+    esp_err_t reg_err = uart_bms_register_listener(monitoring_on_bms_update, NULL);
+    if (reg_err != ESP_OK) {
+        ESP_LOGW(TAG, "Unable to register TinyBMS listener: %s", esp_err_to_name(reg_err));
+    }
+
     esp_err_t err = monitoring_publish_telemetry_snapshot();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Initial telemetry publish failed: %s", esp_err_to_name(err));
