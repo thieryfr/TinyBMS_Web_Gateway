@@ -10,10 +10,18 @@
 #include "freertos/FreeRTOS.h"
 
 #include "app_events.h"
+#include "uart_bms.h"
+
+#ifdef ESP_PLATFORM
+#include "nvs_flash.h"
+#include "nvs.h"
+#endif
 
 #define CONFIG_MANAGER_REGISTER_EVENT_BUFFERS 4
 #define CONFIG_MANAGER_MAX_UPDATE_PAYLOAD     192
 #define CONFIG_MANAGER_MAX_REGISTER_KEY       32
+#define CONFIG_MANAGER_NAMESPACE              "gateway_cfg"
+#define CONFIG_MANAGER_POLL_KEY               "uart_poll"
 
 typedef struct {
     const char *key;
@@ -75,6 +83,11 @@ static float s_register_values[sizeof(s_register_descriptors) / sizeof(s_registe
 static bool s_registers_initialised = false;
 static char s_register_events[CONFIG_MANAGER_REGISTER_EVENT_BUFFERS][CONFIG_MANAGER_MAX_UPDATE_PAYLOAD];
 static size_t s_next_register_event = 0;
+static uint32_t s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+static bool s_settings_loaded = false;
+#ifdef ESP_PLATFORM
+static bool s_nvs_initialised = false;
+#endif
 
 static bool config_manager_json_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
 {
@@ -98,6 +111,98 @@ static bool config_manager_json_append(char *buffer, size_t buffer_size, size_t 
 
     *offset += (size_t)written;
     return true;
+}
+
+static uint32_t config_manager_clamp_poll_interval(uint32_t interval_ms)
+{
+    if (interval_ms < UART_BMS_MIN_POLL_INTERVAL_MS) {
+        return UART_BMS_MIN_POLL_INTERVAL_MS;
+    }
+    if (interval_ms > UART_BMS_MAX_POLL_INTERVAL_MS) {
+        return UART_BMS_MAX_POLL_INTERVAL_MS;
+    }
+    return interval_ms;
+}
+
+#ifdef ESP_PLATFORM
+static esp_err_t config_manager_init_nvs(void)
+{
+    if (s_nvs_initialised) {
+        return ESP_OK;
+    }
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "Erasing NVS partition due to %s", esp_err_to_name(err));
+        esp_err_t erase_err = nvs_flash_erase();
+        if (erase_err != ESP_OK) {
+            return erase_err;
+        }
+        err = nvs_flash_init();
+    }
+
+    if (err == ESP_OK) {
+        s_nvs_initialised = true;
+    } else {
+        ESP_LOGW(TAG, "Failed to initialise NVS: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+#endif
+
+static void config_manager_load_persistent_settings(void)
+{
+    if (s_settings_loaded) {
+        return;
+    }
+
+    s_settings_loaded = true;
+#ifdef ESP_PLATFORM
+    if (config_manager_init_nvs() != ESP_OK) {
+        return;
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return;
+    }
+
+    uint32_t stored_interval = 0;
+    err = nvs_get_u32(handle, CONFIG_MANAGER_POLL_KEY, &stored_interval);
+    if (err == ESP_OK) {
+        s_uart_poll_interval_ms = config_manager_clamp_poll_interval(stored_interval);
+    }
+    nvs_close(handle);
+#else
+    s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+#endif
+}
+
+static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
+{
+#ifdef ESP_PLATFORM
+    esp_err_t err = config_manager_init_nvs();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle = 0;
+    err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = nvs_set_u32(handle, CONFIG_MANAGER_POLL_KEY, interval_ms);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+#else
+    (void)interval_ms;
+    return ESP_OK;
+#endif
 }
 
 static void config_manager_publish_config_snapshot(void)
@@ -152,8 +257,13 @@ static esp_err_t config_manager_build_config_snapshot(void)
 {
     int written = snprintf(s_config_json,
                            sizeof(s_config_json),
-                           "{\"device\":\"TinyBMS Gateway\",\"version\":1,\"register_count\":%zu}",
-                           s_register_count);
+                           "{\"device\":\"TinyBMS Gateway\",\"version\":1,\"register_count\":%zu,"
+                           "\"uart_poll_interval_ms\":%u,\"uart_poll_interval_min_ms\":%u,"
+                           "\"uart_poll_interval_max_ms\":%u}",
+                           s_register_count,
+                           (unsigned)s_uart_poll_interval_ms,
+                           (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
+                           (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS);
     if (written < 0) {
         return ESP_FAIL;
     }
@@ -270,6 +380,43 @@ static bool config_manager_extract_float_field(const char *json, const char *fie
     return true;
 }
 
+static bool config_manager_extract_uint32_field(const char *json,
+                                                const char *field,
+                                                uint32_t *out_value)
+{
+    if (json == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    const char *cursor = strstr(json, field);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor = strchr(cursor, ':');
+    if (cursor == NULL) {
+        return false;
+    }
+
+    ++cursor;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+
+    if (*cursor == '\0') {
+        return false;
+    }
+
+    char *endptr = NULL;
+    unsigned long parsed = strtoul(cursor, &endptr, 10);
+    if (endptr == cursor) {
+        return false;
+    }
+
+    *out_value = (uint32_t)parsed;
+    return true;
+}
+
 static esp_err_t config_manager_validate_value(size_t index, float value)
 {
     if (index >= s_register_count) {
@@ -291,6 +438,10 @@ static void config_manager_ensure_initialised(void)
         config_manager_load_register_defaults();
     }
 
+    if (!s_settings_loaded) {
+        config_manager_load_persistent_settings();
+    }
+
     if (s_config_length == 0) {
         if (config_manager_build_config_snapshot() != ESP_OK) {
             ESP_LOGW(TAG, "Failed to build default configuration snapshot");
@@ -306,6 +457,42 @@ void config_manager_set_event_publisher(event_bus_publish_fn_t publisher)
 void config_manager_init(void)
 {
     config_manager_ensure_initialised();
+    uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
+}
+
+uint32_t config_manager_get_uart_poll_interval_ms(void)
+{
+    config_manager_ensure_initialised();
+    return s_uart_poll_interval_ms;
+}
+
+esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
+{
+    config_manager_ensure_initialised();
+
+    uint32_t clamped = config_manager_clamp_poll_interval(interval_ms);
+    if (clamped == s_uart_poll_interval_ms) {
+        uart_bms_set_poll_interval_ms(clamped);
+        return ESP_OK;
+    }
+
+    s_uart_poll_interval_ms = clamped;
+    uart_bms_set_poll_interval_ms(clamped);
+
+    esp_err_t persist_err = config_manager_store_poll_interval(clamped);
+    if (persist_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to persist UART poll interval: %s", esp_err_to_name(persist_err));
+    }
+
+    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    if (snapshot_err == ESP_OK) {
+        config_manager_publish_config_snapshot();
+    }
+
+    if (persist_err != ESP_OK) {
+        return persist_err;
+    }
+    return snapshot_err;
 }
 
 esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length)
@@ -334,21 +521,30 @@ esp_err_t config_manager_set_config_json(const char *json, size_t length)
         return ESP_ERR_INVALID_ARG;
     }
 
+    config_manager_ensure_initialised();
+
     if (length == 0) {
         length = strlen(json);
     }
 
-    if (length + 1 > sizeof(s_config_json)) {
+    if (length >= CONFIG_MANAGER_MAX_CONFIG_SIZE) {
         ESP_LOGW(TAG, "Config payload too large: %u bytes", (unsigned)length);
         return ESP_ERR_INVALID_SIZE;
     }
 
-    memcpy(s_config_json, json, length);
-    s_config_json[length] = '\0';
-    s_config_length = length;
+    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    memcpy(buffer, json, length);
+    buffer[length] = '\0';
 
-    config_manager_publish_config_snapshot();
-    return ESP_OK;
+    uint32_t poll_interval = 0;
+    if (!config_manager_extract_uint32_field(buffer,
+                                             "\"uart_poll_interval_ms\"",
+                                             &poll_interval)) {
+        ESP_LOGW(TAG, "Config payload missing uart_poll_interval_ms");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return config_manager_set_uart_poll_interval_ms(poll_interval);
 }
 
 esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, size_t *out_length)

@@ -20,6 +20,7 @@
 #include "freertos/task.h"
 
 #include "app_events.h"
+#include "uart_frame_builder.h"
 
 #define UART_BMS_UART_PORT       UART_NUM_1
 #define UART_BMS_BAUD_RATE       115200
@@ -28,37 +29,26 @@
 #define UART_BMS_RX_BUFFER_SIZE  256
 #define UART_BMS_TASK_STACK      4096
 #define UART_BMS_TASK_PRIORITY   12
-#define UART_BMS_POLL_INTERVAL_MS 1000
 #define UART_BMS_MAX_FRAME_SIZE  128
 #define UART_BMS_LISTENER_SLOTS  4
 #define UART_BMS_EVENT_BUFFERS   4
 #define UART_BMS_FRAME_JSON_SIZE 1024
+#define UART_BMS_RESPONSE_TIMEOUT_MS 150
 
 static const char *TAG = "uart_bms";
 
-static uint8_t s_poll_request[5 + 2 * UART_BMS_REGISTER_WORD_COUNT] = {0};
+static uint8_t s_poll_request[UART_BMS_MAX_FRAME_SIZE] = {0};
 static size_t s_poll_request_length = 0;
 
-static void uart_bms_prepare_poll_request(void)
+static esp_err_t uart_bms_prepare_poll_request(void)
 {
     if (s_poll_request_length != 0) {
-        return;
+        return ESP_OK;
     }
 
-    s_poll_request[0] = 0xAA;
-    s_poll_request[1] = 0x09;
-    s_poll_request[2] = (uint8_t)(UART_BMS_REGISTER_WORD_COUNT * sizeof(uint16_t));
-
-    for (size_t i = 0; i < UART_BMS_REGISTER_WORD_COUNT; ++i) {
-        uint16_t address = g_uart_bms_poll_addresses[i];
-        s_poll_request[3 + i * 2] = (uint8_t)(address & 0xFF);
-        s_poll_request[4 + i * 2] = (uint8_t)((address >> 8) & 0xFF);
-    }
-
-    size_t footer_index = 3 + UART_BMS_REGISTER_WORD_COUNT * 2;
-    s_poll_request[footer_index] = 0xBB;
-    s_poll_request[footer_index + 1] = 0x55;
-    s_poll_request_length = footer_index + 2;
+    return uart_frame_builder_build_poll_request(s_poll_request,
+                                                 sizeof(s_poll_request),
+                                                 &s_poll_request_length);
 }
 
 typedef struct {
@@ -74,24 +64,23 @@ static char s_uart_raw_json[UART_BMS_EVENT_BUFFERS][UART_BMS_FRAME_JSON_SIZE];
 static char s_uart_decoded_json[UART_BMS_EVENT_BUFFERS][UART_BMS_FRAME_JSON_SIZE];
 static size_t s_next_uart_json_buffer = 0;
 static bool s_uart_initialised = false;
-static TaskHandle_t s_uart_task_handle = NULL;
+static TaskHandle_t s_uart_poll_task_handle = NULL;
 static uint8_t s_rx_buffer[UART_BMS_MAX_FRAME_SIZE] = {0};
 static size_t s_rx_length = 0;
+#ifdef ESP_PLATFORM
+static portMUX_TYPE s_poll_interval_lock = portMUX_INITIALIZER_UNLOCKED;
+#endif
+static uint32_t s_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
 
-static uint16_t uart_bms_compute_crc(const uint8_t *data, size_t length)
+static uint32_t uart_bms_clamp_poll_interval(uint32_t interval_ms)
 {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < length; ++i) {
-        crc ^= data[i];
-        for (int j = 0; j < 8; ++j) {
-            if (crc & 0x0001) {
-                crc = (crc >> 1) ^ 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
+    if (interval_ms < UART_BMS_MIN_POLL_INTERVAL_MS) {
+        return UART_BMS_MIN_POLL_INTERVAL_MS;
     }
-    return crc;
+    if (interval_ms > UART_BMS_MAX_POLL_INTERVAL_MS) {
+        return UART_BMS_MAX_POLL_INTERVAL_MS;
+    }
+    return interval_ms;
 }
 
 static uint64_t uart_bms_timestamp_ms(void)
@@ -325,22 +314,32 @@ static void uart_bms_consume_bytes(const uint8_t *data, size_t length)
     }
 }
 
-static void uart_bms_task(void *arg)
+static void uart_poll_task(void *arg)
 {
     (void)arg;
     uint8_t read_buffer[64];
 
-    uart_bms_prepare_poll_request();
+    TickType_t last_wake_time = xTaskGetTickCount();
 
     while (true) {
+        esp_err_t frame_err = uart_bms_prepare_poll_request();
+        if (frame_err != ESP_OK || s_poll_request_length == 0) {
+            ESP_LOGE(TAG,
+                     "Unable to prepare TinyBMS poll request: %s",
+                     esp_err_to_name(frame_err));
+            vTaskDelay(pdMS_TO_TICKS(UART_BMS_MIN_POLL_INTERVAL_MS));
+            continue;
+        }
+
         int written = uart_write_bytes(UART_BMS_UART_PORT,
                                        (const char *)s_poll_request,
                                        s_poll_request_length);
-        if (written < 0) {
-            ESP_LOGW(TAG, "Failed to send poll request");
+        if (written < 0 || (size_t)written != s_poll_request_length) {
+            ESP_LOGW(TAG, "Failed to send poll request (%d)", written);
         }
 
-        TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(200);
+        TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(UART_BMS_RESPONSE_TIMEOUT_MS);
+        bool received_bytes = false;
         while (xTaskGetTickCount() < deadline) {
             int bytes_read = uart_read_bytes(UART_BMS_UART_PORT,
                                              read_buffer,
@@ -348,12 +347,24 @@ static void uart_bms_task(void *arg)
                                              pdMS_TO_TICKS(20));
             if (bytes_read > 0) {
                 uart_bms_consume_bytes(read_buffer, (size_t)bytes_read);
-            } else {
+                received_bytes = true;
+            } else if (bytes_read < 0) {
+                ESP_LOGW(TAG, "UART read error: %d", bytes_read);
                 break;
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(UART_BMS_POLL_INTERVAL_MS));
+        if (!received_bytes) {
+            ESP_LOGW(TAG, "TinyBMS poll timed out (no response)");
+        }
+
+        uint32_t interval_ms = uart_bms_get_poll_interval_ms();
+        TickType_t interval_ticks = pdMS_TO_TICKS(interval_ms);
+        if (interval_ticks == 0) {
+            interval_ticks = 1;
+        }
+
+        vTaskDelayUntil(&last_wake_time, interval_ticks);
     }
 }
 
@@ -362,13 +373,39 @@ void uart_bms_set_event_publisher(event_bus_publish_fn_t publisher)
     s_event_publisher = publisher;
 }
 
+void uart_bms_set_poll_interval_ms(uint32_t interval_ms)
+{
+    uint32_t clamped = uart_bms_clamp_poll_interval(interval_ms);
+#ifdef ESP_PLATFORM
+    portENTER_CRITICAL(&s_poll_interval_lock);
+#endif
+    bool changed = (s_poll_interval_ms != clamped);
+    s_poll_interval_ms = clamped;
+#ifdef ESP_PLATFORM
+    portEXIT_CRITICAL(&s_poll_interval_lock);
+#endif
+    if (changed) {
+        ESP_LOGI(TAG, "TinyBMS poll interval set to %u ms", (unsigned)clamped);
+    }
+}
+
+uint32_t uart_bms_get_poll_interval_ms(void)
+{
+#ifdef ESP_PLATFORM
+    portENTER_CRITICAL(&s_poll_interval_lock);
+#endif
+    uint32_t interval = s_poll_interval_ms;
+#ifdef ESP_PLATFORM
+    portEXIT_CRITICAL(&s_poll_interval_lock);
+#endif
+    return interval;
+}
+
 void uart_bms_init(void)
 {
     if (s_uart_initialised) {
         return;
     }
-
-    uart_bms_prepare_poll_request();
 
     uart_config_t config = {
         .baud_rate = UART_BMS_BAUD_RATE,
@@ -408,16 +445,24 @@ void uart_bms_init(void)
 
     s_uart_initialised = true;
 
-    if (xTaskCreate(uart_bms_task,
-                    "uart_bms_rx",
+    esp_err_t frame_err = uart_bms_prepare_poll_request();
+    if (frame_err != ESP_OK) {
+        ESP_LOGE(TAG, "Unable to initialise TinyBMS poll frame: %s", esp_err_to_name(frame_err));
+        uart_driver_delete(UART_BMS_UART_PORT);
+        s_uart_initialised = false;
+        return;
+    }
+
+    if (xTaskCreate(uart_poll_task,
+                    "uart_poll",
                     UART_BMS_TASK_STACK,
                     NULL,
                     UART_BMS_TASK_PRIORITY,
-                    &s_uart_task_handle) != pdPASS) {
+                    &s_uart_poll_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Unable to create UART BMS task");
         uart_driver_delete(UART_BMS_UART_PORT);
         s_uart_initialised = false;
-        s_uart_task_handle = NULL;
+        s_uart_poll_task_handle = NULL;
     }
 }
 
@@ -483,7 +528,7 @@ esp_err_t uart_bms_decode_frame(const uint8_t *frame, size_t length, uart_bms_li
     }
 
     uint16_t crc_expected = (uint16_t)frame[expected_len - 2] | (uint16_t)(frame[expected_len - 1] << 8);
-    uint16_t crc_computed = uart_bms_compute_crc(frame, expected_len - 2);
+    uint16_t crc_computed = uart_frame_builder_crc16(frame, expected_len - 2);
     if (crc_expected != crc_computed) {
         return ESP_ERR_INVALID_CRC;
     }

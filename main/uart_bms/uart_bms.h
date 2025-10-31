@@ -12,6 +12,10 @@
 extern "C" {
 #endif
 
+#define UART_BMS_MIN_POLL_INTERVAL_MS    100U
+#define UART_BMS_MAX_POLL_INTERVAL_MS   1000U
+#define UART_BMS_DEFAULT_POLL_INTERVAL_MS 250U
+
 #define UART_BMS_MAX_REGISTERS UART_BMS_REGISTER_WORD_COUNT
 
 typedef struct {
@@ -58,6 +62,8 @@ typedef void (*uart_bms_data_callback_t)(const uart_bms_live_data_t *data, void 
 
 void uart_bms_init(void);
 void uart_bms_set_event_publisher(event_bus_publish_fn_t publisher);
+void uart_bms_set_poll_interval_ms(uint32_t interval_ms);
+uint32_t uart_bms_get_poll_interval_ms(void);
 
 esp_err_t uart_bms_register_listener(uart_bms_data_callback_t callback, void *context);
 void uart_bms_unregister_listener(uart_bms_data_callback_t callback, void *context);
