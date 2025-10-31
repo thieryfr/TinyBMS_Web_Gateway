@@ -51,12 +51,12 @@ typedef esp_err_t (*can_publisher_frame_publish_fn_t)(uint32_t can_id,
                                                       const char *description);
 
 /**
- * @brief Circular buffer storing the most recent frames prepared by the publisher.
+ * @brief Shared buffer storing the most recent frames prepared for each channel.
  */
 typedef struct {
     can_publisher_frame_t slots[CAN_PUBLISHER_MAX_BUFFER_SLOTS]; /**< Storage for prepared frames. */
+    bool slot_valid[CAN_PUBLISHER_MAX_BUFFER_SLOTS];             /**< Whether the slot contains data. */
     size_t capacity;                                            /**< Number of usable slots. */
-    size_t next_index;                                          /**< Next slot to overwrite. */
 } can_publisher_buffer_t;
 
 /**
@@ -71,6 +71,7 @@ typedef struct {
 void can_publisher_set_event_publisher(event_bus_publish_fn_t publisher);
 void can_publisher_init(event_bus_publish_fn_t publisher,
                         can_publisher_frame_publish_fn_t frame_publisher);
+void can_publisher_deinit(void);
 void can_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context);
 
 #ifdef __cplusplus
