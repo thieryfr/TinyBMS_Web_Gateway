@@ -6,12 +6,13 @@
 #include "esp_err.h"
 
 #include "event_bus.h"
+#include "uart_bms_protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define UART_BMS_MAX_REGISTERS 39
+#define UART_BMS_MAX_REGISTERS UART_BMS_REGISTER_WORD_COUNT
 
 typedef struct {
     uint16_t address;
@@ -33,6 +34,22 @@ typedef struct {
     uint16_t warning_bits;
     uint32_t uptime_seconds;
     uint32_t cycle_count;
+    float auxiliary_temperature_c;
+    float pack_temperature_min_c;
+    float pack_temperature_max_c;
+    float battery_capacity_ah;
+    uint16_t series_cell_count;
+    uint16_t overvoltage_cutoff_mv;
+    uint16_t undervoltage_cutoff_mv;
+    float discharge_overcurrent_limit_a;
+    float charge_overcurrent_limit_a;
+    float peak_discharge_current_limit_a;
+    float overheat_cutoff_c;
+    uint8_t hardware_version;
+    uint8_t hardware_changes_version;
+    uint8_t firmware_version;
+    uint8_t firmware_flags;
+    uint16_t internal_firmware_version;
     size_t register_count;
     uart_bms_register_entry_t registers[UART_BMS_MAX_REGISTERS];
 } uart_bms_live_data_t;

@@ -10,48 +10,13 @@
 
 #include <string.h>
 
-static const uint16_t kRegisterCount = UART_BMS_MAX_REGISTERS;
+static const uint16_t kRegisterCount = UART_BMS_REGISTER_WORD_COUNT;
 
-static const uint16_t kSampleValues[UART_BMS_MAX_REGISTERS] = {
-    5135,
-    (uint16_t)(int16_t)-123,
-    3200,
-    3320,
-    7564,
-    9123,
-    (uint16_t)(int16_t)245,
-    (uint16_t)(int16_t)300,
-    0x0003,
-    0x0040,
-    0x0002,
-    0x0000,
-    0x0001,
-    0x0002,
-    0x0003,
-    0x0004,
-    0x0005,
-    0x0006,
-    0x0007,
-    0x0008,
-    0x0009,
-    0x3456,
-    0x0012,
-    0x00AB,
-    0x0001,
-    0x0100,
-    0x0101,
-    0x0102,
-    0x0200,
-    0x0201,
-    0x0202,
-    0x0203,
-    0x0204,
-    0x0300,
-    0x0301,
-    0x0302,
-    0x0303,
-    0x0304,
-    0x0305,
+static const uint16_t kSampleValues[UART_BMS_REGISTER_WORD_COUNT] = {
+    0x3456, 0x0012, 0x6666, 0x424D, 0xCCCD, 0xC144, 0x0C80, 0x0CF8, 0x00F5,
+    0x012C, 0xB22F, 0x2CC0, 0x0482, 0x0113, 0x0091, 0x0002, 0x0003, 0x1C12,
+    0x0078, 0x2F12, 0x0010, 0x1068, 0x0BB8, 0x0096, 0x003F, 0x003E, 0x0102,
+    0x1234, 0x0456,
 };
 
 static uint16_t compute_crc16(const uint8_t *data, size_t length)
@@ -138,24 +103,40 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
     const uart_bms_live_data_t *payload = (const uart_bms_live_data_t *)event.payload;
     TEST_ASSERT_EQUAL_UINT32(kRegisterCount, payload->register_count);
     TEST_ASSERT_EQUAL_UINT16(0x0020, payload->registers[0].address);
-    TEST_ASSERT_EQUAL_UINT16(5135, payload->registers[0].raw_value);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 51.35f, payload->pack_voltage_v);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, -12.3f, payload->pack_current_a);
+    TEST_ASSERT_EQUAL_UINT16(0x3456, payload->registers[0].raw_value);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 51.35f, payload->pack_voltage_v);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -12.3f, payload->pack_current_a);
     TEST_ASSERT_EQUAL_UINT16(3200, payload->min_cell_mv);
     TEST_ASSERT_EQUAL_UINT16(3320, payload->max_cell_mv);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.64f, payload->state_of_charge_pct);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 91.23f, payload->state_of_health_pct);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 24.5f, payload->average_temperature_c);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 30.0f, payload->mosfet_temperature_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.64f, payload->state_of_charge_pct);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 91.23f, payload->state_of_health_pct);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 24.5f, payload->average_temperature_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f, payload->auxiliary_temperature_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 27.5f, payload->mosfet_temperature_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 18.0f, payload->pack_temperature_min_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 28.0f, payload->pack_temperature_max_c);
     TEST_ASSERT_EQUAL_UINT16(0x0003, payload->balancing_bits);
-    TEST_ASSERT_EQUAL_UINT16(0x0040, payload->alarm_bits);
+    TEST_ASSERT_EQUAL_UINT16(0x0091, payload->alarm_bits);
     TEST_ASSERT_EQUAL_UINT16(0x0002, payload->warning_bits);
     TEST_ASSERT_EQUAL_UINT32((uint32_t)0x0012 << 16 | 0x3456, payload->uptime_seconds);
-    TEST_ASSERT_EQUAL_UINT32((uint32_t)0x0001 << 16 | 0x00AB, payload->cycle_count);
+    TEST_ASSERT_EQUAL_UINT32(0, payload->cycle_count);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 120.5f, payload->battery_capacity_ah);
+    TEST_ASSERT_EQUAL_UINT16(16, payload->series_cell_count);
+    TEST_ASSERT_EQUAL_UINT16(4200, payload->overvoltage_cutoff_mv);
+    TEST_ASSERT_EQUAL_UINT16(3000, payload->undervoltage_cutoff_mv);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 150.0f, payload->discharge_overcurrent_limit_a);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 63.0f, payload->charge_overcurrent_limit_a);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 120.0f, payload->peak_discharge_current_limit_a);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 62.0f, payload->overheat_cutoff_c);
+    TEST_ASSERT_EQUAL_UINT8(2, payload->hardware_version);
+    TEST_ASSERT_EQUAL_UINT8(1, payload->hardware_changes_version);
+    TEST_ASSERT_EQUAL_UINT8(0x34, payload->firmware_version);
+    TEST_ASSERT_EQUAL_UINT8(0x12, payload->firmware_flags);
+    TEST_ASSERT_EQUAL_UINT16(0x0456, payload->internal_firmware_version);
 
     TEST_ASSERT_TRUE(s_listener_called);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 51.35f, s_listener_data.pack_voltage_v);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, -12.3f, s_listener_data.pack_current_a);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 51.35f, s_listener_data.pack_voltage_v);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -12.3f, s_listener_data.pack_current_a);
 
     uart_bms_unregister_listener(test_listener, NULL);
     event_bus_unsubscribe(subscriber);
