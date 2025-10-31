@@ -80,4 +80,44 @@ menu "CAN Publisher"
             latest frames at the configured cadence.
 endmenu
 
+menu "Victron CAN"
+    config TINYBMS_CAN_VICTRON_TX_GPIO
+        int "Victron CAN TX GPIO"
+        range 0 48
+        default 5
+        help
+            GPIO used as the TWAI transmit output towards the Victron bus.
+
+    config TINYBMS_CAN_VICTRON_RX_GPIO
+        int "Victron CAN RX GPIO"
+        range 0 48
+        default 4
+        help
+            GPIO used as the TWAI receive input from the Victron bus.
+
+    config TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
+        int "Keepalive transmit interval (ms)"
+        range 100 60000
+        default 1000
+        help
+            Interval between keepalive frames transmitted to Victron devices.
+
+    config TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS
+        int "Keepalive timeout (ms)"
+        range 1000 120000
+        default 10000
+        help
+            Time allowed between keepalive frames received from Victron
+            devices before marking the link as unhealthy.
+
+    config TINYBMS_CAN_KEEPALIVE_RETRY_MS
+        int "Keepalive retry interval (ms)"
+        range 100 60000
+        default 500
+        help
+            Retry cadence used when the Victron keepalive handshake is not
+            confirmed. Values lower than the transmit interval trigger faster
+            retries while the link is degraded.
+endmenu
+
 endmenu

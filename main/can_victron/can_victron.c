@@ -8,7 +8,11 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #ifdef ESP_PLATFORM
+#include "driver/gpio.h"
+#include "driver/twai.h"
 #include "esp_timer.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 #else
 #include <sys/time.h>
 #endif
@@ -20,12 +24,69 @@
 #define CAN_VICTRON_EVENT_BUFFERS 4
 #define CAN_VICTRON_JSON_SIZE     256
 
+#define CAN_VICTRON_KEEPALIVE_ID         0x305U
+#define CAN_VICTRON_KEEPALIVE_DLC        1U
+#define CAN_VICTRON_TASK_STACK           4096
+#define CAN_VICTRON_TASK_PRIORITY        (tskIDLE_PRIORITY + 6)
+#define CAN_VICTRON_TASK_DELAY_MS        50U
+#define CAN_VICTRON_RX_TIMEOUT_MS        10U
+#define CAN_VICTRON_TX_TIMEOUT_MS        50U
+#define CAN_VICTRON_LOCK_TIMEOUT_MS      20U
+#define CAN_VICTRON_TWAI_TX_QUEUE_LEN    16
+#define CAN_VICTRON_TWAI_RX_QUEUE_LEN    16
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS 1000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS 10000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS 500
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO 5
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO 4
+#endif
+
+typedef enum {
+    CAN_VICTRON_DIRECTION_TX,
+    CAN_VICTRON_DIRECTION_RX,
+} can_victron_direction_t;
+
 static const char *TAG = "can_victron";
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static char s_can_raw_events[CAN_VICTRON_EVENT_BUFFERS][CAN_VICTRON_JSON_SIZE];
 static char s_can_decoded_events[CAN_VICTRON_EVENT_BUFFERS][CAN_VICTRON_JSON_SIZE];
 static size_t s_next_event_slot = 0;
+static portMUX_TYPE s_event_slot_lock = portMUX_INITIALIZER_UNLOCKED;
+
+#ifdef ESP_PLATFORM
+static SemaphoreHandle_t s_twai_mutex = NULL;
+static TaskHandle_t s_can_task_handle = NULL;
+static bool s_driver_started = false;
+static bool s_keepalive_ok = false;
+static uint64_t s_last_keepalive_tx_ms = 0;
+static uint64_t s_last_keepalive_rx_ms = 0;
+static const uint32_t s_keepalive_interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS;
+static const uint32_t s_keepalive_timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS;
+static const uint32_t s_keepalive_retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS;
+
+static esp_err_t can_victron_start_driver(void);
+static void can_victron_stop_driver(void);
+static void can_victron_send_keepalive(uint64_t now);
+static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now);
+static void can_victron_service_keepalive(uint64_t now);
+static void can_victron_handle_rx_message(const twai_message_t *message);
+static void can_victron_task(void *context);
+#endif
 
 static uint64_t can_victron_timestamp_ms(void)
 {
@@ -79,56 +140,50 @@ static void can_victron_publish_event(event_bus_event_id_t id, char *payload, si
     }
 }
 
-static void can_victron_publish_demo_frames(void)
+static esp_err_t can_victron_emit_events(uint32_t can_id,
+                                         const uint8_t *data,
+                                         size_t dlc,
+                                         size_t data_length,
+                                         const char *description,
+                                         can_victron_direction_t direction,
+                                         uint64_t timestamp)
 {
-    static const uint8_t k_demo_status[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-    can_victron_publish_frame(0x18FF50E5, k_demo_status, sizeof(k_demo_status), "Battery status frame");
+    if (s_event_publisher == NULL) {
+        return ESP_OK;
+    }
 
-    static const uint8_t k_demo_alarm[] = {0x01, 0x02, 0x00, 0x00};
-    can_victron_publish_frame(0x18FF01E5, k_demo_alarm, sizeof(k_demo_alarm), "Alarm flags");
-}
+    if (data_length > dlc) {
+        data_length = dlc;
+    }
 
-void can_victron_set_event_publisher(event_bus_publish_fn_t publisher)
-{
-    s_event_publisher = publisher;
-}
-
-esp_err_t can_victron_publish_frame(uint32_t can_id,
-                                    const uint8_t *data,
-                                    size_t length,
-                                    const char *description)
-{
-    if (data == NULL || length == 0) {
+    if (data_length > 0 && data == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (length > 8) {
-        length = 8;
-    }
+    const char *direction_label = (direction == CAN_VICTRON_DIRECTION_RX) ? "rx" : "tx";
 
-    if (s_event_publisher == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
+    size_t raw_index;
+    portENTER_CRITICAL(&s_event_slot_lock);
+    raw_index = s_next_event_slot;
+    s_next_event_slot = (s_next_event_slot + 1U) % CAN_VICTRON_EVENT_BUFFERS;
+    portEXIT_CRITICAL(&s_event_slot_lock);
 
-    uint64_t timestamp = can_victron_timestamp_ms();
-
-    size_t raw_index = s_next_event_slot;
-    s_next_event_slot = (s_next_event_slot + 1) % CAN_VICTRON_EVENT_BUFFERS;
     char *raw_payload = s_can_raw_events[raw_index];
     size_t raw_offset = 0;
 
     if (!can_victron_json_append(raw_payload,
                                  CAN_VICTRON_JSON_SIZE,
                                  &raw_offset,
-                                 "{\"type\":\"can_raw\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\","
+                                 "{\"type\":\"can_raw\",\"direction\":\"%s\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
                                  "\"dlc\":%zu,\"data\":\"",
+                                 direction_label,
                                  timestamp,
                                  can_id,
-                                 length)) {
+                                 dlc)) {
         return ESP_ERR_INVALID_SIZE;
     }
 
-    for (size_t i = 0; i < length; ++i) {
+    for (size_t i = 0; i < data_length; ++i) {
         if (!can_victron_json_append(raw_payload,
                                      CAN_VICTRON_JSON_SIZE,
                                      &raw_offset,
@@ -144,8 +199,12 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
 
     can_victron_publish_event(APP_EVENT_ID_CAN_FRAME_RAW, raw_payload, raw_offset);
 
-    size_t decoded_index = s_next_event_slot;
-    s_next_event_slot = (s_next_event_slot + 1) % CAN_VICTRON_EVENT_BUFFERS;
+    size_t decoded_index;
+    portENTER_CRITICAL(&s_event_slot_lock);
+    decoded_index = s_next_event_slot;
+    s_next_event_slot = (s_next_event_slot + 1U) % CAN_VICTRON_EVENT_BUFFERS;
+    portEXIT_CRITICAL(&s_event_slot_lock);
+
     char *decoded_payload = s_can_decoded_events[decoded_index];
     size_t decoded_offset = 0;
 
@@ -153,20 +212,21 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
     if (!can_victron_json_append(decoded_payload,
                                  CAN_VICTRON_JSON_SIZE,
                                  &decoded_offset,
-                                 "{\"type\":\"can_decoded\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\","
+                                 "{\"type\":\"can_decoded\",\"direction\":\"%s\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
                                  "\"description\":\"%s\",\"bytes\":[",
+                                 direction_label,
                                  timestamp,
                                  can_id,
                                  label)) {
         return ESP_ERR_INVALID_SIZE;
     }
 
-    for (size_t i = 0; i < length; ++i) {
+    for (size_t i = 0; i < data_length; ++i) {
         if (!can_victron_json_append(decoded_payload,
                                      CAN_VICTRON_JSON_SIZE,
                                      &decoded_offset,
                                      "%s%u",
-                                     (i == 0) ? "" : ",",
+                                     (i == 0U) ? "" : ",",
                                      (unsigned)data[i])) {
             return ESP_ERR_INVALID_SIZE;
         }
@@ -180,8 +240,316 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
     return ESP_OK;
 }
 
+static void can_victron_publish_demo_frames(void)
+{
+    static const uint8_t k_demo_status[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
+    uint64_t timestamp = can_victron_timestamp_ms();
+    (void)can_victron_emit_events(0x18FF50E5,
+                                  k_demo_status,
+                                  sizeof(k_demo_status),
+                                  sizeof(k_demo_status),
+                                  "Battery status frame",
+                                  CAN_VICTRON_DIRECTION_TX,
+                                  timestamp);
+
+    static const uint8_t k_demo_alarm[] = {0x01, 0x02, 0x00, 0x00};
+    (void)can_victron_emit_events(0x18FF01E5,
+                                  k_demo_alarm,
+                                  sizeof(k_demo_alarm),
+                                  sizeof(k_demo_alarm),
+                                  "Alarm flags",
+                                  CAN_VICTRON_DIRECTION_TX,
+                                  can_victron_timestamp_ms());
+}
+
+#ifdef ESP_PLATFORM
+static esp_err_t can_victron_start_driver(void)
+{
+    if (s_driver_started) {
+        return ESP_OK;
+    }
+
+    twai_general_config_t g_config =
+        TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+                                    (gpio_num_t)CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+                                    TWAI_MODE_NORMAL);
+    g_config.tx_queue_len = CAN_VICTRON_TWAI_TX_QUEUE_LEN;
+    g_config.rx_queue_len = CAN_VICTRON_TWAI_RX_QUEUE_LEN;
+
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
+    twai_filter_config_t f_config = {
+        .acceptance_code = (uint32_t)(CAN_VICTRON_KEEPALIVE_ID << 21),
+        .acceptance_mask = ~(0x7FFU << 21),
+        .single_filter = true,
+    };
+
+    esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = twai_start();
+    if (err != ESP_OK) {
+        (void)twai_driver_uninstall();
+        return err;
+    }
+
+    s_driver_started = true;
+    s_keepalive_ok = false;
+    uint64_t now = can_victron_timestamp_ms();
+    s_last_keepalive_rx_ms = now;
+    if (now >= s_keepalive_interval_ms) {
+        s_last_keepalive_tx_ms = now - s_keepalive_interval_ms;
+    } else {
+        s_last_keepalive_tx_ms = 0;
+    }
+    return ESP_OK;
+}
+
+static void can_victron_stop_driver(void)
+{
+    if (!s_driver_started) {
+        return;
+    }
+
+    (void)twai_stop();
+    (void)twai_driver_uninstall();
+    s_driver_started = false;
+}
+
+static void can_victron_send_keepalive(uint64_t now)
+{
+    if (!s_driver_started) {
+        return;
+    }
+
+    uint8_t payload[CAN_VICTRON_KEEPALIVE_DLC] = {0x00};
+    esp_err_t err = can_victron_publish_frame(CAN_VICTRON_KEEPALIVE_ID,
+                                              payload,
+                                              CAN_VICTRON_KEEPALIVE_DLC,
+                                              "Victron keepalive");
+    if (err == ESP_OK) {
+        s_last_keepalive_tx_ms = now;
+    } else {
+        ESP_LOGW(TAG, "Failed to transmit keepalive: %s", esp_err_to_name(err));
+    }
+}
+
+static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now)
+{
+    s_last_keepalive_rx_ms = now;
+    if (!s_keepalive_ok) {
+        s_keepalive_ok = true;
+        ESP_LOGI(TAG, "Victron keepalive detected");
+    }
+
+    if (remote_request) {
+        ESP_LOGD(TAG, "Victron keepalive request received");
+        can_victron_send_keepalive(now);
+    }
+}
+
+static void can_victron_service_keepalive(uint64_t now)
+{
+    if (!s_driver_started) {
+        return;
+    }
+
+    uint32_t interval = s_keepalive_interval_ms;
+    if (!s_keepalive_ok && s_keepalive_retry_ms > 0U && s_keepalive_retry_ms < interval) {
+        interval = s_keepalive_retry_ms;
+    }
+    if (interval == 0U) {
+        interval = 1000U;
+    }
+
+    if ((now - s_last_keepalive_tx_ms) >= interval) {
+        can_victron_send_keepalive(now);
+    }
+
+    if (s_keepalive_ok && (now - s_last_keepalive_rx_ms) > s_keepalive_timeout_ms) {
+        s_keepalive_ok = false;
+        ESP_LOGW(TAG,
+                 "Victron keepalive timeout after %" PRIu64 " ms",
+                 now - s_last_keepalive_rx_ms);
+        can_victron_send_keepalive(now);
+    }
+}
+
+static void can_victron_handle_rx_message(const twai_message_t *message)
+{
+    if (message == NULL) {
+        return;
+    }
+
+    const bool is_remote = (message->flags & TWAI_MSG_FLAG_RTR) != 0U;
+    const bool is_extended = (message->flags & TWAI_MSG_FLAG_EXTD) != 0U;
+    const uint32_t identifier = message->identifier;
+    const size_t dlc = message->data_length_code;
+    const size_t data_length = is_remote ? 0U : dlc;
+    const uint8_t *payload = is_remote ? NULL : message->data;
+    uint64_t timestamp = can_victron_timestamp_ms();
+
+    if (!is_extended && identifier == CAN_VICTRON_KEEPALIVE_ID) {
+        can_victron_process_keepalive_rx(is_remote, timestamp);
+
+        const char *desc = is_remote ? "Victron keepalive request" : "Victron keepalive";
+        (void)can_victron_emit_events(identifier,
+                                      payload,
+                                      dlc,
+                                      data_length,
+                                      desc,
+                                      CAN_VICTRON_DIRECTION_RX,
+                                      timestamp);
+    }
+}
+
+static void can_victron_task(void *context)
+{
+    (void)context;
+    while (true) {
+        uint64_t now = can_victron_timestamp_ms();
+
+        if (s_driver_started) {
+            twai_message_t message = {0};
+            while (true) {
+                esp_err_t rx = twai_receive(&message, pdMS_TO_TICKS(CAN_VICTRON_RX_TIMEOUT_MS));
+                if (rx == ESP_OK) {
+                    can_victron_handle_rx_message(&message);
+                } else if (rx == ESP_ERR_TIMEOUT) {
+                    break;
+                } else {
+                    ESP_LOGW(TAG, "CAN receive error: %s", esp_err_to_name(rx));
+                    break;
+                }
+            }
+
+            can_victron_service_keepalive(now);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(CAN_VICTRON_TASK_DELAY_MS));
+    }
+}
+#endif  // ESP_PLATFORM
+
+void can_victron_set_event_publisher(event_bus_publish_fn_t publisher)
+{
+    s_event_publisher = publisher;
+}
+
+esp_err_t can_victron_publish_frame(uint32_t can_id,
+                                    const uint8_t *data,
+                                    size_t length,
+                                    const char *description)
+{
+    if (length > 8U) {
+        length = 8U;
+    }
+
+    size_t dlc = length;
+    size_t data_length = length;
+
+    if (data_length > 0U && data == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!s_driver_started) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    twai_message_t message = {
+        .identifier = can_id,
+        .flags = 0,
+        .data_length_code = (uint8_t)dlc,
+    };
+
+    if (data_length > 0U) {
+        memcpy(message.data, data, data_length);
+    }
+
+    if (can_id > 0x7FFU) {
+        message.flags |= TWAI_MSG_FLAG_EXTD;
+    }
+
+    SemaphoreHandle_t mutex = s_twai_mutex;
+    if (mutex != NULL) {
+        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(CAN_VICTRON_LOCK_TIMEOUT_MS)) != pdTRUE) {
+            ESP_LOGW(TAG, "Timed out acquiring CAN TX mutex");
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+
+    esp_err_t tx_err = twai_transmit(&message, pdMS_TO_TICKS(CAN_VICTRON_TX_TIMEOUT_MS));
+
+    if (mutex != NULL) {
+        xSemaphoreGive(mutex);
+    }
+
+    if (tx_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "Failed to transmit CAN frame 0x%08" PRIX32 ": %s",
+                 can_id,
+                 esp_err_to_name(tx_err));
+        return tx_err;
+    }
+#endif
+
+    uint64_t timestamp = can_victron_timestamp_ms();
+    return can_victron_emit_events(can_id,
+                                   data,
+                                   dlc,
+                                   data_length,
+                                   description,
+                                   CAN_VICTRON_DIRECTION_TX,
+                                   timestamp);
+}
+
 void can_victron_init(void)
 {
-    ESP_LOGI(TAG, "Victron CAN monitor initialised");
+#ifdef ESP_PLATFORM
+    ESP_LOGI(TAG, "Initialising Victron CAN interface");
+    esp_err_t err = can_victron_start_driver();
+    if (err == ESP_OK) {
+        if (s_twai_mutex == NULL) {
+            s_twai_mutex = xSemaphoreCreateMutex();
+            if (s_twai_mutex == NULL) {
+                ESP_LOGE(TAG, "Failed to create CAN mutex");
+            }
+        }
+
+        if (s_can_task_handle == NULL) {
+            BaseType_t rc = xTaskCreate(can_victron_task,
+                                        "can_victron",
+                                        CAN_VICTRON_TASK_STACK,
+                                        NULL,
+                                        CAN_VICTRON_TASK_PRIORITY,
+                                        &s_can_task_handle);
+            if (rc != pdPASS) {
+                ESP_LOGE(TAG, "Failed to create Victron CAN task");
+                s_can_task_handle = NULL;
+                can_victron_stop_driver();
+            }
+        }
+
+        if (s_driver_started) {
+            uint64_t now = can_victron_timestamp_ms();
+            can_victron_send_keepalive(now);
+            ESP_LOGI(TAG,
+                     "Victron CAN driver ready (TX=%d RX=%d)",
+                     CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+                     CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO);
+        }
+    } else {
+        ESP_LOGE(TAG, "Victron CAN driver start failed: %s", esp_err_to_name(err));
+    }
+
+    if (!s_driver_started) {
+        can_victron_publish_demo_frames();
+    }
+#else
+    ESP_LOGI(TAG, "Victron CAN monitor initialised (host mode)");
     can_victron_publish_demo_frames();
+#endif
 }
+
