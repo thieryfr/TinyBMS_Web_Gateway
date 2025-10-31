@@ -1,6 +1,7 @@
 #include "config_manager.h"
 
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,64 +23,65 @@
 #define CONFIG_MANAGER_MAX_REGISTER_KEY       32
 #define CONFIG_MANAGER_NAMESPACE              "gateway_cfg"
 #define CONFIG_MANAGER_POLL_KEY               "uart_poll"
+#define CONFIG_MANAGER_REGISTER_KEY_PREFIX    "reg"
+#define CONFIG_MANAGER_REGISTER_KEY_MAX       16
+
+static void config_manager_make_register_key(uint16_t address, char *out_key, size_t out_size)
+{
+    if (out_key == NULL || out_size == 0) {
+        return;
+    }
+    if (snprintf(out_key, out_size, CONFIG_MANAGER_REGISTER_KEY_PREFIX "%04X", (unsigned)address) >= (int)out_size) {
+        out_key[out_size - 1] = '\0';
+    }
+}
+
+typedef enum {
+    CONFIG_MANAGER_ACCESS_RO = 0,
+    CONFIG_MANAGER_ACCESS_WO,
+    CONFIG_MANAGER_ACCESS_RW,
+} config_manager_access_t;
+
+typedef enum {
+    CONFIG_MANAGER_VALUE_NUMERIC = 0,
+    CONFIG_MANAGER_VALUE_ENUM,
+} config_manager_value_class_t;
 
 typedef struct {
+    uint16_t value;
+    const char *label;
+} config_manager_enum_entry_t;
+
+typedef struct {
+    uint16_t address;
     const char *key;
     const char *label;
     const char *unit;
-    float min_value;
-    float max_value;
-    float step;
-    float default_value;
-    uint16_t address;
+    const char *group;
+    const char *comment;
+    const char *type;
+    config_manager_access_t access;
+    float scale;
+    uint8_t precision;
+    bool has_min;
+    uint16_t min_raw;
+    bool has_max;
+    uint16_t max_raw;
+    float step_raw;
+    uint16_t default_raw;
+    config_manager_value_class_t value_class;
+    const config_manager_enum_entry_t *enum_values;
+    size_t enum_count;
 } config_manager_register_descriptor_t;
 
-static const config_manager_register_descriptor_t s_register_descriptors[] = {
-    {"charge_voltage_limit", "Charge Voltage Limit", "V", 48.0f, 58.4f, 0.1f, 54.8f, 0x0200},
-    {"discharge_voltage_limit", "Discharge Voltage Limit", "V", 40.0f, 53.0f, 0.1f, 46.0f, 0x0201},
-    {"charge_current_limit", "Charge Current Limit", "A", 5.0f, 200.0f, 0.5f, 80.0f, 0x0202},
-    {"discharge_current_limit", "Discharge Current Limit", "A", 5.0f, 300.0f, 0.5f, 120.0f, 0x0203},
-    {"cell_balance_start", "Cell Balance Start", "mV", 3400.0f, 3700.0f, 10.0f, 3500.0f, 0x0204},
-    {"cell_balance_stop", "Cell Balance Stop", "mV", 3450.0f, 3800.0f, 10.0f, 3550.0f, 0x0205},
-    {"cell_overvoltage", "Cell Overvoltage", "mV", 3600.0f, 4000.0f, 10.0f, 3800.0f, 0x0206},
-    {"cell_undervoltage", "Cell Undervoltage", "mV", 2500.0f, 3200.0f, 10.0f, 2800.0f, 0x0207},
-    {"pack_overvoltage_release", "Pack Overvoltage Release", "V", 48.0f, 60.0f, 0.1f, 57.0f, 0x0208},
-    {"pack_undervoltage_release", "Pack Undervoltage Release", "V", 40.0f, 55.0f, 0.1f, 44.0f, 0x0209},
-    {"charge_temp_min", "Charge Temperature Min", "°C", -20.0f, 20.0f, 1.0f, 0.0f, 0x020A},
-    {"charge_temp_max", "Charge Temperature Max", "°C", 20.0f, 60.0f, 1.0f, 45.0f, 0x020B},
-    {"discharge_temp_min", "Discharge Temperature Min", "°C", -40.0f, 20.0f, 1.0f, -10.0f, 0x020C},
-    {"discharge_temp_max", "Discharge Temperature Max", "°C", 20.0f, 80.0f, 1.0f, 55.0f, 0x020D},
-    {"storage_voltage", "Storage Voltage", "V", 45.0f, 54.0f, 0.1f, 50.0f, 0x020E},
-    {"heater_enable_temp", "Heater Enable Temperature", "°C", -20.0f, 20.0f, 1.0f, 5.0f, 0x020F},
-    {"heater_disable_temp", "Heater Disable Temperature", "°C", 0.0f, 40.0f, 1.0f, 15.0f, 0x0210},
-    {"soc_calibration_low", "SOC Calibration Low", "%", 0.0f, 50.0f, 0.5f, 10.0f, 0x0211},
-    {"soc_calibration_high", "SOC Calibration High", "%", 50.0f, 100.0f, 0.5f, 90.0f, 0x0212},
-    {"current_calibration", "Current Sensor Calibration", "%", 80.0f, 120.0f, 0.5f, 100.0f, 0x0213},
-    {"voltage_calibration", "Voltage Calibration", "%", 95.0f, 105.0f, 0.1f, 100.0f, 0x0214},
-    {"shunt_resistance", "Shunt Resistance", "mΩ", 0.1f, 5.0f, 0.1f, 1.5f, 0x0215},
-    {"precharge_delay", "Precharge Delay", "ms", 0.0f, 5000.0f, 50.0f, 1500.0f, 0x0216},
-    {"precharge_voltage", "Precharge Voltage", "V", 10.0f, 60.0f, 0.5f, 48.0f, 0x0217},
-    {"balance_timeout", "Balance Timeout", "s", 0.0f, 600.0f, 10.0f, 180.0f, 0x0218},
-    {"balance_trigger_delta", "Balance Trigger Delta", "mV", 5.0f, 50.0f, 1.0f, 15.0f, 0x0219},
-    {"charge_current_cutoff", "Charge Current Cut-off", "A", 1.0f, 50.0f, 0.5f, 10.0f, 0x021A},
-    {"float_voltage", "Float Voltage", "V", 48.0f, 56.0f, 0.1f, 54.0f, 0x021B},
-    {"buzzer_enable", "Buzzer Enable", "bool", 0.0f, 1.0f, 1.0f, 1.0f, 0x021C},
-    {"relay_hold_time", "Relay Hold Time", "ms", 0.0f, 5000.0f, 50.0f, 1000.0f, 0x021D},
-    {"aux_output_mode", "Auxiliary Output Mode", "enum", 0.0f, 3.0f, 1.0f, 0.0f, 0x021E},
-    {"can_node_id", "CAN Node ID", "", 1.0f, 253.0f, 1.0f, 42.0f, 0x021F},
-    {"modbus_address", "Modbus Address", "", 1.0f, 247.0f, 1.0f, 1.0f, 0x0220},
-    {"log_interval", "Log Interval", "s", 1.0f, 3600.0f, 1.0f, 60.0f, 0x0221},
-    {"alarm_reset_delay", "Alarm Reset Delay", "s", 1.0f, 600.0f, 5.0f, 30.0f, 0x0222},
-};
-
-static const size_t s_register_count = sizeof(s_register_descriptors) / sizeof(s_register_descriptors[0]);
+#include "generated_tiny_rw_registers.inc"
 
 static const char *TAG = "config_manager";
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static char s_config_json[CONFIG_MANAGER_MAX_CONFIG_SIZE] = {0};
 static size_t s_config_length = 0;
-static float s_register_values[sizeof(s_register_descriptors) / sizeof(s_register_descriptors[0])];
+static uint16_t s_register_raw_values[s_register_count];
 static bool s_registers_initialised = false;
 static char s_register_events[CONFIG_MANAGER_REGISTER_EVENT_BUFFERS][CONFIG_MANAGER_MAX_UPDATE_PAYLOAD];
 static size_t s_next_register_event = 0;
@@ -177,6 +179,33 @@ static void config_manager_load_persistent_settings(void)
 #else
     s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
 #endif
+
+    for (size_t i = 0; i < s_register_count; ++i) {
+        const config_manager_register_descriptor_t *desc = &s_register_descriptors[i];
+        uint16_t stored_raw = 0;
+        if (!config_manager_load_register_raw(desc->address, &stored_raw)) {
+            continue;
+        }
+
+        if (desc->value_class == CONFIG_MANAGER_VALUE_ENUM) {
+            bool found = false;
+            for (size_t e = 0; e < desc->enum_count; ++e) {
+                if (desc->enum_values[e].value == stored_raw) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                s_register_raw_values[i] = stored_raw;
+            }
+            continue;
+        }
+
+        uint16_t aligned = 0;
+        if (config_manager_align_raw_value(desc, (float)stored_raw, &aligned) == ESP_OK) {
+            s_register_raw_values[i] = aligned;
+        }
+    }
 }
 
 static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
@@ -205,6 +234,76 @@ static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
 #endif
 }
 
+#ifdef ESP_PLATFORM
+static esp_err_t config_manager_store_register_raw(uint16_t address, uint16_t raw_value)
+{
+    esp_err_t err = config_manager_init_nvs();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle = 0;
+    err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char key[CONFIG_MANAGER_REGISTER_KEY_MAX];
+    config_manager_make_register_key(address, key, sizeof(key));
+
+    err = nvs_set_u16(handle, key, raw_value);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+}
+
+static bool config_manager_load_register_raw(uint16_t address, uint16_t *out_value)
+{
+    if (out_value == NULL) {
+        return false;
+    }
+
+    esp_err_t err = config_manager_init_nvs();
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    nvs_handle_t handle = 0;
+    err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    char key[CONFIG_MANAGER_REGISTER_KEY_MAX];
+    config_manager_make_register_key(address, key, sizeof(key));
+    uint16_t value = 0;
+    err = nvs_get_u16(handle, key, &value);
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    *out_value = value;
+    return true;
+}
+#else
+static esp_err_t config_manager_store_register_raw(uint16_t address, uint16_t raw_value)
+{
+    (void)address;
+    (void)raw_value;
+    return ESP_OK;
+}
+
+static bool config_manager_load_register_raw(uint16_t address, uint16_t *out_value)
+{
+    (void)address;
+    (void)out_value;
+    return false;
+}
+#endif
+
 static void config_manager_publish_config_snapshot(void)
 {
     if (s_event_publisher == NULL || s_config_length == 0) {
@@ -222,9 +321,10 @@ static void config_manager_publish_config_snapshot(void)
     }
 }
 
-static void config_manager_publish_register_change(const char *key, float value)
+static void config_manager_publish_register_change(const config_manager_register_descriptor_t *desc,
+                                                   uint16_t raw_value)
 {
-    if (s_event_publisher == NULL || key == NULL) {
+    if (s_event_publisher == NULL || desc == NULL) {
         return;
     }
 
@@ -232,13 +332,19 @@ static void config_manager_publish_register_change(const char *key, float value)
     s_next_register_event = (s_next_register_event + 1) % CONFIG_MANAGER_REGISTER_EVENT_BUFFERS;
 
     char *payload = s_register_events[slot];
+    float user_value = (desc->value_class == CONFIG_MANAGER_VALUE_ENUM)
+                           ? (float)raw_value
+                           : config_manager_raw_to_user(desc, raw_value);
+    int precision = (desc->value_class == CONFIG_MANAGER_VALUE_ENUM) ? 0 : desc->precision;
     int written = snprintf(payload,
                            CONFIG_MANAGER_MAX_UPDATE_PAYLOAD,
-                           "{\"type\":\"register_update\",\"key\":\"%s\",\"value\":%.3f}",
-                           key,
-                           value);
+                           "{\"type\":\"register_update\",\"key\":\"%s\",\"value\":%.*f,\"raw\":%u}",
+                           desc->key,
+                           precision,
+                           user_value,
+                           (unsigned)raw_value);
     if (written < 0 || written >= CONFIG_MANAGER_MAX_UPDATE_PAYLOAD) {
-        ESP_LOGW(TAG, "Register update payload truncated for %s", key);
+        ESP_LOGW(TAG, "Register update payload truncated for %s", desc->key);
         return;
     }
 
@@ -279,7 +385,7 @@ static esp_err_t config_manager_build_config_snapshot(void)
 static void config_manager_load_register_defaults(void)
 {
     for (size_t i = 0; i < s_register_count; ++i) {
-        s_register_values[i] = s_register_descriptors[i].default_value;
+        s_register_raw_values[i] = s_register_descriptors[i].default_raw;
     }
     s_registers_initialised = true;
 }
@@ -417,18 +523,107 @@ static bool config_manager_extract_uint32_field(const char *json,
     return true;
 }
 
-static esp_err_t config_manager_validate_value(size_t index, float value)
+static float config_manager_raw_to_user(const config_manager_register_descriptor_t *desc, uint16_t raw_value)
 {
-    if (index >= s_register_count) {
+    if (desc == NULL) {
+        return 0.0f;
+    }
+    return (float)raw_value * desc->scale;
+}
+
+static esp_err_t config_manager_align_raw_value(const config_manager_register_descriptor_t *desc,
+                                                float requested_raw,
+                                                uint16_t *out_raw)
+{
+    if (desc == NULL || out_raw == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    const config_manager_register_descriptor_t *desc = &s_register_descriptors[index];
-    if (value < desc->min_value || value > desc->max_value) {
-        ESP_LOGW(TAG, "%s=%.3f outside range %.3f..%.3f", desc->key, value, desc->min_value, desc->max_value);
+    float aligned_raw = requested_raw;
+    if (desc->step_raw > 0.0f) {
+        float base = desc->has_min ? (float)desc->min_raw : 0.0f;
+        float steps = (aligned_raw - base) / desc->step_raw;
+        float rounded = nearbyintf(steps);
+        aligned_raw = base + desc->step_raw * rounded;
+    }
+
+    if (desc->has_min && aligned_raw < (float)desc->min_raw) {
+        aligned_raw = (float)desc->min_raw;
+    }
+    if (desc->has_max && aligned_raw > (float)desc->max_raw) {
+        aligned_raw = (float)desc->max_raw;
+    }
+
+    if (aligned_raw < 0.0f || aligned_raw > 65535.0f) {
         return ESP_ERR_INVALID_ARG;
     }
 
+    *out_raw = (uint16_t)lrintf(aligned_raw);
+    return ESP_OK;
+}
+
+static esp_err_t config_manager_convert_user_to_raw(const config_manager_register_descriptor_t *desc,
+                                                    float user_value,
+                                                    uint16_t *out_raw,
+                                                    float *out_aligned_user)
+{
+    if (desc == NULL || out_raw == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (desc->access != CONFIG_MANAGER_ACCESS_RW) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (desc->value_class == CONFIG_MANAGER_VALUE_ENUM) {
+        uint16_t candidate = (uint16_t)lrintf(user_value);
+        for (size_t i = 0; i < desc->enum_count; ++i) {
+            if (desc->enum_values[i].value == candidate) {
+                *out_raw = candidate;
+                if (out_aligned_user != NULL) {
+                    *out_aligned_user = (float)candidate;
+                }
+                return ESP_OK;
+            }
+        }
+        ESP_LOGW(TAG, "%s value %.3f does not match enum options", desc->key, user_value);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (desc->scale <= 0.0f) {
+        ESP_LOGW(TAG, "Register %s has invalid scale %.3f", desc->key, desc->scale);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    float requested_raw = user_value / desc->scale;
+    uint16_t raw_value = 0;
+    esp_err_t err = config_manager_align_raw_value(desc, requested_raw, &raw_value);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "%s unable to align %.3f -> raw", desc->key, user_value);
+        return err;
+    }
+
+    if (desc->has_min && raw_value < desc->min_raw) {
+        ESP_LOGW(TAG,
+                 "%s raw %u below minimum %u",
+                 desc->key,
+                 (unsigned)raw_value,
+                 (unsigned)desc->min_raw);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (desc->has_max && raw_value > desc->max_raw) {
+        ESP_LOGW(TAG,
+                 "%s raw %u above maximum %u",
+                 desc->key,
+                 (unsigned)raw_value,
+                 (unsigned)desc->max_raw);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_raw = raw_value;
+    if (out_aligned_user != NULL) {
+        *out_aligned_user = config_manager_raw_to_user(desc, raw_value);
+    }
     return ESP_OK;
 }
 
@@ -566,20 +761,108 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
 
     for (size_t i = 0; i < s_register_count; ++i) {
         const config_manager_register_descriptor_t *desc = &s_register_descriptors[i];
+        uint16_t raw_value = s_register_raw_values[i];
+        bool is_enum = (desc->value_class == CONFIG_MANAGER_VALUE_ENUM);
+        float user_value = is_enum ? (float)raw_value : config_manager_raw_to_user(desc, raw_value);
+        float min_user = (desc->has_min && !is_enum) ? config_manager_raw_to_user(desc, desc->min_raw) : 0.0f;
+        float max_user = (desc->has_max && !is_enum) ? config_manager_raw_to_user(desc, desc->max_raw) : 0.0f;
+        float step_user = (!is_enum) ? desc->step_raw * desc->scale : 0.0f;
+        float default_user = is_enum ? (float)desc->default_raw : config_manager_raw_to_user(desc, desc->default_raw);
+        const char *access_str = "ro";
+        if (desc->access == CONFIG_MANAGER_ACCESS_RW) {
+            access_str = "rw";
+        } else if (desc->access == CONFIG_MANAGER_ACCESS_WO) {
+            access_str = "wo";
+        }
+
         if (!config_manager_json_append(buffer,
                                         buffer_size,
                                         &offset,
-                                        "%s{\"key\":\"%s\",\"label\":\"%s\",\"unit\":\"%s\",\"address\":%u,"
-                                        "\"min\":%.3f,\"max\":%.3f,\"step\":%.3f,\"value\":%.3f}",
+                                        "%s{\"key\":\"%s\",\"label\":\"%s\",\"unit\":\"%s\",\"group\":\"%s\","
+                                        "\"type\":\"%s\",\"access\":\"%s\",\"address\":%u,\"scale\":%.6f,"
+                                        "\"precision\":%u,\"value\":%.*f,\"raw\":%u,\"default\":%.*f",
                                         (i == 0) ? "" : ",",
                                         desc->key,
-                                        desc->label,
-                                        desc->unit,
+                                        desc->label != NULL ? desc->label : "",
+                                        desc->unit != NULL ? desc->unit : "",
+                                        desc->group != NULL ? desc->group : "",
+                                        desc->type != NULL ? desc->type : "",
+                                        access_str,
                                         (unsigned)desc->address,
-                                        desc->min_value,
-                                        desc->max_value,
-                                        desc->step,
-                                        s_register_values[i])) {
+                                        desc->scale,
+                                        (unsigned)desc->precision,
+                                        is_enum ? 0 : desc->precision,
+                                        user_value,
+                                        (unsigned)raw_value,
+                                        is_enum ? 0 : desc->precision,
+                                        default_user)) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+
+        if (!is_enum) {
+            if (desc->has_min &&
+                !config_manager_json_append(buffer,
+                                            buffer_size,
+                                            &offset,
+                                            ",\"min\":%.*f",
+                                            desc->precision,
+                                            min_user)) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+            if (desc->has_max &&
+                !config_manager_json_append(buffer,
+                                            buffer_size,
+                                            &offset,
+                                            ",\"max\":%.*f",
+                                            desc->precision,
+                                            max_user)) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+            if (desc->step_raw > 0.0f &&
+                !config_manager_json_append(buffer,
+                                            buffer_size,
+                                            &offset,
+                                            ",\"step\":%.*f",
+                                            desc->precision,
+                                            step_user)) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+        }
+
+        if (desc->comment != NULL &&
+            !config_manager_json_append(buffer,
+                                        buffer_size,
+                                        &offset,
+                                        ",\"comment\":\"%s\"",
+                                        desc->comment)) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+
+        if (desc->enum_count > 0U) {
+            if (!config_manager_json_append(buffer,
+                                            buffer_size,
+                                            &offset,
+                                            ",\"enum\":[")) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+            for (size_t e = 0; e < desc->enum_count; ++e) {
+                const config_manager_enum_entry_t *entry = &desc->enum_values[e];
+                if (!config_manager_json_append(buffer,
+                                                buffer_size,
+                                                &offset,
+                                                "%s{\"value\":%u,\"label\":\"%s\"}",
+                                                (e == 0) ? "" : ",",
+                                                (unsigned)entry->value,
+                                                entry->label != NULL ? entry->label : "")) {
+                    return ESP_ERR_INVALID_SIZE;
+                }
+            }
+            if (!config_manager_json_append(buffer, buffer_size, &offset, "]")) {
+                return ESP_ERR_INVALID_SIZE;
+            }
+        }
+
+        if (!config_manager_json_append(buffer, buffer_size, &offset, "}")) {
             return ESP_ERR_INVALID_SIZE;
         }
     }
@@ -620,8 +903,8 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
         return ESP_ERR_INVALID_ARG;
     }
 
-    float value = 0.0f;
-    if (!config_manager_extract_float_field(buffer, "\"value\"", &value)) {
+    float requested_value = 0.0f;
+    if (!config_manager_extract_float_field(buffer, "\"value\"", &requested_value)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -631,24 +914,37 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
         return ESP_ERR_NOT_FOUND;
     }
 
-    esp_err_t validation = config_manager_validate_value(index, value);
-    if (validation != ESP_OK) {
-        return validation;
-    }
-
     const config_manager_register_descriptor_t *desc = &s_register_descriptors[index];
-    if (desc->step > 0.0f) {
-        float steps = (value - desc->min_value) / desc->step;
-        float rounded = (steps >= 0.0f) ? (float)((int)(steps + 0.5f)) : (float)((int)(steps - 0.5f));
-        value = desc->min_value + desc->step * rounded;
-        if (value < desc->min_value) {
-            value = desc->min_value;
-        } else if (value > desc->max_value) {
-            value = desc->max_value;
-        }
+    uint16_t raw_value = 0;
+    esp_err_t conversion = config_manager_convert_user_to_raw(desc, requested_value, &raw_value, NULL);
+    if (conversion != ESP_OK) {
+        return conversion;
     }
 
-    s_register_values[index] = value;
-    config_manager_publish_register_change(desc->key, value);
+    uint16_t readback_raw = raw_value;
+    esp_err_t write_err = uart_bms_write_register(desc->address,
+                                                  raw_value,
+                                                  &readback_raw,
+                                                  UART_BMS_RESPONSE_TIMEOUT_MS);
+    if (write_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "Failed to write register %s (0x%04X): %s",
+                 desc->key,
+                 (unsigned)desc->address,
+                 esp_err_to_name(write_err));
+        return write_err;
+    }
+
+    s_register_raw_values[index] = readback_raw;
+    config_manager_publish_register_change(desc, readback_raw);
+#ifdef ESP_PLATFORM
+    esp_err_t persist_err = config_manager_store_register_raw(desc->address, readback_raw);
+    if (persist_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "Failed to persist register 0x%04X: %s",
+                 (unsigned)desc->address,
+                 esp_err_to_name(persist_err));
+    }
+#endif
     return config_manager_build_config_snapshot();
 }

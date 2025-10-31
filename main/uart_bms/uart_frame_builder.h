@@ -19,7 +19,18 @@ extern "C" {
  *         an argument is invalid.
  */
 esp_err_t uart_frame_builder_build_poll_request(uint8_t *buffer,
+                                                size_t buffer_size,
+                                                size_t *out_length);
+
+esp_err_t uart_frame_builder_build_write_single(uint8_t *buffer,
                                                  size_t buffer_size,
+                                                 uint16_t address,
+                                                 uint16_t value,
+                                                 size_t *out_length);
+
+esp_err_t uart_frame_builder_build_read_register(uint8_t *buffer,
+                                                 size_t buffer_size,
+                                                 uint16_t address,
                                                  size_t *out_length);
 
 /**
