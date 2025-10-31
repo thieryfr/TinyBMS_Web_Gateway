@@ -36,6 +36,7 @@
 #define WEB_SERVER_INDEX_PATH   WEB_SERVER_WEB_ROOT "/index.html"
 #define WEB_SERVER_MAX_PATH     256
 #define WEB_SERVER_FILE_BUFSZ   1024
+#define WEB_SERVER_HISTORY_JSON_SIZE 4096
 
 typedef struct ws_client {
     int fd;
@@ -49,6 +50,8 @@ static httpd_handle_t s_httpd = NULL;
 static SemaphoreHandle_t s_ws_mutex = NULL;
 static ws_client_t *s_telemetry_clients = NULL;
 static ws_client_t *s_event_clients = NULL;
+static ws_client_t *s_uart_clients = NULL;
+static ws_client_t *s_can_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
 
@@ -371,6 +374,96 @@ static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
     return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
 }
 
+static esp_err_t web_server_api_history_handler(httpd_req_t *req)
+{
+    size_t limit = 0;
+    int query_len = httpd_req_get_url_query_len(req);
+    if (query_len > 0) {
+        char query[64];
+        if (query_len + 1 > (int)sizeof(query)) {
+            query_len = sizeof(query) - 1;
+        }
+        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+            char value[16];
+            if (httpd_query_key_value(query, "limit", value, sizeof(value)) == ESP_OK) {
+                char *endptr = NULL;
+                unsigned long parsed = strtoul(value, &endptr, 10);
+                if (endptr != value) {
+                    limit = (size_t)parsed;
+                }
+            }
+        }
+    }
+
+    char buffer[WEB_SERVER_HISTORY_JSON_SIZE];
+    size_t length = 0;
+    esp_err_t err = monitoring_get_history_json(limit, buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to build history JSON: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History unavailable");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, length);
+}
+
+static esp_err_t web_server_api_registers_get_handler(httpd_req_t *req)
+{
+    char buffer[CONFIG_MANAGER_MAX_REGISTERS_JSON];
+    size_t length = 0;
+    esp_err_t err = config_manager_get_registers_json(buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to build register catalog: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Registers unavailable");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, length);
+}
+
+static esp_err_t web_server_api_registers_post_handler(httpd_req_t *req)
+{
+    if (req->content_len == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (req->content_len + 1 > CONFIG_MANAGER_MAX_CONFIG_SIZE) {
+        httpd_resp_send_err(req, HTTPD_413_PAYLOAD_TOO_LARGE, "Register payload too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    size_t received = 0;
+    while (received < req->content_len) {
+        int ret = httpd_req_recv(req, buffer + received, req->content_len - received);
+        if (ret < 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            ESP_LOGE(TAG, "Error receiving register payload: %d", ret);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive error");
+            return ESP_FAIL;
+        }
+        received += ret;
+    }
+
+    buffer[received] = '\0';
+
+    esp_err_t err = config_manager_apply_register_update_json(buffer, received);
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid register update");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
+}
+
 static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
 {
     if (req->content_len == 0) {
@@ -533,6 +626,50 @@ static esp_err_t web_server_events_ws_handler(httpd_req_t *req)
     return web_server_ws_receive(req, &s_event_clients);
 }
 
+static esp_err_t web_server_uart_ws_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET) {
+        int fd = httpd_req_to_sockfd(req);
+        ws_client_list_add(&s_uart_clients, fd);
+        ESP_LOGI(TAG, "UART WebSocket client connected: %d", fd);
+
+        static const char k_ready_message[] = "{\"type\":\"uart\",\"status\":\"connected\"}";
+        httpd_ws_frame_t frame = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)k_ready_message,
+            .len = sizeof(k_ready_message) - 1,
+        };
+        httpd_ws_send_frame(req, &frame);
+        return ESP_OK;
+    }
+
+    return web_server_ws_receive(req, &s_uart_clients);
+}
+
+static esp_err_t web_server_can_ws_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET) {
+        int fd = httpd_req_to_sockfd(req);
+        ws_client_list_add(&s_can_clients, fd);
+        ESP_LOGI(TAG, "CAN WebSocket client connected: %d", fd);
+
+        static const char k_ready_message[] = "{\"type\":\"can\",\"status\":\"connected\"}";
+        httpd_ws_frame_t frame = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)k_ready_message,
+            .len = sizeof(k_ready_message) - 1,
+        };
+        httpd_ws_send_frame(req, &frame);
+        return ESP_OK;
+    }
+
+    return web_server_ws_receive(req, &s_can_clients);
+}
+
 static void web_server_event_task(void *context)
 {
     (void)context;
@@ -558,6 +695,14 @@ static void web_server_event_task(void *context)
         case APP_EVENT_ID_CONFIG_UPDATED:
         case APP_EVENT_ID_OTA_UPLOAD_READY:
             ws_client_list_broadcast(&s_event_clients, payload, length);
+            break;
+        case APP_EVENT_ID_UART_FRAME_RAW:
+        case APP_EVENT_ID_UART_FRAME_DECODED:
+            ws_client_list_broadcast(&s_uart_clients, payload, length);
+            break;
+        case APP_EVENT_ID_CAN_FRAME_RAW:
+        case APP_EVENT_ID_CAN_FRAME_DECODED:
+            ws_client_list_broadcast(&s_can_clients, payload, length);
             break;
         default:
             break;
@@ -622,6 +767,30 @@ void web_server_init(void)
     };
     httpd_register_uri_handler(s_httpd, &api_config_post);
 
+    const httpd_uri_t api_history = {
+        .uri = "/api/history",
+        .method = HTTP_GET,
+        .handler = web_server_api_history_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_history);
+
+    const httpd_uri_t api_registers_get = {
+        .uri = "/api/registers",
+        .method = HTTP_GET,
+        .handler = web_server_api_registers_get_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_registers_get);
+
+    const httpd_uri_t api_registers_post = {
+        .uri = "/api/registers",
+        .method = HTTP_POST,
+        .handler = web_server_api_registers_post_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_registers_post);
+
     const httpd_uri_t api_ota_post = {
         .uri = "/api/ota",
         .method = HTTP_POST,
@@ -647,6 +816,24 @@ void web_server_init(void)
         .is_websocket = true,
     };
     httpd_register_uri_handler(s_httpd, &events_ws);
+
+    const httpd_uri_t uart_ws = {
+        .uri = "/ws/uart",
+        .method = HTTP_GET,
+        .handler = web_server_uart_ws_handler,
+        .user_ctx = NULL,
+        .is_websocket = true,
+    };
+    httpd_register_uri_handler(s_httpd, &uart_ws);
+
+    const httpd_uri_t can_ws = {
+        .uri = "/ws/can",
+        .method = HTTP_GET,
+        .handler = web_server_can_ws_handler,
+        .user_ctx = NULL,
+        .is_websocket = true,
+    };
+    httpd_register_uri_handler(s_httpd, &can_ws);
 
     const httpd_uri_t static_files = {
         .uri = "/*",

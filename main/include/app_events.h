@@ -20,6 +20,14 @@ typedef enum {
     APP_EVENT_ID_OTA_UPLOAD_READY = 0x1003,
     /** Decoded TinyBMS live telemetry sample. */
     APP_EVENT_ID_BMS_LIVE_DATA = 0x1100,
+    /** Raw TinyBMS UART frame as hexadecimal string. */
+    APP_EVENT_ID_UART_FRAME_RAW = 0x1101,
+    /** Decoded TinyBMS UART frame content. */
+    APP_EVENT_ID_UART_FRAME_DECODED = 0x1102,
+    /** Raw CAN frame received on the Victron bus. */
+    APP_EVENT_ID_CAN_FRAME_RAW = 0x1200,
+    /** Human readable representation of a CAN frame. */
+    APP_EVENT_ID_CAN_FRAME_DECODED = 0x1201,
 } app_event_id_t;
 
 #ifdef __cplusplus
