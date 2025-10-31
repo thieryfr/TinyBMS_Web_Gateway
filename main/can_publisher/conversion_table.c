@@ -47,6 +47,13 @@ static double s_energy_charged_wh = 0.0;
 static double s_energy_discharged_wh = 0.0;
 static uint64_t s_energy_last_timestamp_ms = 0;
 
+void can_publisher_conversion_reset_state(void)
+{
+    s_energy_charged_wh = 0.0;
+    s_energy_discharged_wh = 0.0;
+    s_energy_last_timestamp_ms = 0;
+}
+
 static inline uint16_t clamp_u16(int32_t value)
 {
     if (value < 0) {
