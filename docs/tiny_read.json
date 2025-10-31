@@ -1,0 +1,154 @@
+{
+  "tiny_read_registers": {
+    "32": {
+      "tiny_name": "Tiny BMS lifetime counter",
+      "tiny_type": "UINT32",
+      "tiny_scale_unit": "1 s",
+      "comment": "Read via UART/CAN (Reg:32)"
+    },
+    "36": {
+      "tiny_name": "Battery Pack Voltage",
+      "tiny_type": "FLOAT",
+      "tiny_scale_unit": "1 V",
+      "comment": "Read via UART/CAN (Reg:36)"
+    },
+    "38": {
+      "tiny_name": "Battery Pack Current",
+      "tiny_type": "FLOAT",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via UART/CAN (Reg:38)"
+    },
+    "40": {
+      "tiny_name": "Min Cell Voltage",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:40)"
+    },
+    "41": {
+      "tiny_name": "Max Cell Voltage",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:41)"
+    },
+    "42": {
+      "tiny_name": "External Temperature #1",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:42)"
+    },
+    "43": {
+      "tiny_name": "External Temperature #2",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:43)"
+    },
+    "45": {
+      "tiny_name": "State Of Health",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "0.002 %",
+      "comment": "Read via UART/CAN (Reg:45)"
+    },
+    "46": {
+      "tiny_name": "State Of Charge",
+      "tiny_type": "UINT32",
+      "tiny_scale_unit": "0.000001 %",
+      "comment": "Read via UART/CAN (Reg:46)"
+    },
+    "48": {
+      "tiny_name": "Internal Temperature",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:48)"
+    },
+    "50": {
+      "tiny_name": "System Status (online/offline)",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:50)"
+    },
+    "51": {
+      "tiny_name": "Need Balancing",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:51)"
+    },
+    "52": {
+      "tiny_name": "Real Balancing Bits",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:52)"
+    },
+    "113": {
+      "tiny_name": "Pack Temperature Min",
+      "tiny_type": "INT8",
+      "tiny_scale_unit": "1 °C",
+      "comment": "Read via UART/CAN (Reg:113, LSB = Min, MSB = Max)"
+    },
+    "305": {
+      "tiny_name": "Peak Discharge Current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via CAN (Reg:305)"
+    },
+    "306": {
+      "tiny_name": "Battery Capacity",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "0.01 Ah",
+      "comment": "Read via UART/CAN (Reg:306)"
+    },
+    "307": {
+      "tiny_name": "Number Of Series Cells",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 cell",
+      "comment": "Read via CAN (Reg:307)"
+    },
+    "315": {
+      "tiny_name": "Overvoltage Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:315)"
+    },
+    "316": {
+      "tiny_name": "Undervoltage Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:316)"
+    },
+    "317": {
+      "tiny_name": "Discharge Over-current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via UART/CAN (Reg:317)"
+    },
+    "318": {
+      "tiny_name": "Charge Over-current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via UART/CAN (Reg:318)"
+    },
+    "319": {
+      "tiny_name": "Overheat Cutoff",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "1 °C",
+      "comment": "Read via UART/CAN (Reg:319)"
+    },
+    "500": {
+      "tiny_name": "Hardware/Changes Version",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Reg:500. HW Ver (LSB), HW Changes Ver (MSB)"
+    },
+    "501": {
+      "tiny_name": "Public Firmware/Flags",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Reg:501. Public FW Ver (LSB), Flags (MSB)"
+    },
+    "502": {
+      "tiny_name": "Internal Firmware Version",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Reg:502"
+    }
+  }
+}
