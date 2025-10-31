@@ -28,6 +28,8 @@ typedef enum {
     APP_EVENT_ID_CAN_FRAME_RAW = 0x1200,
     /** Human readable representation of a CAN frame. */
     APP_EVENT_ID_CAN_FRAME_DECODED = 0x1201,
+    /** Binary CAN frame prepared by the CAN publisher. */
+    APP_EVENT_ID_CAN_FRAME_READY = 0x1202,
     /** Wi-Fi station interface has started. */
     APP_EVENT_ID_WIFI_STA_START = 0x1300,
     /** Wi-Fi station connected to the configured access point. */
