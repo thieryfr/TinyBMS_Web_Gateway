@@ -2,6 +2,7 @@
 
 #include "event_bus.h"
 #include "uart_bms.h"
+#include "can_publisher.h"
 #include "can_victron.h"
 #include "pgn_mapper.h"
 #include "web_server.h"
@@ -18,6 +19,7 @@ void app_main(void)
     event_bus_init();
     event_bus_publish_fn_t publish_hook = event_bus_get_publish_hook();
     uart_bms_set_event_publisher(publish_hook);
+    can_publisher_set_event_publisher(publish_hook);
     can_victron_set_event_publisher(publish_hook);
     pgn_mapper_set_event_publisher(publish_hook);
     web_server_set_event_publisher(publish_hook);
@@ -29,6 +31,7 @@ void app_main(void)
     config_manager_init();
     wifi_init();
     uart_bms_init();
+    can_publisher_init(publish_hook, can_victron_publish_frame);
     can_victron_init();
     pgn_mapper_init();
     web_server_init();
