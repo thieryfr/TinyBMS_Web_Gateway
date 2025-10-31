@@ -15,6 +15,15 @@
 void app_main(void)
 {
     event_bus_init();
+    event_bus_publish_fn_t publish_hook = event_bus_get_publish_hook();
+    uart_bms_set_event_publisher(publish_hook);
+    can_victron_set_event_publisher(publish_hook);
+    pgn_mapper_set_event_publisher(publish_hook);
+    web_server_set_event_publisher(publish_hook);
+    config_manager_set_event_publisher(publish_hook);
+    mqtt_client_set_event_publisher(publish_hook);
+    monitoring_set_event_publisher(publish_hook);
+
     config_manager_init();
     uart_bms_init();
     can_victron_init();
