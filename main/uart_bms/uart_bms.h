@@ -24,6 +24,16 @@ typedef struct {
 } uart_bms_register_entry_t;
 
 typedef struct {
+    uint32_t frames_total;
+    uint32_t frames_valid;
+    uint32_t header_errors;
+    uint32_t length_errors;
+    uint32_t crc_errors;
+    uint32_t timeout_errors;
+    uint32_t missing_register_errors;
+} uart_bms_parser_diagnostics_t;
+
+typedef struct {
     uint64_t timestamp_ms;
     float pack_voltage_v;
     float pack_current_a;
@@ -70,7 +80,18 @@ void uart_bms_unregister_listener(uart_bms_data_callback_t callback, void *conte
 
 esp_err_t uart_bms_process_frame(const uint8_t *frame, size_t length);
 esp_err_t uart_bms_decode_frame(const uint8_t *frame, size_t length, uart_bms_live_data_t *out_data);
+void uart_bms_get_parser_diagnostics(uart_bms_parser_diagnostics_t *out_diagnostics);
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+#include "shared_data.h"
+
+typedef void (*uart_bms_shared_callback_t)(const TinyBMS_LiveData&, void *context);
+
+esp_err_t uart_bms_register_shared_listener(uart_bms_shared_callback_t callback, void *context);
+void uart_bms_unregister_shared_listener(uart_bms_shared_callback_t callback, void *context);
+const TinyBMS_LiveData *uart_bms_get_latest_shared(void);
 #endif
