@@ -18,6 +18,8 @@ typedef enum {
     APP_EVENT_ID_CONFIG_UPDATED = 0x1002,
     /** Firmware upload was received via the OTA endpoint. */
     APP_EVENT_ID_OTA_UPLOAD_READY = 0x1003,
+    /** Decoded TinyBMS live telemetry sample. */
+    APP_EVENT_ID_BMS_LIVE_DATA = 0x1100,
 } app_event_id_t;
 
 #ifdef __cplusplus
