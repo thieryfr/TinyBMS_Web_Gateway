@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,16 +8,129 @@
 </head>
 <body>
     <div id="app">
-        <header>
-            <h1>TinyBMS Web Gateway Dashboard</h1>
+        <header class="app-header">
+            <div class="branding">
+                <h1>TinyBMS Web Gateway</h1>
+                <span class="subtitle">Système de monitoring et configuration ESP32-CAN-X2</span>
+            </div>
+            <nav class="tabs" aria-label="Navigation principale">
+                <button class="tab-button active" data-tab="battery">Temps réel – Batterie</button>
+                <button class="tab-button" data-tab="uart">Temps réel – UART</button>
+                <button class="tab-button" data-tab="can">Temps réel – CAN Bus</button>
+                <button class="tab-button" data-tab="history">Historique</button>
+                <button class="tab-button" data-tab="config">Configuration</button>
+            </nav>
         </header>
         <main>
-            <section id="status">
-                <h2>Status</h2>
-                <div id="status-content"></div>
+            <section id="tab-battery" class="tab-panel active" aria-labelledby="Temps réel – Batterie">
+                <div class="card-grid">
+                    <article class="metric-card">
+                        <h2>Tension pack</h2>
+                        <p class="metric" id="battery-voltage">-- V</p>
+                        <span class="metric-detail" id="battery-minmax">min -- mV • max -- mV</span>
+                    </article>
+                    <article class="metric-card">
+                        <h2>Courant pack</h2>
+                        <p class="metric" id="battery-current">-- A</p>
+                        <span class="metric-detail" id="battery-balancing">Équilibrage: --</span>
+                    </article>
+                    <article class="metric-card">
+                        <h2>État de charge</h2>
+                        <p class="metric" id="battery-soc">-- %</p>
+                        <span class="metric-detail" id="battery-soh">SOH -- %</span>
+                    </article>
+                    <article class="metric-card">
+                        <h2>Températures</h2>
+                        <p class="metric" id="battery-temperature">-- °C</p>
+                        <span class="metric-detail" id="battery-temp-extra">MOSFET: -- °C</span>
+                    </article>
+                </div>
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>Alarmes</h3>
+                        <ul id="battery-alarms" class="status-list"></ul>
+                    </div>
+                    <div class="status-card">
+                        <h3>Avertissements</h3>
+                        <ul id="battery-warnings" class="status-list"></ul>
+                    </div>
+                    <div class="status-card">
+                        <h3>Informations système</h3>
+                        <dl class="status-kv" id="battery-system-info"></dl>
+                    </div>
+                </div>
+                <div class="register-table">
+                    <h3>Registres TinyBMS surveillés</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Adresse</th>
+                                <th>Valeur brute</th>
+                            </tr>
+                        </thead>
+                        <tbody id="battery-registers"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section id="tab-uart" class="tab-panel" aria-labelledby="Temps réel – UART">
+                <div class="split-panel">
+                    <section>
+                        <header><h2>Trames brutes</h2></header>
+                        <ul id="uart-raw-list" class="data-list"></ul>
+                    </section>
+                    <section>
+                        <header><h2>Décodage TinyBMS</h2></header>
+                        <ul id="uart-decoded-list" class="data-list"></ul>
+                    </section>
+                </div>
+            </section>
+            <section id="tab-can" class="tab-panel" aria-labelledby="Temps réel – CAN Bus">
+                <div class="split-panel">
+                    <section>
+                        <header><h2>Trames CAN brutes</h2></header>
+                        <ul id="can-raw-list" class="data-list"></ul>
+                    </section>
+                    <section>
+                        <header><h2>Décodage Victron</h2></header>
+                        <ul id="can-decoded-list" class="data-list"></ul>
+                    </section>
+                </div>
+            </section>
+            <section id="tab-history" class="tab-panel" aria-labelledby="Historique">
+                <div class="history-toolbar">
+                    <label for="history-range">Nombre de points</label>
+                    <select id="history-range">
+                        <option value="60">60</option>
+                        <option value="120" selected>120</option>
+                        <option value="240">240</option>
+                        <option value="0">Tous</option>
+                    </select>
+                    <button id="history-refresh">Rafraîchir</button>
+                    <button id="history-export">Exporter CSV</button>
+                </div>
+                <canvas id="history-chart" width="800" height="320" role="img" aria-label="Évolution tension et courant"></canvas>
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Horodatage</th>
+                            <th>Tension (V)</th>
+                            <th>Courant (A)</th>
+                            <th>SOC (%)</th>
+                            <th>Température (°C)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body"></tbody>
+                </table>
+            </section>
+            <section id="tab-config" class="tab-panel" aria-labelledby="Configuration">
+                <div class="config-header">
+                    <h2>Paramètres TinyBMS</h2>
+                    <p id="config-status" role="status">Chargement des registres…</p>
+                </div>
+                <div id="config-registers" class="config-grid" role="form"></div>
             </section>
         </main>
     </div>
-    <script src="dashboard.js"></script>
+    <script src="dashboard.js" type="module"></script>
 </body>
 </html>

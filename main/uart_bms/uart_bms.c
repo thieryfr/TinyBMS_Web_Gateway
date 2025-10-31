@@ -1,6 +1,8 @@
 #include "uart_bms.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "esp_err.h"
@@ -29,7 +31,8 @@
 #define UART_BMS_POLL_INTERVAL_MS 1000
 #define UART_BMS_MAX_FRAME_SIZE  128
 #define UART_BMS_LISTENER_SLOTS  4
-#define UART_BMS_EVENT_BUFFERS   2
+#define UART_BMS_EVENT_BUFFERS   4
+#define UART_BMS_FRAME_JSON_SIZE 1024
 
 static const char *TAG = "uart_bms";
 
@@ -104,6 +107,9 @@ static event_bus_publish_fn_t s_event_publisher = NULL;
 static uart_bms_listener_t s_listeners[UART_BMS_LISTENER_SLOTS] = {0};
 static uart_bms_live_data_t s_event_buffers[UART_BMS_EVENT_BUFFERS];
 static size_t s_next_event_buffer = 0;
+static char s_uart_raw_json[UART_BMS_EVENT_BUFFERS][UART_BMS_FRAME_JSON_SIZE];
+static char s_uart_decoded_json[UART_BMS_EVENT_BUFFERS][UART_BMS_FRAME_JSON_SIZE];
+static size_t s_next_uart_json_buffer = 0;
 static bool s_uart_initialised = false;
 static TaskHandle_t s_uart_task_handle = NULL;
 static uint8_t s_rx_buffer[UART_BMS_MAX_FRAME_SIZE] = {0};
@@ -175,6 +181,134 @@ static void uart_bms_publish_live_data(const uart_bms_live_data_t *data)
     }
 
     uart_bms_notify_listeners(data);
+}
+
+static bool uart_bms_json_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
+{
+    if (buffer == NULL || buffer_size == 0 || offset == NULL) {
+        return false;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    int written = vsnprintf(buffer + *offset, buffer_size - *offset, fmt, args);
+    va_end(args);
+
+    if (written < 0) {
+        return false;
+    }
+
+    size_t remaining = buffer_size - *offset;
+    if ((size_t)written >= remaining) {
+        return false;
+    }
+
+    *offset += (size_t)written;
+    return true;
+}
+
+static void uart_bms_publish_frame_events(const uint8_t *frame,
+                                          size_t length,
+                                          const uart_bms_live_data_t *decoded)
+{
+    if (s_event_publisher == NULL || frame == NULL || decoded == NULL) {
+        return;
+    }
+
+    size_t raw_index = s_next_uart_json_buffer;
+    s_next_uart_json_buffer = (s_next_uart_json_buffer + 1) % UART_BMS_EVENT_BUFFERS;
+
+    char *raw_json = s_uart_raw_json[raw_index];
+    size_t raw_offset = 0;
+    if (uart_bms_json_append(raw_json,
+                             UART_BMS_FRAME_JSON_SIZE,
+                             &raw_offset,
+                             "{\"type\":\"uart_raw\",\"timestamp\":%" PRIu64 ",\"length\":%zu,\"data\":\"",
+                             decoded->timestamp_ms,
+                             length)) {
+        for (size_t i = 0; i < length; ++i) {
+            if (!uart_bms_json_append(raw_json,
+                                      UART_BMS_FRAME_JSON_SIZE,
+                                      &raw_offset,
+                                      "%02X",
+                                      (unsigned)frame[i])) {
+                ESP_LOGW(TAG, "UART raw frame JSON truncated");
+                raw_offset = 0;
+                break;
+            }
+        }
+
+        if (raw_offset > 0 &&
+            uart_bms_json_append(raw_json, UART_BMS_FRAME_JSON_SIZE, &raw_offset, "\"}")) {
+            event_bus_event_t raw_event = {
+                .id = APP_EVENT_ID_UART_FRAME_RAW,
+                .payload = raw_json,
+                .payload_size = raw_offset + 1,
+            };
+            if (!s_event_publisher(&raw_event, pdMS_TO_TICKS(50))) {
+                ESP_LOGW(TAG, "Unable to publish UART raw frame event");
+            }
+        }
+    }
+
+    size_t decoded_index = s_next_uart_json_buffer;
+    s_next_uart_json_buffer = (s_next_uart_json_buffer + 1) % UART_BMS_EVENT_BUFFERS;
+
+    char *decoded_json = s_uart_decoded_json[decoded_index];
+    size_t decoded_offset = 0;
+    if (!uart_bms_json_append(decoded_json,
+                              UART_BMS_FRAME_JSON_SIZE,
+                              &decoded_offset,
+                              "{\"type\":\"uart_decoded\",\"timestamp\":%" PRIu64 ",\"pack_voltage\":%.3f,"
+                              "\"pack_current\":%.3f,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
+                              "\"average_temperature\":%.2f,\"mos_temperature\":%.2f,\"uptime_seconds\":%" PRIu32 ","
+                              "\"cycle_count\":%" PRIu32 ",\"registers\":[",
+                              decoded->timestamp_ms,
+                              decoded->pack_voltage_v,
+                              decoded->pack_current_a,
+                              decoded->state_of_charge_pct,
+                              decoded->state_of_health_pct,
+                              decoded->average_temperature_c,
+                              decoded->mosfet_temperature_c,
+                              decoded->uptime_seconds,
+                              decoded->cycle_count)) {
+        return;
+    }
+
+    for (size_t i = 0; i < decoded->register_count; ++i) {
+        const uart_bms_register_entry_t *entry = &decoded->registers[i];
+        if (!uart_bms_json_append(decoded_json,
+                                  UART_BMS_FRAME_JSON_SIZE,
+                                  &decoded_offset,
+                                  "%s{\"address\":%u,\"value\":%u}",
+                                  (i == 0) ? "" : ",",
+                                  (unsigned)entry->address,
+                                  (unsigned)entry->raw_value)) {
+            ESP_LOGW(TAG, "UART decoded frame JSON truncated");
+            return;
+        }
+    }
+
+    if (!uart_bms_json_append(decoded_json,
+                              UART_BMS_FRAME_JSON_SIZE,
+                              &decoded_offset,
+                              "],\"alarm_bits\":%u,\"warning_bits\":%u,\"balancing_bits\":%u}",
+                              (unsigned)decoded->alarm_bits,
+                              (unsigned)decoded->warning_bits,
+                              (unsigned)decoded->balancing_bits)) {
+        ESP_LOGW(TAG, "UART decoded frame JSON truncated");
+        return;
+    }
+
+    event_bus_event_t decoded_event = {
+        .id = APP_EVENT_ID_UART_FRAME_DECODED,
+        .payload = decoded_json,
+        .payload_size = decoded_offset + 1,
+    };
+
+    if (!s_event_publisher(&decoded_event, pdMS_TO_TICKS(50))) {
+        ESP_LOGW(TAG, "Unable to publish UART decoded frame event");
+    }
 }
 
 static void uart_bms_reset_buffer(void)
@@ -508,6 +642,7 @@ esp_err_t uart_bms_process_frame(const uint8_t *frame, size_t length)
         return err;
     }
 
+    uart_bms_publish_frame_events(frame, length, &data);
     uart_bms_publish_live_data(&data);
     return ESP_OK;
 }
