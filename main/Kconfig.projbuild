@@ -68,4 +68,16 @@ menu "Wi-Fi"
         default 4
 endmenu
 
+menu "CAN Publisher"
+    config TINYBMS_CAN_PUBLISHER_PERIOD_MS
+        int "CAN publisher period (ms)"
+        range 0 60000
+        default 0
+        help
+            Interval used to publish buffered CAN frames. Set to 0 to
+            publish immediately on each TinyBMS UART update. A positive
+            value enables a dedicated FreeRTOS task that republishes the
+            latest frames at the configured cadence.
+endmenu
+
 endmenu

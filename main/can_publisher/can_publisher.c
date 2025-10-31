@@ -12,11 +12,20 @@
 #endif
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+
+#include "sdkconfig.h"
 
 #include "app_events.h"
 #include "conversion_table.h"
 
 #define CAN_PUBLISHER_EVENT_TIMEOUT_MS 50U
+#define CAN_PUBLISHER_LOCK_TIMEOUT_MS  20U
+
+#ifndef CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS
+#define CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS 0
+#endif
 
 static const char *TAG = "can_pub";
 
@@ -24,14 +33,28 @@ static event_bus_publish_fn_t s_event_publisher = NULL;
 static can_publisher_frame_publish_fn_t s_frame_publisher = NULL;
 static can_publisher_buffer_t s_frame_buffer = {
     .slots = {0},
+    .slot_valid = {0},
     .capacity = 0,
-    .next_index = 0,
 };
 static can_publisher_registry_t s_registry = {
     .channels = NULL,
     .channel_count = 0,
     .buffer = &s_frame_buffer,
 };
+static SemaphoreHandle_t s_buffer_mutex = NULL;
+static TaskHandle_t s_publish_task_handle = NULL;
+static bool s_listener_registered = false;
+static uint32_t s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
+static can_publisher_frame_t s_event_frames[CAN_PUBLISHER_MAX_BUFFER_SLOTS];
+static size_t s_event_frame_index = 0;
+static portMUX_TYPE s_event_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static bool can_publisher_periodic_mode_enabled(void);
+static void can_publisher_publish_buffer(can_publisher_registry_t *registry);
+static bool can_publisher_store_frame(can_publisher_buffer_t *buffer,
+                                      size_t index,
+                                      const can_publisher_frame_t *frame);
+static void can_publisher_task(void *context);
 
 static uint64_t can_publisher_timestamp_ms(void)
 {
@@ -55,10 +78,19 @@ static void can_publisher_publish_event(const can_publisher_frame_t *frame)
         return;
     }
 
+    can_publisher_frame_t *event_frame = NULL;
+
+    portENTER_CRITICAL(&s_event_lock);
+    size_t slot = s_event_frame_index;
+    s_event_frame_index = (s_event_frame_index + 1U) % CAN_PUBLISHER_MAX_BUFFER_SLOTS;
+    s_event_frames[slot] = *frame;
+    event_frame = &s_event_frames[slot];
+    portEXIT_CRITICAL(&s_event_lock);
+
     event_bus_event_t event = {
         .id = APP_EVENT_ID_CAN_FRAME_READY,
-        .payload = frame,
-        .payload_size = sizeof(*frame),
+        .payload = event_frame,
+        .payload_size = sizeof(*event_frame),
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(CAN_PUBLISHER_EVENT_TIMEOUT_MS))) {
@@ -67,7 +99,7 @@ static void can_publisher_publish_event(const can_publisher_frame_t *frame)
 }
 
 static void can_publisher_dispatch_frame(const can_publisher_channel_t *channel,
-                                         can_publisher_frame_t *frame)
+                                         const can_publisher_frame_t *frame)
 {
     if (channel == NULL || frame == NULL) {
         return;
@@ -91,6 +123,8 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
     can_publisher_set_event_publisher(publisher);
     s_frame_publisher = frame_publisher;
 
+    s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
+
     s_registry.channels = g_can_publisher_channels;
     s_registry.channel_count = g_can_publisher_channel_count;
 
@@ -103,13 +137,44 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
     }
 
     s_frame_buffer.capacity = s_registry.channel_count;
-    s_frame_buffer.next_index = 0;
+    memset(s_frame_buffer.slots, 0, sizeof(s_frame_buffer.slots));
+    memset(s_frame_buffer.slot_valid, 0, sizeof(s_frame_buffer.slot_valid));
+    memset(s_event_frames, 0, sizeof(s_event_frames));
+    s_event_frame_index = 0;
+
+    if (s_buffer_mutex == NULL) {
+        s_buffer_mutex = xSemaphoreCreateMutex();
+        if (s_buffer_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create CAN publisher buffer mutex");
+        }
+    }
 
     esp_err_t err = uart_bms_register_listener(can_publisher_on_bms_update, &s_registry);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Unable to register TinyBMS listener: %s", esp_err_to_name(err));
     } else {
+        s_listener_registered = true;
         ESP_LOGI(TAG, "CAN publisher initialised with %zu channels", s_registry.channel_count);
+    }
+
+    if (can_publisher_periodic_mode_enabled() && s_publish_task_handle == NULL) {
+        BaseType_t task_created = xTaskCreate(can_publisher_task,
+                                             "can_pub",
+                                             3072,
+                                             &s_registry,
+                                             tskIDLE_PRIORITY + 2,
+                                             &s_publish_task_handle);
+        if (task_created != pdPASS) {
+            ESP_LOGE(TAG, "Failed to start CAN publisher task");
+            s_publish_task_handle = NULL;
+            ESP_LOGW(TAG, "Falling back to immediate CAN frame dispatch");
+        } else {
+            ESP_LOGI(TAG,
+                     "CAN publisher task running with %u ms interval",
+                     (unsigned)s_publish_interval_ms);
+        }
+    } else if (!can_publisher_periodic_mode_enabled()) {
+        ESP_LOGI(TAG, "CAN publisher dispatching immediately on TinyBMS updates");
     }
 }
 
@@ -127,6 +192,8 @@ void can_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context
 
     uint64_t timestamp_ms = (data->timestamp_ms > 0U) ? data->timestamp_ms : can_publisher_timestamp_ms();
 
+    bool periodic = can_publisher_periodic_mode_enabled() && (s_publish_task_handle != NULL);
+
     for (size_t i = 0; i < registry->channel_count; ++i) {
         const can_publisher_channel_t *channel = &registry->channels[i];
 
@@ -134,23 +201,138 @@ void can_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context
             continue;
         }
 
-        can_publisher_buffer_t *buffer = registry->buffer;
-        can_publisher_frame_t *frame = &buffer->slots[buffer->next_index];
+        can_publisher_frame_t frame = {
+            .id = channel->can_id,
+            .dlc = (channel->dlc > 8U) ? 8U : channel->dlc,
+            .data = {0},
+            .timestamp_ms = timestamp_ms,
+        };
 
-        frame->id = channel->can_id;
-        frame->dlc = (channel->dlc > 8U) ? 8U : channel->dlc;
-        memset(frame->data, 0, sizeof(frame->data));
-        frame->timestamp_ms = timestamp_ms;
-
-        bool encoded = channel->fill_fn(data, frame);
+        bool encoded = channel->fill_fn(data, &frame);
         if (!encoded) {
             ESP_LOGW(TAG, "Encoder rejected TinyBMS sample for CAN ID 0x%08" PRIX32, channel->can_id);
             continue;
         }
 
-        buffer->next_index = (buffer->next_index + 1U) % buffer->capacity;
+        bool stored = can_publisher_store_frame(registry->buffer, i, &frame);
+        if (!stored) {
+            continue;
+        }
 
-        can_publisher_dispatch_frame(channel, frame);
+        if (!periodic) {
+            can_publisher_dispatch_frame(channel, &frame);
+        }
+    }
+}
+
+void can_publisher_deinit(void)
+{
+    if (s_publish_task_handle != NULL) {
+        vTaskDelete(s_publish_task_handle);
+        s_publish_task_handle = NULL;
+    }
+
+    if (s_listener_registered) {
+        uart_bms_unregister_listener(can_publisher_on_bms_update, &s_registry);
+        s_listener_registered = false;
+    }
+
+    if (s_buffer_mutex != NULL) {
+        vSemaphoreDelete(s_buffer_mutex);
+        s_buffer_mutex = NULL;
+    }
+
+    memset(&s_frame_buffer, 0, sizeof(s_frame_buffer));
+    s_registry.buffer = &s_frame_buffer;
+    s_registry.channel_count = 0;
+    s_registry.channels = NULL;
+
+    memset(s_event_frames, 0, sizeof(s_event_frames));
+    s_event_frame_index = 0;
+
+    s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
+
+    s_frame_publisher = NULL;
+    s_event_publisher = NULL;
+}
+
+static bool can_publisher_periodic_mode_enabled(void)
+{
+    return (s_publish_interval_ms > 0U);
+}
+
+static bool can_publisher_store_frame(can_publisher_buffer_t *buffer,
+                                      size_t index,
+                                      const can_publisher_frame_t *frame)
+{
+    if (buffer == NULL || frame == NULL || index >= buffer->capacity) {
+        return false;
+    }
+
+    if (s_buffer_mutex != NULL) {
+        if (xSemaphoreTake(s_buffer_mutex, pdMS_TO_TICKS(CAN_PUBLISHER_LOCK_TIMEOUT_MS)) != pdTRUE) {
+            ESP_LOGW(TAG, "Timed out acquiring CAN publisher buffer lock");
+            return false;
+        }
+
+        buffer->slots[index] = *frame;
+        buffer->slot_valid[index] = true;
+        xSemaphoreGive(s_buffer_mutex);
+        return true;
+    }
+
+    buffer->slots[index] = *frame;
+    buffer->slot_valid[index] = true;
+    return true;
+}
+
+static void can_publisher_publish_buffer(can_publisher_registry_t *registry)
+{
+    if (registry == NULL || registry->channels == NULL || registry->buffer == NULL) {
+        return;
+    }
+
+    can_publisher_buffer_t *buffer = registry->buffer;
+
+    if (buffer->capacity == 0) {
+        return;
+    }
+
+    for (size_t i = 0; i < registry->channel_count; ++i) {
+        const can_publisher_channel_t *channel = &registry->channels[i];
+        can_publisher_frame_t frame = {0};
+        bool has_frame = false;
+
+        if (s_buffer_mutex != NULL) {
+            if (xSemaphoreTake(s_buffer_mutex, pdMS_TO_TICKS(CAN_PUBLISHER_LOCK_TIMEOUT_MS)) == pdTRUE) {
+                if (buffer->slot_valid[i]) {
+                    frame = buffer->slots[i];
+                    has_frame = true;
+                }
+                xSemaphoreGive(s_buffer_mutex);
+            } else {
+                ESP_LOGW(TAG, "Timed out acquiring CAN publisher buffer for read");
+            }
+        } else if (buffer->slot_valid[i]) {
+            frame = buffer->slots[i];
+            has_frame = true;
+        }
+
+        if (has_frame) {
+            can_publisher_dispatch_frame(channel, &frame);
+        }
+    }
+}
+
+static void can_publisher_task(void *context)
+{
+    can_publisher_registry_t *registry = (can_publisher_registry_t *)context;
+
+    TickType_t delay_ticks = pdMS_TO_TICKS((s_publish_interval_ms > 0U) ? s_publish_interval_ms : 1U);
+
+    while (true) {
+        can_publisher_publish_buffer(registry);
+        vTaskDelay(delay_ticks);
     }
 }
 

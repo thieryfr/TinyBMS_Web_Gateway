@@ -31,8 +31,8 @@ void app_main(void)
     config_manager_init();
     wifi_init();
     uart_bms_init();
-    can_publisher_init(publish_hook, can_victron_publish_frame);
     can_victron_init();
+    can_publisher_init(publish_hook, can_victron_publish_frame);
     pgn_mapper_init();
     web_server_init();
     mqtt_client_init();
