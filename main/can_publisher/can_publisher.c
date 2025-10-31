@@ -48,13 +48,24 @@ static uint32_t s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
 static can_publisher_frame_t s_event_frames[CAN_PUBLISHER_MAX_BUFFER_SLOTS];
 static size_t s_event_frame_index = 0;
 static portMUX_TYPE s_event_lock = portMUX_INITIALIZER_UNLOCKED;
+static TickType_t s_channel_period_ticks[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
+static TickType_t s_channel_deadlines[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
 
 static bool can_publisher_periodic_mode_enabled(void);
-static void can_publisher_publish_buffer(can_publisher_registry_t *registry);
+static TickType_t can_publisher_publish_buffer(can_publisher_registry_t *registry, TickType_t now);
 static bool can_publisher_store_frame(can_publisher_buffer_t *buffer,
                                       size_t index,
                                       const can_publisher_frame_t *frame);
 static void can_publisher_task(void *context);
+
+static TickType_t can_publisher_ms_to_ticks(uint32_t period_ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(period_ms);
+    if (ticks == 0) {
+        ticks = 1;
+    }
+    return ticks;
+}
 
 static uint64_t can_publisher_timestamp_ms(void)
 {
@@ -141,6 +152,22 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
     memset(s_frame_buffer.slot_valid, 0, sizeof(s_frame_buffer.slot_valid));
     memset(s_event_frames, 0, sizeof(s_event_frames));
     s_event_frame_index = 0;
+
+    TickType_t now_ticks = xTaskGetTickCount();
+    for (size_t i = 0; i < s_registry.channel_count; ++i) {
+        const can_publisher_channel_t *channel = &s_registry.channels[i];
+        uint32_t period_ms = channel->period_ms;
+        if (period_ms == 0U) {
+            period_ms = (s_publish_interval_ms > 0U) ? s_publish_interval_ms : 1000U;
+        }
+        s_channel_period_ticks[i] = can_publisher_ms_to_ticks(period_ms);
+        s_channel_deadlines[i] = now_ticks;
+        ESP_LOGI(TAG,
+                 "Channel %zu PGN 0x%03X scheduled every %u ms",
+                 i,
+                 (unsigned)channel->pgn,
+                 (unsigned)period_ms);
+    }
 
     if (s_buffer_mutex == NULL) {
         s_buffer_mutex = xSemaphoreCreateMutex();
@@ -249,6 +276,8 @@ void can_publisher_deinit(void)
 
     memset(s_event_frames, 0, sizeof(s_event_frames));
     s_event_frame_index = 0;
+    memset(s_channel_period_ticks, 0, sizeof(s_channel_period_ticks));
+    memset(s_channel_deadlines, 0, sizeof(s_channel_deadlines));
 
     s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
 
@@ -277,26 +306,31 @@ static bool can_publisher_store_frame(can_publisher_buffer_t *buffer,
 
         buffer->slots[index] = *frame;
         buffer->slot_valid[index] = true;
+        s_channel_deadlines[index] = xTaskGetTickCount();
         xSemaphoreGive(s_buffer_mutex);
         return true;
     }
 
     buffer->slots[index] = *frame;
     buffer->slot_valid[index] = true;
+    s_channel_deadlines[index] = xTaskGetTickCount();
     return true;
 }
 
-static void can_publisher_publish_buffer(can_publisher_registry_t *registry)
+static TickType_t can_publisher_publish_buffer(can_publisher_registry_t *registry, TickType_t now)
 {
     if (registry == NULL || registry->channels == NULL || registry->buffer == NULL) {
-        return;
+        return 1;
     }
 
     can_publisher_buffer_t *buffer = registry->buffer;
 
     if (buffer->capacity == 0) {
-        return;
+        return 1;
     }
+
+    TickType_t next_delay = 0;
+    bool have_delay = false;
 
     for (size_t i = 0; i < registry->channel_count; ++i) {
         const can_publisher_channel_t *channel = &registry->channels[i];
@@ -318,21 +352,51 @@ static void can_publisher_publish_buffer(can_publisher_registry_t *registry)
             has_frame = true;
         }
 
-        if (has_frame) {
+        TickType_t deadline = s_channel_deadlines[i];
+        if (deadline == 0) {
+            deadline = now;
+        }
+
+        bool due = (now >= deadline);
+
+        if (due && has_frame) {
             can_publisher_dispatch_frame(channel, &frame);
+            s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            deadline = s_channel_deadlines[i];
+        } else if (due && !has_frame) {
+            s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            deadline = s_channel_deadlines[i];
+        }
+
+        TickType_t delta = (deadline > now) ? (deadline - now) : 0;
+        if (!have_delay || delta < next_delay) {
+            next_delay = delta;
+            have_delay = true;
         }
     }
+
+    if (!have_delay) {
+        uint32_t default_period = (s_publish_interval_ms > 0U) ? s_publish_interval_ms : 1000U;
+        next_delay = can_publisher_ms_to_ticks(default_period);
+    } else if (next_delay == 0) {
+        next_delay = 1;
+    }
+
+    return next_delay;
 }
 
 static void can_publisher_task(void *context)
 {
     can_publisher_registry_t *registry = (can_publisher_registry_t *)context;
 
-    TickType_t delay_ticks = pdMS_TO_TICKS((s_publish_interval_ms > 0U) ? s_publish_interval_ms : 1U);
-
     while (true) {
-        can_publisher_publish_buffer(registry);
-        vTaskDelay(delay_ticks);
+        TickType_t now = xTaskGetTickCount();
+        TickType_t delay_ticks = can_publisher_publish_buffer(registry, now);
+        if (delay_ticks == 0) {
+            taskYIELD();
+        } else {
+            vTaskDelay(delay_ticks);
+        }
     }
 }
 

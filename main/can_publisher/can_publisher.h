@@ -36,10 +36,12 @@ typedef bool (*can_publisher_fill_frame_fn_t)(const uart_bms_live_data_t *bms_da
  * @brief CAN channel description used by the publisher registry.
  */
 typedef struct {
+    uint16_t pgn;                            /**< Victron PGN identifier (11-bit). */
     uint32_t can_id;                         /**< CAN identifier associated with the channel. */
     uint8_t dlc;                             /**< Expected payload size for the channel. */
     can_publisher_fill_frame_fn_t fill_fn;   /**< Encoder translating TinyBMS fields. */
     const char *description;                 /**< Human readable description of the channel. */
+    uint32_t period_ms;                      /**< Dispatch period for the channel (0 = inherit global). */
 } can_publisher_channel_t;
 
 /**
