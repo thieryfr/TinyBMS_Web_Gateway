@@ -16,6 +16,22 @@ static event_bus_subscription_t *s_subscribers = NULL;
 static SemaphoreHandle_t s_bus_lock = NULL;
 static portMUX_TYPE s_init_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
+static bool event_bus_take_lock(void)
+{
+    if (s_bus_lock == NULL) {
+        return false;
+    }
+
+    return xSemaphoreTake(s_bus_lock, portMAX_DELAY) == pdTRUE;
+}
+
+static void event_bus_give_lock(void)
+{
+    if (s_bus_lock != NULL) {
+        xSemaphoreGive(s_bus_lock);
+    }
+}
+
 static void event_bus_ensure_init(void)
 {
     if (s_bus_lock != NULL) {
@@ -91,7 +107,7 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
     subscription->context = context;
     subscription->next = NULL;
 
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
+    if (!event_bus_take_lock()) {
         vQueueDelete(queue);
         vPortFree(subscription);
         return NULL;
@@ -100,7 +116,7 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
     subscription->next = s_subscribers;
     s_subscribers = subscription;
 
-    xSemaphoreGive(s_bus_lock);
+    event_bus_give_lock();
 
     return subscription;
 }
@@ -113,7 +129,7 @@ void event_bus_unsubscribe(event_bus_subscription_handle_t handle)
 
     event_bus_subscription_t *to_free = NULL;
 
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
+    if (!event_bus_take_lock()) {
         return;
     }
 
@@ -127,7 +143,7 @@ void event_bus_unsubscribe(event_bus_subscription_handle_t handle)
         link = &(*link)->next;
     }
 
-    xSemaphoreGive(s_bus_lock);
+    event_bus_give_lock();
 
     if (to_free == NULL) {
         return;
@@ -145,7 +161,7 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
         return false;
     }
 
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
+    if (!event_bus_take_lock()) {
         return false;
     }
 
@@ -158,7 +174,7 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
         subscriber = subscriber->next;
     }
 
-    xSemaphoreGive(s_bus_lock);
+    event_bus_give_lock();
     return success;
 }
 
