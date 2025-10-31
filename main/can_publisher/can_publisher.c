@@ -19,6 +19,7 @@
 
 #include "app_events.h"
 #include "conversion_table.h"
+#include "cvl_controller.h"
 
 #define CAN_PUBLISHER_EVENT_TIMEOUT_MS 50U
 #define CAN_PUBLISHER_LOCK_TIMEOUT_MS  20U
@@ -134,6 +135,8 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
     can_publisher_set_event_publisher(publisher);
     s_frame_publisher = frame_publisher;
 
+    can_publisher_cvl_init();
+
     s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
 
     s_registry.channels = g_can_publisher_channels;
@@ -217,6 +220,8 @@ void can_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context
         return;
     }
 
+    can_publisher_cvl_prepare(data);
+
     uint64_t timestamp_ms = (data->timestamp_ms > 0U) ? data->timestamp_ms : can_publisher_timestamp_ms();
 
     bool periodic = can_publisher_periodic_mode_enabled() && (s_publish_task_handle != NULL);
@@ -283,6 +288,8 @@ void can_publisher_deinit(void)
 
     s_frame_publisher = NULL;
     s_event_publisher = NULL;
+
+    can_publisher_cvl_init();
 }
 
 static bool can_publisher_periodic_mode_enabled(void)

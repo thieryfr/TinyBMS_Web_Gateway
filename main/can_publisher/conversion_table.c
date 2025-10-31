@@ -11,6 +11,8 @@
 
 #include "esp_log.h"
 
+#include "cvl_controller.h"
+
 #define VICTRON_PGN_CVL_CCL_DCL      0x351U
 #define VICTRON_PGN_SOC_SOH          0x355U
 #define VICTRON_PGN_VOLTAGE_CURRENT  0x356U
@@ -312,6 +314,14 @@ static const char *resolve_battery_family_string(const uart_bms_live_data_t *dat
     return CONFIG_TINYBMS_CAN_BATTERY_FAMILY;
 }
 
+static float sanitize_positive(float value)
+{
+    if (!isfinite(value) || value < 0.0f) {
+        return 0.0f;
+    }
+    return value;
+}
+
 static bool encode_charge_limits(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
 {
     if (data == NULL || frame == NULL) {
@@ -320,25 +330,37 @@ static bool encode_charge_limits(const uart_bms_live_data_t *data, can_publisher
 
     memset(frame->data, 0, sizeof(frame->data));
 
-    float cvl_v = data->pack_voltage_v;
-    if (data->overvoltage_cutoff_mv > 0U) {
-        cvl_v = (float)data->overvoltage_cutoff_mv / 1000.0f;
+    float cvl_v = 0.0f;
+    float ccl_a = 0.0f;
+    float dcl_a = 0.0f;
+
+    can_publisher_cvl_result_t cvl_result;
+    bool have_cvl = can_publisher_cvl_get_latest(&cvl_result);
+    if (have_cvl) {
+        cvl_v = sanitize_positive(cvl_result.result.cvl_voltage_v);
+        ccl_a = sanitize_positive(cvl_result.result.ccl_limit_a);
+        dcl_a = sanitize_positive(cvl_result.result.dcl_limit_a);
+
+        if (cvl_v <= 0.0f) {
+            have_cvl = false;
+        }
     }
 
-    float ccl_a = data->charge_overcurrent_limit_a;
-    if (ccl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
-        ccl_a = data->peak_discharge_current_limit_a;
-    }
-    if (ccl_a < 0.0f) {
-        ccl_a = 0.0f;
-    }
+    if (!have_cvl) {
+        cvl_v = sanitize_positive(data->pack_voltage_v);
+        if (data->overvoltage_cutoff_mv > 0U) {
+            cvl_v = (float)data->overvoltage_cutoff_mv / 1000.0f;
+        }
 
-    float dcl_a = data->discharge_overcurrent_limit_a;
-    if (dcl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
-        dcl_a = data->peak_discharge_current_limit_a;
-    }
-    if (dcl_a < 0.0f) {
-        dcl_a = 0.0f;
+        ccl_a = sanitize_positive(data->charge_overcurrent_limit_a);
+        if (ccl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
+            ccl_a = sanitize_positive(data->peak_discharge_current_limit_a);
+        }
+
+        dcl_a = sanitize_positive(data->discharge_overcurrent_limit_a);
+        if (dcl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
+            dcl_a = sanitize_positive(data->peak_discharge_current_limit_a);
+        }
     }
 
     uint16_t cvl_raw = encode_u16_scaled(cvl_v, 100.0f, 0.0f, 0U, 0xFFFFU);
