@@ -1,0 +1,71 @@
+menu "TinyBMS Web Gateway"
+
+menu "Wi-Fi"
+    config TINYBMS_WIFI_ENABLE
+        bool "Enable Wi-Fi support"
+        default y
+
+    config TINYBMS_WIFI_STA_SSID
+        string "Wi-Fi station SSID"
+        depends on TINYBMS_WIFI_ENABLE
+        default "TinyBMS"
+        help
+            SSID of the Wi-Fi network the gateway should connect to in station
+            mode.
+
+    config TINYBMS_WIFI_STA_PASSWORD
+        string "Wi-Fi station password"
+        depends on TINYBMS_WIFI_ENABLE
+        default ""
+        help
+            Passphrase for the configured Wi-Fi network. Leave empty to connect
+            to open networks.
+
+    config TINYBMS_WIFI_STA_HOSTNAME
+        string "Wi-Fi station hostname"
+        depends on TINYBMS_WIFI_ENABLE
+        default "tinybms-gateway"
+        help
+            Hostname assigned to the Wi-Fi station interface.
+
+    config TINYBMS_WIFI_STA_MAX_RETRY
+        int "Maximum connection retry attempts"
+        depends on TINYBMS_WIFI_ENABLE
+        range 1 50
+        default 5
+        help
+            Number of times the station interface will attempt to reconnect
+            before enabling the fallback access point.
+
+    config TINYBMS_WIFI_AP_FALLBACK
+        bool "Enable fallback access point"
+        depends on TINYBMS_WIFI_ENABLE
+        default y
+        help
+            When enabled the gateway exposes an access point if it cannot
+            connect to the configured infrastructure network.
+
+    config TINYBMS_WIFI_AP_SSID
+        string "Fallback access point SSID"
+        depends on TINYBMS_WIFI_AP_FALLBACK
+        default "TinyBMS-Gateway"
+
+    config TINYBMS_WIFI_AP_PASSWORD
+        string "Fallback access point password"
+        depends on TINYBMS_WIFI_AP_FALLBACK
+        default "tinybmsgw"
+
+    config TINYBMS_WIFI_AP_CHANNEL
+        int "Fallback access point channel"
+        depends on TINYBMS_WIFI_AP_FALLBACK
+        range 1 13
+        default 1
+
+    config TINYBMS_WIFI_AP_MAX_CLIENTS
+        int "Maximum fallback access point clients"
+        depends on TINYBMS_WIFI_AP_FALLBACK
+        range 1 10
+        default 4
+endmenu
+
+endmenu

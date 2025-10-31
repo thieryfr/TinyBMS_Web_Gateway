@@ -8,6 +8,7 @@
 #include "config_manager.h"
 #include "mqtt_client.h"
 #include "monitoring.h"
+#include "wifi.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,9 +23,11 @@ void app_main(void)
     web_server_set_event_publisher(publish_hook);
     config_manager_set_event_publisher(publish_hook);
     mqtt_client_set_event_publisher(publish_hook);
+    wifi_set_event_publisher(publish_hook);
     monitoring_set_event_publisher(publish_hook);
 
     config_manager_init();
+    wifi_init();
     uart_bms_init();
     can_victron_init();
     pgn_mapper_init();

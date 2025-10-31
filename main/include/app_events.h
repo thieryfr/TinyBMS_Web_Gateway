@@ -28,6 +28,24 @@ typedef enum {
     APP_EVENT_ID_CAN_FRAME_RAW = 0x1200,
     /** Human readable representation of a CAN frame. */
     APP_EVENT_ID_CAN_FRAME_DECODED = 0x1201,
+    /** Wi-Fi station interface has started. */
+    APP_EVENT_ID_WIFI_STA_START = 0x1300,
+    /** Wi-Fi station connected to the configured access point. */
+    APP_EVENT_ID_WIFI_STA_CONNECTED = 0x1301,
+    /** Wi-Fi station disconnected from the access point. */
+    APP_EVENT_ID_WIFI_STA_DISCONNECTED = 0x1302,
+    /** Wi-Fi station obtained an IPv4 address. */
+    APP_EVENT_ID_WIFI_STA_GOT_IP = 0x1303,
+    /** Wi-Fi station lost its IPv4 address. */
+    APP_EVENT_ID_WIFI_STA_LOST_IP = 0x1304,
+    /** Wi-Fi fallback access point started. */
+    APP_EVENT_ID_WIFI_AP_STARTED = 0x1310,
+    /** Wi-Fi fallback access point stopped. */
+    APP_EVENT_ID_WIFI_AP_STOPPED = 0x1311,
+    /** A client associated with the Wi-Fi access point. */
+    APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED = 0x1312,
+    /** A client disconnected from the Wi-Fi access point. */
+    APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED = 0x1313,
 } app_event_id_t;
 
 #ifdef __cplusplus
