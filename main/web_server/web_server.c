@@ -1302,7 +1302,7 @@ void web_server_init(void)
     };
     httpd_register_uri_handler(s_httpd, &static_files);
 
-    s_event_subscription = event_bus_subscribe(8, NULL, NULL);
+    s_event_subscription = event_bus_subscribe_default(NULL, NULL);
     if (s_event_subscription == NULL) {
         ESP_LOGW(TAG, "Failed to subscribe to event bus; WebSocket forwarding disabled");
         return;

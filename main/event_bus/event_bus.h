@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "sdkconfig.h"
+
 #include "freertos/FreeRTOS.h"
 
 #ifdef __cplusplus
@@ -41,6 +43,10 @@ typedef void (*event_bus_subscriber_cb_t)(const event_bus_event_t *event, void *
  */
 typedef bool (*event_bus_publish_fn_t)(const event_bus_event_t *event, TickType_t timeout);
 
+#ifndef CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH
+#define CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH 8
+#endif
+
 /**
  * @brief Initialise the event bus infrastructure.
  *
@@ -71,6 +77,12 @@ void event_bus_deinit(void);
 event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
                                                      event_bus_subscriber_cb_t callback,
                                                      void *context);
+
+static inline event_bus_subscription_handle_t event_bus_subscribe_default(event_bus_subscriber_cb_t callback,
+                                                                          void *context)
+{
+    return event_bus_subscribe(CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH, callback, context);
+}
 
 /**
  * @brief Remove a subscription from the bus and free its resources.

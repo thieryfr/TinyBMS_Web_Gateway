@@ -43,6 +43,11 @@ All tasks subscribe to relevant event IDs to decouple producers from consumers. 
 - `test/test_can_conversion.c` vérifie les conversions nominales/extrêmes pour tous les PGN gérés.【F:test/test_can_conversion.c†L1-L340】
 
 ## Operational Notes
-- `event_bus` est thread-safe et tolère la saturation via un tampon circulaire de 8 événements ; ajuster `CONFIG_TINYBMS_EVENT_BUS_QUEUE_LEN` si les tâches commencent à perdre des messages lors d'essais intensifs.
+- `event_bus` attribue une file dédiée à chaque abonné pour isoler les producteurs ; la taille par défaut est pilotée par `CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH` (8 événements), ajustable via Kconfig.
 - `can_victron` arrête automatiquement le driver TWAI en cas de timeout keepalive et tente une relance toutes les `CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS` millisecondes.【F:main/can_victron/can_victron.c†L273-L563】
 - `wifi` bascule en mode AP de secours (`CONFIG_TINYBMS_WIFI_AP_FALLBACK`) après `CONFIG_TINYBMS_WIFI_STA_MAX_RETRY` échecs de connexion.【F:main/wifi/wifi.c†L22-L370】
+
+### Dimensionnement des files d'abonnement
+- Chaque appelant choisit `queue_length` lors de `event_bus_subscribe()`, ce qui détermine le nombre d'évènements pouvant être mis en attente pour cet abonné avant que `event_bus_publish()` ne retourne `false`.
+- Utiliser la valeur Kconfig par défaut (`CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH`) lorsque l'abonné consomme un flux moyen et qu'il dispose d'une tâche dédiée.
+- Augmenter `queue_length` lorsque plusieurs flux sont multiplexés sur la même tâche ou lorsque la latence de traitement peut dépasser la cadence de publication. Par exemple, `web_server` s'abonne avec `event_bus_subscribe_default()` et obtient une file de 8 évènements pour amortir les pics liés aux WebSockets.【F:main/web_server/web_server.c†L1299-L1311】

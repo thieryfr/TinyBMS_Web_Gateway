@@ -40,6 +40,7 @@ Le bus d'évènements fournit une infrastructure de publication/abonnement threa
 
 ## API et paramètres
 - `event_bus_subscribe(queue_length, callback, context)` : crée une queue (`xQueueCreate`) de `queue_length` éléments (taille recommandée ≥ 4 pour éviter les pertes) et l’insère dans la liste chaînée protégée par `s_bus_lock`.
+- `event_bus_subscribe_default(callback, context)` : utilise `CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH` pour dimensionner automatiquement la file lorsque la taille par défaut (8) suffit.
 - `event_bus_publish(event, timeout)` : parcourt la liste, envoie le message sur chaque queue (timeout `TickType_t`). Retourne `false` si au moins une queue est pleine ou si le bus n’est pas initialisé.【F:main/event_bus/event_bus.c†L61-L119】
 - `event_bus_receive()` / `event_bus_dispatch()` : lecture bloquante et exécution du callback utilisateur.
 - `event_bus_deinit()` : libère toutes les queues, détruit le mutex et vide la liste ; utile pour les tests ou un redémarrage contrôlé.【F:main/event_bus/event_bus.c†L31-L59】
@@ -71,7 +72,7 @@ Le bus d'évènements fournit une infrastructure de publication/abonnement threa
 - `web_server` maintient plusieurs abonnements (télémétrie, évènements UI, flux CAN/UART) pour alimenter les websockets clients.
 
 ## Bonnes pratiques
-- Choisir un `queue_length` adapté au rythme de publication attendu (ex. 8 pour `mqtt_gateway` qui consomme plusieurs flux rapides).
+- Choisir un `queue_length` adapté au rythme de publication attendu (ex. la valeur Kconfig `CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH` couvre la plupart des abonnés uniques, tandis que `web_server` l’emploie pour absorber les rafales WebSocket).
 - Toujours documenter la durée de vie du payload : si un buffer local est utilisé, en publier une copie stable avant de publier.
 - Utiliser des timeouts de publication modestes (`25–50 ms`) afin de ne pas bloquer le producteur en cas de consommateur lent.【F:main/event_bus/event_bus.c†L61-L119】
 

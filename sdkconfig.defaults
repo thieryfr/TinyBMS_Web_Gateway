@@ -1,5 +1,9 @@
 # Default SDK configuration for TinyBMS Web Gateway project
 # Customize via `idf.py menuconfig` and re-run configure step
+
+# Event bus
+CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH=8
+
 # MQTT defaults
 CONFIG_TINYBMS_MQTT_ENABLE=y
 CONFIG_TINYBMS_MQTT_BROKER_URI="mqtt://tinybms.local"

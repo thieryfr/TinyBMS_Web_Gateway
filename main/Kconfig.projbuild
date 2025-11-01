@@ -1,5 +1,17 @@
 menu "TinyBMS Web Gateway"
 
+menu "Infrastructure"
+    config TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH
+        int "Default event bus queue length"
+        range 1 32
+        default 8
+        help
+            Number of events queued per subscriber before publishers start
+            failing. Increase the value when subscribers may be preempted for
+            extended periods or when they multiplex several streams through a
+            single task.
+endmenu
+
 menu "Wi-Fi"
     config TINYBMS_WIFI_ENABLE
         bool "Enable Wi-Fi support"
