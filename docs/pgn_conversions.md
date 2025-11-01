@@ -30,16 +30,42 @@ Ce document détaille le mapping entre les mesures TinyBMS et les PGN attendus p
 - **MOSFET temperature** : `live->mosfet_temperature_c` (représente la température interne TinyBMS utilisée par Victron).
   - Conversion : degrés Celsius → entier signé ×10 (0,1 °C).【F:main/can_publisher/conversion_table.c†L415-L424】
 
-## PGN 0x35A — Alarms
-- Chaque alarme est encodée sur 2 bits (0=OK, 1=Avertissement, 2=Critique) dans les octets 0 et 1 :
-  - **Undervoltage** : comparaison `pack_voltage_v` vs `undervoltage_cutoff_mv` (critique si ≤ seuil, avertissement si ≤ seuil ×1,05).
-  - **Overvoltage** : `pack_voltage_v` vs `overvoltage_cutoff_mv` (critique si ≥ seuil, avertissement si ≥ seuil ×0,95).
-  - **Haute température** : `max(mosfet_temperature_c, pack_temperature_max_c)` vs `overheat_cutoff_c` (critique si dépassé, avertissement à 90 %).
-  - **Basse température** : `min(mosfet_temperature_c, pack_temperature_min_c)` (critique < −10 °C, avertissement < 0 °C).
-  - **Équilibrage / déséquilibre cellules** : `max_cell_mv - min_cell_mv` (≥80 mV critique, ≥40 mV avertissement).
-  - **SOC bas** : `state_of_charge_pct` (≤5 % critique, ≤15 % avertissement).
-  - **SOC élevé** : `state_of_charge_pct ≥ 98 %` et `pack_current_a > 1 A`.
-- L'octet 7 reflète le niveau d'alarme le plus élevé (0=OK, 1=Avertissement, 2=Critique).【F:main/can_publisher/conversion_table.c†L429-L520】
+## PGN 0x35A — Alarmes & avertissements
+Chaque champ 2 bits encode un niveau Victron (0 = OK, 1 = warning, 2 = alarm, 3 = réservé). Les huit octets couvrent les alarmes
+et avertissements attendus par le protocole CAN-BMS. Les bits réservés sont explicitement positionnés à `0b11` pour signaler
+leur absence. L’ensemble des seuils s’appuie sur les registres TinyBMS (`*_cutoff`, surintensités) ou les températures internes/
+externes calculées par le pont.【F:main/can_publisher/conversion_table.c†L115-L206】【F:main/can_publisher/conversion_table.c†L434-L547】
+
+| Byte | Bits | Champ | Source et seuils |
+| ---- | ---- | ----- | ---------------- |
+| 0 | 0-1 | General Alarm | Passe à 2 dès qu’une alarme critique est active, sinon 0. |
+| 0 | 2-3 | Battery High Voltage Alarm | `pack_voltage_v` vs `overvoltage_cutoff_mv` (alarm ≥ seuil, warning ≥95 %). |
+| 0 | 4-5 | Battery Low Voltage Alarm | `pack_voltage_v` vs `undervoltage_cutoff_mv` (alarm ≤ seuil, warning ≤105 %). |
+| 0 | 6-7 | Battery High Temperature Alarm | `max(mosfet_temperature_c, pack_temperature_max_c)` vs `overheat_cutoff_c` (warning à 90 %). |
+| 1 | 0-1 | Battery Low Temperature Alarm | `min(mosfet_temperature_c, pack_temperature_min_c)` (alarm < −10 °C, warning < 0 °C). |
+| 1 | 2-3 | Battery High Temp Charge Alarm | Température externe `auxiliary_temperature_c` vs `overheat_cutoff_c` (warning à 90 %). |
+| 1 | 4-5 | Battery Low Temp Charge Alarm | Réservé : forcé à `0b11` (non fourni par TinyBMS). |
+| 1 | 6-7 | Battery High Current Alarm | Courant de décharge `|-pack_current_a|` vs `discharge_overcurrent_limit_a` (warning ≥80 %). |
+| 2 | 0-1 | Battery High Charge Current Alarm | Courant de charge `pack_current_a` vs `charge_overcurrent_limit_a` (warning ≥80 %). |
+| 2 | 2-7 | Contactor/short/BMS Internal Alarms | Réservés (`0b11`). |
+| 3 | 0-1 | Cell Imbalance Alarm | `max_cell_mv - min_cell_mv` (alarm ≥80 mV, warning ≥40 mV). |
+| 3 | 2-7 | Reserved | `0b11`. |
+| 4 | 0-1 | General Warning | 1 lorsqu’au moins un warning est actif (2 si une alarme est présente). |
+| 4 | 2-3 | Battery High Voltage Warning | Même seuils que l’alarme (95 %). |
+| 4 | 4-5 | Battery Low Voltage Warning | Même seuils que l’alarme (105 %). |
+| 4 | 6-7 | Battery High Temperature Warning | Avertissement à 90 % de `overheat_cutoff_c`. |
+| 5 | 0-1 | Battery Low Temperature Warning | Identique au champ d’alarme (0 °C / −10 °C). |
+| 5 | 2-3 | Battery High Temp Charge Warning | Température externe > 90 % de `overheat_cutoff_c`. |
+| 5 | 4-5 | Battery Low Temp Charge Warning | `auxiliary_temperature_c` < `low_temp_charge_cutoff_c` (alarm), warning 5 °C au-dessus. |
+| 5 | 6-7 | Battery High Current Warning | Décharge ≥80 % de `discharge_overcurrent_limit_a`. |
+| 6 | 0-1 | Battery High Charge Current Warning | Charge ≥80 % de `charge_overcurrent_limit_a`. |
+| 6 | 2-7 | Reserved | `0b11`. |
+| 7 | 0-1 | Cell Imbalance Warning | Reflète le niveau (0/1/2) du déséquilibre cellulaire. |
+| 7 | 2-3 | System Status | Non exposé par TinyBMS → `0b11`. |
+| 7 | 4-7 | Reserved | `0b11`. |
+
+Les seuils « charge basse température » utilisent désormais le registre TinyBMS 0x0140 (`low_temp_charge_cutoff_c`), ajouté à la
+trame UART pour récupérer la consigne de coupure de charge basse température.【F:main/uart_bms/uart_bms_protocol.c†L229-L260】【F:main/uart_bms/uart_response_parser.cpp†L234-L255】
 
 ## PGN 0x35E / 0x35F / 0x371 — Informations fabricant & nom
 - **0x35E Manufacturer** : chaîne `CONFIG_TINYBMS_CAN_MANUFACTURER` tronquée/padée à 8 caractères.【F:main/can_publisher/conversion_table.c†L299-L335】

@@ -119,6 +119,56 @@ static uint8_t encode_2bit_field(uint8_t current, size_t index, uint8_t level)
     return current;
 }
 
+static uint8_t level_from_high_threshold(float value, float warn_threshold, float alarm_threshold)
+{
+    if (!isfinite(value) || !isfinite(alarm_threshold) || alarm_threshold <= 0.0f) {
+        return 0U;
+    }
+    if (!isfinite(warn_threshold) || warn_threshold <= 0.0f || warn_threshold > alarm_threshold) {
+        warn_threshold = alarm_threshold;
+    }
+    if (value >= alarm_threshold) {
+        return 2U;
+    }
+    if (value >= warn_threshold) {
+        return 1U;
+    }
+    return 0U;
+}
+
+static uint8_t level_from_low_threshold(float value, float warn_threshold, float alarm_threshold)
+{
+    if (!isfinite(value) || !isfinite(alarm_threshold)) {
+        return 0U;
+    }
+    if (!isfinite(warn_threshold) || warn_threshold < alarm_threshold) {
+        warn_threshold = alarm_threshold;
+    }
+    if (value <= alarm_threshold) {
+        return 2U;
+    }
+    if (value <= warn_threshold) {
+        return 1U;
+    }
+    return 0U;
+}
+
+static uint8_t alarm_field_value(uint8_t level)
+{
+    return (level >= 2U) ? 2U : 0U;
+}
+
+static uint8_t warning_field_value(uint8_t level)
+{
+    if (level >= 2U) {
+        return 2U;
+    }
+    if (level == 1U) {
+        return 1U;
+    }
+    return 0U;
+}
+
 static bool find_register_value(const uart_bms_live_data_t *data, uint16_t address, uint16_t *out_value)
 {
     if (data == NULL || out_value == NULL) {
@@ -452,58 +502,90 @@ static bool encode_alarm_status(const uart_bms_live_data_t *data, can_publisher_
         return false;
     }
 
-    memset(frame->data, 0, sizeof(frame->data));
-
-    float pack_voltage_v = data->pack_voltage_v;
-    float undervoltage_v = (data->undervoltage_cutoff_mv > 0U) ? ((float)data->undervoltage_cutoff_mv / 1000.0f) : 0.0f;
-    float overvoltage_v = (data->overvoltage_cutoff_mv > 0U) ? ((float)data->overvoltage_cutoff_mv / 1000.0f) : 0.0f;
-    float max_temp_c = fmaxf(data->mosfet_temperature_c, data->pack_temperature_max_c);
-    float min_temp_c = fminf(data->mosfet_temperature_c, data->pack_temperature_min_c);
-    float overheat_cutoff_c = (data->overheat_cutoff_c > 0.0f) ? data->overheat_cutoff_c : 65.0f;
-
-    uint8_t byte0 = 0U;
-    uint8_t byte1 = 0U;
+    uint8_t bytes[8] = {0};
     uint8_t highest_level = 0U;
 
-    uint8_t underv_level = 0U;
-    if (undervoltage_v > 0.0f) {
-        if (pack_voltage_v <= undervoltage_v) {
-            underv_level = 2U;
-        } else if (pack_voltage_v <= (undervoltage_v * 1.05f)) {
-            underv_level = 1U;
-        }
-    }
-    byte0 = encode_2bit_field(byte0, 0U, underv_level);
-    highest_level = (underv_level > highest_level) ? underv_level : highest_level;
+    const float pack_voltage_v = data->pack_voltage_v;
+    const float undervoltage_v = (data->undervoltage_cutoff_mv > 0U)
+                                     ? ((float)data->undervoltage_cutoff_mv / 1000.0f)
+                                     : 0.0f;
+    const float overvoltage_v = (data->overvoltage_cutoff_mv > 0U)
+                                    ? ((float)data->overvoltage_cutoff_mv / 1000.0f)
+                                    : 0.0f;
+    const float max_temp_c = fmaxf(data->mosfet_temperature_c, data->pack_temperature_max_c);
+    const float min_temp_c = fminf(data->mosfet_temperature_c, data->pack_temperature_min_c);
+    const float overheat_cutoff_c = (data->overheat_cutoff_c > 0.0f) ? data->overheat_cutoff_c : 65.0f;
+    const float external_temp_c = data->auxiliary_temperature_c;
+    const float low_temp_charge_cutoff_c = data->low_temp_charge_cutoff_c;
+    const float discharge_limit_a = data->discharge_overcurrent_limit_a;
+    const float charge_limit_a = data->charge_overcurrent_limit_a;
+    const float discharge_current_a = (data->pack_current_a < 0.0f) ? -data->pack_current_a : 0.0f;
+    const float charge_current_a = (data->pack_current_a > 0.0f) ? data->pack_current_a : 0.0f;
 
-    uint8_t overvoltage_level = 0U;
-    if (overvoltage_v > 0.0f) {
-        if (pack_voltage_v >= overvoltage_v) {
-            overvoltage_level = 2U;
-        } else if (pack_voltage_v >= (overvoltage_v * 0.95f)) {
-            overvoltage_level = 1U;
-        }
-    }
-    byte0 = encode_2bit_field(byte0, 1U, overvoltage_level);
-    highest_level = (overvoltage_level > highest_level) ? overvoltage_level : highest_level;
+    uint8_t level = level_from_low_threshold(pack_voltage_v,
+                                             undervoltage_v * 1.05f,
+                                             undervoltage_v);
+    highest_level = (level > highest_level) ? level : highest_level;
+    bytes[0] = encode_2bit_field(bytes[0], 2U, alarm_field_value(level));
+    bytes[4] = encode_2bit_field(bytes[4], 2U, warning_field_value(level));
 
-    uint8_t high_temp_level = 0U;
-    if (max_temp_c > overheat_cutoff_c) {
-        high_temp_level = 2U;
-    } else if (max_temp_c > (overheat_cutoff_c * 0.9f)) {
-        high_temp_level = 1U;
-    }
-    byte0 = encode_2bit_field(byte0, 2U, high_temp_level);
-    highest_level = (high_temp_level > highest_level) ? high_temp_level : highest_level;
+    level = level_from_high_threshold(pack_voltage_v,
+                                      overvoltage_v * 0.95f,
+                                      overvoltage_v);
+    highest_level = (level > highest_level) ? level : highest_level;
+    bytes[0] = encode_2bit_field(bytes[0], 1U, alarm_field_value(level));
+    bytes[4] = encode_2bit_field(bytes[4], 1U, warning_field_value(level));
 
-    uint8_t low_temp_level = 0U;
-    if (min_temp_c < -10.0f) {
-        low_temp_level = 2U;
-    } else if (min_temp_c < 0.0f) {
-        low_temp_level = 1U;
+    level = level_from_high_threshold(max_temp_c,
+                                      overheat_cutoff_c * 0.9f,
+                                      overheat_cutoff_c);
+    highest_level = (level > highest_level) ? level : highest_level;
+    bytes[0] = encode_2bit_field(bytes[0], 3U, alarm_field_value(level));
+    bytes[4] = encode_2bit_field(bytes[4], 3U, warning_field_value(level));
+
+    level = level_from_low_threshold(min_temp_c, 0.0f, -10.0f);
+    highest_level = (level > highest_level) ? level : highest_level;
+    bytes[1] = encode_2bit_field(bytes[1], 0U, alarm_field_value(level));
+    bytes[5] = encode_2bit_field(bytes[5], 0U, warning_field_value(level));
+
+    uint8_t high_temp_charge_level = 0U;
+    if (isfinite(external_temp_c)) {
+        high_temp_charge_level = level_from_high_threshold(external_temp_c,
+                                                          overheat_cutoff_c * 0.9f,
+                                                          overheat_cutoff_c);
     }
-    byte0 = encode_2bit_field(byte0, 3U, low_temp_level);
-    highest_level = (low_temp_level > highest_level) ? low_temp_level : highest_level;
+    highest_level = (high_temp_charge_level > highest_level) ? high_temp_charge_level : highest_level;
+    bytes[1] = encode_2bit_field(bytes[1], 1U, alarm_field_value(high_temp_charge_level));
+    bytes[5] = encode_2bit_field(bytes[5], 1U, warning_field_value(high_temp_charge_level));
+
+    uint8_t low_temp_charge_warning_level = 0U;
+    if (isfinite(external_temp_c)) {
+        low_temp_charge_warning_level = level_from_low_threshold(external_temp_c,
+                                                                 low_temp_charge_cutoff_c + 5.0f,
+                                                                 low_temp_charge_cutoff_c);
+    }
+    highest_level = (low_temp_charge_warning_level > highest_level) ? low_temp_charge_warning_level : highest_level;
+    bytes[5] = encode_2bit_field(bytes[5], 2U, warning_field_value(low_temp_charge_warning_level));
+
+    uint8_t high_current_level = 0U;
+    if (discharge_limit_a > 0.0f) {
+        high_current_level = level_from_high_threshold(discharge_current_a,
+                                                       discharge_limit_a * 0.8f,
+                                                       discharge_limit_a);
+    }
+    highest_level = (high_current_level > highest_level) ? high_current_level : highest_level;
+    bytes[1] = encode_2bit_field(bytes[1], 3U, alarm_field_value(high_current_level));
+    bytes[5] = encode_2bit_field(bytes[5], 3U, warning_field_value(high_current_level));
+
+    uint8_t high_charge_current_level = 0U;
+    if (charge_limit_a > 0.0f) {
+        high_charge_current_level = level_from_high_threshold(charge_current_a,
+                                                              charge_limit_a * 0.8f,
+                                                              charge_limit_a);
+    }
+    highest_level = (high_charge_current_level > highest_level) ? high_charge_current_level : highest_level;
+    bytes[2] = encode_2bit_field(bytes[2], 0U, alarm_field_value(high_charge_current_level));
+    bytes[6] = encode_2bit_field(bytes[6], 0U, warning_field_value(high_charge_current_level));
 
     uint16_t imbalance_mv = 0U;
     if (data->max_cell_mv > data->min_cell_mv) {
@@ -515,28 +597,29 @@ static bool encode_alarm_status(const uart_bms_live_data_t *data, can_publisher_
     } else if (imbalance_mv >= 40U) {
         imbalance_level = 1U;
     }
-    byte1 = encode_2bit_field(byte1, 0U, imbalance_level);
     highest_level = (imbalance_level > highest_level) ? imbalance_level : highest_level;
+    bytes[3] = encode_2bit_field(bytes[3], 0U, alarm_field_value(imbalance_level));
+    bytes[7] = encode_2bit_field(bytes[7], 0U, warning_field_value(imbalance_level));
 
-    uint8_t low_soc_level = 0U;
-    if (data->state_of_charge_pct <= 5.0f) {
-        low_soc_level = 2U;
-    } else if (data->state_of_charge_pct <= 15.0f) {
-        low_soc_level = 1U;
+    bytes[0] = encode_2bit_field(bytes[0], 0U, (highest_level >= 2U) ? 2U : 0U);
+    bytes[4] = encode_2bit_field(bytes[4], 0U, warning_field_value(highest_level));
+
+    bytes[1] = encode_2bit_field(bytes[1], 2U, 0x3U);
+    bytes[2] = encode_2bit_field(bytes[2], 1U, 0x3U);
+    bytes[2] = encode_2bit_field(bytes[2], 2U, 0x3U);
+    bytes[2] = encode_2bit_field(bytes[2], 3U, 0x3U);
+    bytes[3] = encode_2bit_field(bytes[3], 1U, 0x3U);
+    bytes[3] = encode_2bit_field(bytes[3], 2U, 0x3U);
+    bytes[3] = encode_2bit_field(bytes[3], 3U, 0x3U);
+    bytes[6] = encode_2bit_field(bytes[6], 1U, 0x3U);
+    bytes[6] = encode_2bit_field(bytes[6], 2U, 0x3U);
+    bytes[6] = encode_2bit_field(bytes[6], 3U, 0x3U);
+    bytes[7] = encode_2bit_field(bytes[7], 2U, 0x3U);
+    bytes[7] = encode_2bit_field(bytes[7], 3U, 0x3U);
+
+    for (size_t i = 0; i < sizeof(bytes); ++i) {
+        frame->data[i] = bytes[i];
     }
-    byte1 = encode_2bit_field(byte1, 1U, low_soc_level);
-    highest_level = (low_soc_level > highest_level) ? low_soc_level : highest_level;
-
-    uint8_t high_soc_level = 0U;
-    if (data->state_of_charge_pct >= 98.0f && data->pack_current_a > 1.0f) {
-        high_soc_level = 1U;
-    }
-    byte1 = encode_2bit_field(byte1, 2U, high_soc_level);
-    highest_level = (high_soc_level > highest_level) ? high_soc_level : highest_level;
-
-    frame->data[0] = byte0;
-    frame->data[1] = byte1;
-    frame->data[7] = (highest_level >= 2U) ? 0x02U : ((highest_level == 1U) ? 0x01U : 0x00U);
 
     return true;
 }

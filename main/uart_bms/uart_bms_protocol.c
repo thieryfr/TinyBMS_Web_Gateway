@@ -268,6 +268,18 @@ const uart_bms_register_metadata_t g_uart_bms_registers[UART_BMS_REGISTER_COUNT]
         .comment = "Read via UART/CAN (Reg:319)",
     },
     {
+        .id = UART_BMS_REGISTER_LOW_TEMP_CHARGE_CUTOFF,
+        .address = 0x0140,
+        .word_count = 1,
+        .type = UART_BMS_VALUE_INT16,
+        .scale = 1.0f,
+        .primary_field = UART_BMS_FIELD_LOW_TEMP_CHARGE_CUTOFF,
+        .secondary_field = UART_BMS_FIELD_NONE,
+        .name = "Low Temp Charge Cutoff",
+        .unit = "\xB0C",
+        .comment = "Read via UART/CAN (Reg:320)",
+    },
+    {
         .id = UART_BMS_REGISTER_HARDWARE_VERSION,
         .address = 0x01F4,
         .word_count = 1,
@@ -310,8 +322,8 @@ const size_t g_uart_bms_register_count = UART_BMS_REGISTER_COUNT;
 const uint16_t g_uart_bms_poll_addresses[UART_BMS_REGISTER_WORD_COUNT] = {
     0x0020, 0x0021, 0x0024, 0x0025, 0x0026, 0x0027, 0x0028, 0x0029, 0x002A,
     0x002B, 0x002D, 0x002E, 0x002F, 0x0030, 0x0032, 0x0033, 0x0034, 0x0071,
-    0x0131, 0x0132, 0x0133, 0x013B, 0x013C, 0x013D, 0x013E, 0x013F, 0x01F4,
-    0x01F5, 0x01F6,
+    0x0131, 0x0132, 0x0133, 0x013B, 0x013C, 0x013D, 0x013E, 0x013F, 0x0140,
+    0x01F4, 0x01F5, 0x01F6,
 };
 
 const uart_bms_register_metadata_t *uart_bms_protocol_find_by_address(uint16_t address)

@@ -84,6 +84,7 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 63.0f, payload->charge_overcurrent_limit_a);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 120.0f, payload->peak_discharge_current_limit_a);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 62.0f, payload->overheat_cutoff_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -16.0f, payload->low_temp_charge_cutoff_c);
     TEST_ASSERT_EQUAL_UINT8(2, payload->hardware_version);
     TEST_ASSERT_EQUAL_UINT8(1, payload->hardware_changes_version);
     TEST_ASSERT_EQUAL_UINT8(0x34, payload->firmware_version);

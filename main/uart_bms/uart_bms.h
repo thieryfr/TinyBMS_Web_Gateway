@@ -60,6 +60,7 @@ typedef struct {
     float charge_overcurrent_limit_a;
     float peak_discharge_current_limit_a;
     float overheat_cutoff_c;
+    float low_temp_charge_cutoff_c;
     uint8_t hardware_version;
     uint8_t hardware_changes_version;
     uint8_t firmware_version;

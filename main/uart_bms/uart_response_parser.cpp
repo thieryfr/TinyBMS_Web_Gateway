@@ -285,6 +285,9 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                         case UART_BMS_FIELD_OVERHEAT_CUTOFF:
                             legacy_out->overheat_cutoff_c = scaled;
                             break;
+                        case UART_BMS_FIELD_LOW_TEMP_CHARGE_CUTOFF:
+                            legacy_out->low_temp_charge_cutoff_c = scaled;
+                            break;
                         default:
                             break;
                     }
