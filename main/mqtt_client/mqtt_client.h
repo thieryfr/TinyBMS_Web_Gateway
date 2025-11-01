@@ -20,6 +20,7 @@ typedef int esp_err_t;
 #define ESP_ERR_NO_MEM 0x101
 #define ESP_ERR_INVALID_STATE 0x102
 #define ESP_ERR_NOT_SUPPORTED 0x103
+#define ESP_ERR_INVALID_ARG 0x104
 #endif
 
 struct esp_mqtt_client;
@@ -89,6 +90,10 @@ void mqtt_client_set_event_publisher(event_bus_publish_fn_t publisher);
  * @brief Initialise the MQTT client module and install the optional listener.
  */
 esp_err_t mqtt_client_init(const mqtt_client_event_listener_t *listener);
+/**
+ * @brief Apply a new runtime configuration to the MQTT client handle.
+ */
+esp_err_t mqtt_client_apply_configuration(const mqtt_client_config_t *config);
 /**
  * @brief Start the MQTT client connection state machine.
  */
