@@ -4,6 +4,10 @@ Squelette de projet ESP-IDF pour la passerelle TinyBMS ↔ Victron avec interfac
 
 ESP32-S3-WROOM-1-N8R8 using an Xtensa® 32-bit LX7 CPU operating at up to 240 MHz (8MB flash, 8MB PSRAM), dual CAN bus support, two CAN bus transceivers.
 
+https://wiki.autosportlabs.com/ESP32-CAN-X2#Introduction
+
+https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s3/get-started/establish-serial-connection.html
+
 ## Structure du projet
 ```
 TinyBMS-WebGateway/
