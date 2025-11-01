@@ -2,6 +2,8 @@
 
 Squelette de projet ESP-IDF pour la passerelle TinyBMS ↔ Victron avec interface web embarquée. Cette arborescence prépare l'intégration des différents modules (UART BMS, CAN Victron, MQTT, monitoring, etc.) ainsi que la partie front-end servie depuis l'ESP32.
 
+ESP32-S3-WROOM-1-N8R8 using an Xtensa® 32-bit LX7 CPU operating at up to 240 MHz (8MB flash, 8MB PSRAM), dual CAN bus support, two CAN bus transceivers.
+
 ## Structure du projet
 ```
 TinyBMS-WebGateway/
