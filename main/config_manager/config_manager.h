@@ -1,11 +1,13 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
 
 #include "event_bus.h"
+#include "mqtt_client.h"
 
 void config_manager_init(void);
 void config_manager_set_event_publisher(event_bus_publish_fn_t publisher);
@@ -17,6 +19,9 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
 
 uint32_t config_manager_get_uart_poll_interval_ms(void);
 esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms);
+
+const mqtt_client_config_t *config_manager_get_mqtt_client_config(void);
+esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config);
 
 #define CONFIG_MANAGER_MAX_CONFIG_SIZE 2048
 #define CONFIG_MANAGER_MAX_REGISTERS_JSON 4096
