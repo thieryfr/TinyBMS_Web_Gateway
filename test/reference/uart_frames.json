@@ -1,0 +1,180 @@
+{
+  "metadata": {
+    "description": "Reference TinyBMS UART frames used by test/uart_sim.py to stream deterministic payloads toward the gateway.",
+    "poll_addresses": [
+      "0x0020", "0x0021", "0x0024", "0x0025", "0x0026", "0x0027", "0x0028", "0x0029", "0x002A",
+      "0x002B", "0x002D", "0x002E", "0x002F", "0x0030", "0x0032", "0x0033", "0x0034", "0x0071",
+      "0x0131", "0x0132", "0x0133", "0x013B", "0x013C", "0x013D", "0x013E", "0x013F", "0x0140",
+      "0x01F4", "0x01F5", "0x01F6", "0x01F8", "0x01F9", "0x01FA", "0x01FB", "0x01FC", "0x01FD",
+      "0x01FE", "0x01FF"
+    ]
+  },
+  "frames": [
+    {
+      "id": "nominal_pack",
+      "description": "Nominal 16s LiFePO4 pack at 51.2 V, light discharge current and healthy temperatures.",
+      "registers": {
+        "0x0020": {"value": "0x2C90", "comment": "Lifetime seconds LSW (180000 s)"},
+        "0x0021": {"value": "0x0002", "comment": "Lifetime seconds MSW"},
+        "0x0024": {"value": "0xCCCD", "comment": "Pack voltage 51.2 V (float32 LSW)"},
+        "0x0025": {"value": "0x424C", "comment": "Pack voltage 51.2 V (float32 MSW)"},
+        "0x0026": {"value": "0x6666", "comment": "Pack current -12.4 A (float32 LSW)"},
+        "0x0027": {"value": "0xC146", "comment": "Pack current -12.4 A (float32 MSW)"},
+        "0x0028": {"value": 3250, "comment": "Min cell 3.250 V"},
+        "0x0029": {"value": 3320, "comment": "Max cell 3.320 V"},
+        "0x002A": {"value": 230, "comment": "External temp 23.0 °C"},
+        "0x002B": {"value": 225, "comment": "Aux temp 22.5 °C"},
+        "0x002D": {"value": 485, "comment": "SOH 97.0 %"},
+        "0x002E": {"value": "0x71B0", "comment": "SOC 75 % LSW"},
+        "0x002F": {"value": "0x000B", "comment": "SOC 75 % MSW"},
+        "0x0030": {"value": 280, "comment": "MOS temp 28.0 °C"},
+        "0x0032": {"value": "0x0000", "comment": "System status OK"},
+        "0x0033": {"value": "0x0000", "comment": "No balancing requested"},
+        "0x0034": {"value": "0x00FF", "comment": "Balancing bits (cells 0-7)"},
+        "0x0071": {"value": "0x2012", "comment": "Pack temp min 18 °C / max 32 °C"},
+        "0x0131": {"value": 180, "comment": "Peak discharge current limit 180 A"},
+        "0x0132": {"value": "0x6D60", "comment": "Capacity 280 Ah"},
+        "0x0133": {"value": 16, "comment": "Series cells"},
+        "0x013B": {"value": 3600, "comment": "Overvoltage cutoff 3.600 V"},
+        "0x013C": {"value": 2800, "comment": "Undervoltage cutoff 2.800 V"},
+        "0x013D": {"value": 180, "comment": "Discharge OC limit 180 A"},
+        "0x013E": {"value": 120, "comment": "Charge OC limit 120 A"},
+        "0x013F": {"value": 55, "comment": "Overheat cutoff 55 °C"},
+        "0x0140": {"value": "0xFFFB", "comment": "Low temp charge cutoff -5 °C"},
+        "0x01F4": {"value": "0x0302", "comment": "Hardware v2 / changes v3"},
+        "0x01F5": {"value": "0x1203", "comment": "Public FW 0x03 / flags 0x12"},
+        "0x01F6": {"value": "0x0456", "comment": "Internal FW 0x0456"},
+        "0x01F8": {"value": "0x4E54", "comment": "Serial ASCII 'TN'"},
+        "0x01F9": {"value": "0x3432", "comment": "Serial ASCII '24'"},
+        "0x01FA": {"value": "0x3041", "comment": "Serial ASCII 'A0'"},
+        "0x01FB": {"value": "0x3130", "comment": "Serial ASCII '01'"},
+        "0x01FC": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FD": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FE": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FF": {"value": "0x0000", "comment": "Reserved"}
+      },
+      "expected": {
+        "pack_voltage_v": 51.2,
+        "pack_current_a": -12.4,
+        "soc_percent": 75.0,
+        "alarms": []
+      }
+    },
+    {
+      "id": "undervoltage_alarm",
+      "description": "Pack sagging to 46 V with minimum cell at 2.70 V triggering undervoltage alarm bit.",
+      "registers": {
+        "0x0020": {"value": "0x36B0", "comment": "Lifetime seconds LSW (220000 s)"},
+        "0x0021": {"value": "0x0003", "comment": "Lifetime seconds MSW"},
+        "0x0024": {"value": "0x0000", "comment": "Pack voltage 46.0 V (float32 LSW)"},
+        "0x0025": {"value": "0x4238", "comment": "Pack voltage 46.0 V (float32 MSW)"},
+        "0x0026": {"value": "0x0000", "comment": "Pack current -180 A (float32 LSW)"},
+        "0x0027": {"value": "0xC334", "comment": "Pack current -180 A (float32 MSW)"},
+        "0x0028": {"value": 2700, "comment": "Min cell 2.700 V"},
+        "0x0029": {"value": 3150, "comment": "Max cell 3.150 V"},
+        "0x002A": {"value": 180, "comment": "External temp 18.0 °C"},
+        "0x002B": {"value": 175, "comment": "Aux temp 17.5 °C"},
+        "0x002D": {"value": 470, "comment": "SOH 94.0 %"},
+        "0x002E": {"value": "0xD4C0", "comment": "SOC 12 % LSW"},
+        "0x002F": {"value": "0x0001", "comment": "SOC 12 % MSW"},
+        "0x0030": {"value": 265, "comment": "MOS temp 26.5 °C"},
+        "0x0032": {"value": "0x0001", "comment": "System status: undervoltage"},
+        "0x0033": {"value": "0x0003", "comment": "Balancing requested on two cells"},
+        "0x0034": {"value": "0x00F0", "comment": "Balancing bits"},
+        "0x0071": {"value": "0x1E0F", "comment": "Pack temp min 15 °C / max 30 °C"},
+        "0x0131": {"value": 200, "comment": "Peak discharge current limit 200 A"},
+        "0x0132": {"value": "0x6D60", "comment": "Capacity unchanged"},
+        "0x0133": {"value": 16, "comment": "Series cells"},
+        "0x013B": {"value": 3600, "comment": "Overvoltage cutoff"},
+        "0x013C": {"value": 2700, "comment": "Undervoltage cutoff tightened"},
+        "0x013D": {"value": 200, "comment": "Discharge OC limit"},
+        "0x013E": {"value": 120, "comment": "Charge OC limit"},
+        "0x013F": {"value": 55, "comment": "Overheat cutoff"},
+        "0x0140": {"value": "0xFFF0", "comment": "Low temp charge cutoff -16 °C"},
+        "0x01F4": {"value": "0x0302", "comment": "Hardware info"},
+        "0x01F5": {"value": "0x1203", "comment": "Firmware info"},
+        "0x01F6": {"value": "0x0456", "comment": "Internal FW"},
+        "0x01F8": {"value": "0x4E54", "comment": "Serial ASCII 'TN'"},
+        "0x01F9": {"value": "0x3432", "comment": "Serial ASCII '24'"},
+        "0x01FA": {"value": "0x3041", "comment": "Serial ASCII 'A0'"},
+        "0x01FB": {"value": "0x3131", "comment": "Serial ASCII '11'"},
+        "0x01FC": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FD": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FE": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FF": {"value": "0x0000", "comment": "Reserved"}
+      },
+      "expected": {
+        "pack_voltage_v": 46.0,
+        "pack_current_a": -180.0,
+        "soc_percent": 12.0,
+        "alarms": ["undervoltage"]
+      }
+    },
+    {
+      "id": "temperature_limit",
+      "description": "Thermal edge case that clips CVL: min temp -15 °C, MOSFET at 62 °C, charge disabled.",
+      "registers": {
+        "0x0020": {"value": "0x3A98", "comment": "Lifetime seconds LSW (240000 s)"},
+        "0x0021": {"value": "0x0003", "comment": "Lifetime seconds MSW"},
+        "0x0024": {"value": "0x199A", "comment": "Pack voltage 25.2 V (float32 LSW)"},
+        "0x0025": {"value": "0x41C9", "comment": "Pack voltage 25.2 V (float32 MSW)"},
+        "0x0026": {"value": "0x0000", "comment": "Pack current 5.0 A charge (float32 LSW)"},
+        "0x0027": {"value": "0x40A0", "comment": "Pack current 5.0 A charge (float32 MSW)"},
+        "0x0028": {"value": 3000, "comment": "Min cell 3.000 V"},
+        "0x0029": {"value": 3010, "comment": "Max cell 3.010 V"},
+        "0x002A": {"value": 100, "comment": "External temp 10.0 °C"},
+        "0x002B": {"value": 90, "comment": "Aux temp 9.0 °C"},
+        "0x002D": {"value": 500, "comment": "SOH 100 %"},
+        "0x002E": {"value": "0xC350", "comment": "SOC 50 % LSW"},
+        "0x002F": {"value": "0x0007", "comment": "SOC 50 % MSW"},
+        "0x0030": {"value": 620, "comment": "MOS temp 62.0 °C"},
+        "0x0032": {"value": "0x0008", "comment": "System status: charge disabled"},
+        "0x0033": {"value": "0x0000", "comment": "No balancing"},
+        "0x0034": {"value": "0x0000", "comment": "No balancing bits"},
+        "0x0071": {"value": "0x10F1", "comment": "Pack temp min -15 °C / max 16 °C"},
+        "0x0131": {"value": 150, "comment": "Peak discharge current limit"},
+        "0x0132": {"value": "0x6D60", "comment": "Capacity"},
+        "0x0133": {"value": 8, "comment": "Series cells for 8s pack"},
+        "0x013B": {"value": 3500, "comment": "Overvoltage cutoff"},
+        "0x013C": {"value": 2900, "comment": "Undervoltage cutoff"},
+        "0x013D": {"value": 150, "comment": "Discharge OC limit"},
+        "0x013E": {"value": 80, "comment": "Charge OC limit (derated)"},
+        "0x013F": {"value": 60, "comment": "Overheat cutoff"},
+        "0x0140": {"value": "0xFFF1", "comment": "Low temp charge cutoff -15 °C"},
+        "0x01F4": {"value": "0x0202", "comment": "Hardware info"},
+        "0x01F5": {"value": "0x1103", "comment": "Firmware info"},
+        "0x01F6": {"value": "0x0355", "comment": "Internal FW"},
+        "0x01F8": {"value": "0x4E54", "comment": "Serial ASCII 'TN'"},
+        "0x01F9": {"value": "0x3230", "comment": "Serial ASCII '02'"},
+        "0x01FA": {"value": "0x3443", "comment": "Serial ASCII 'C4'"},
+        "0x01FB": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FC": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FD": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FE": {"value": "0x0000", "comment": "Reserved"},
+        "0x01FF": {"value": "0x0000", "comment": "Reserved"}
+      },
+      "expected": {
+        "pack_voltage_v": 25.2,
+        "pack_current_a": 5.0,
+        "soc_percent": 50.0,
+        "alarms": ["charge_disabled", "temp_min"]
+      }
+    },
+    {
+      "id": "crc_error",
+      "description": "Frame intentionally corrupted to validate CRC error handling.",
+      "base_frame": "nominal_pack",
+      "mutations": [
+        {"type": "crc_flip", "byte": -1}
+      ]
+    },
+    {
+      "id": "truncated_payload",
+      "description": "Frame truncated after the MOS temperature to emulate UART noise and trigger length errors.",
+      "base_frame": "nominal_pack",
+      "mutations": [
+        {"type": "truncate_after_address", "address": "0x0030"}
+      ]
+    }
+  ]
+}

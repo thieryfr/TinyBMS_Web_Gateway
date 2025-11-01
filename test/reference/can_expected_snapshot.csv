@@ -1,0 +1,8 @@
+scenario_id,pgn_hex,interval_ms,data_hex,expected_fields
+nominal_pack,0x18FF50E5,1000,320C0034FCFFFFFF,Voltage=51.2V;Current=-12.4A
+nominal_pack,0x18FF56E5,1000,0000000000000000,AlarmBits=0x0000;WarningBits=0x0000
+nominal_pack,0x18FF55E5,1000,120002001C000000,SOC=75%;SOH=97%
+undervoltage_alarm,0x18FF50E5,1000,00230BC06CFFFFFFFF,Voltage=46.0V;Current=-180A
+undervoltage_alarm,0x18FF56E5,1000,0100030000000000,AlarmBits=0x0001;WarningBits=0x0003
+temperature_limit,0x18FF50E5,1000,9A19C94100000000,Voltage=25.2V;Current=5.0A
+temperature_limit,0x18FF56E5,1000,0800000000000000,AlarmBits=0x0008;WarningBits=0x0000
