@@ -26,6 +26,20 @@
 #define CONFIG_MANAGER_REGISTER_KEY_PREFIX    "reg"
 #define CONFIG_MANAGER_REGISTER_KEY_MAX       16
 
+#define CONFIG_MANAGER_MQTT_URI_KEY       "mqtt_uri"
+#define CONFIG_MANAGER_MQTT_USERNAME_KEY  "mqtt_user"
+#define CONFIG_MANAGER_MQTT_PASSWORD_KEY  "mqtt_pass"
+#define CONFIG_MANAGER_MQTT_KEEPALIVE_KEY "mqtt_keepalive"
+#define CONFIG_MANAGER_MQTT_QOS_KEY       "mqtt_qos"
+#define CONFIG_MANAGER_MQTT_RETAIN_KEY    "mqtt_retain"
+
+#define CONFIG_MANAGER_MQTT_DEFAULT_URI       "mqtt://localhost"
+#define CONFIG_MANAGER_MQTT_DEFAULT_USERNAME  ""
+#define CONFIG_MANAGER_MQTT_DEFAULT_PASSWORD  ""
+#define CONFIG_MANAGER_MQTT_DEFAULT_KEEPALIVE 60U
+#define CONFIG_MANAGER_MQTT_DEFAULT_QOS       1U
+#define CONFIG_MANAGER_MQTT_DEFAULT_RETAIN    false
+
 static void config_manager_make_register_key(uint16_t address, char *out_key, size_t out_size)
 {
     if (out_key == NULL || out_size == 0) {
@@ -77,6 +91,112 @@ typedef struct {
 #include "generated_tiny_rw_registers.inc"
 
 static const char *TAG = "config_manager";
+
+static mqtt_client_config_t s_mqtt_config = {
+    .broker_uri = CONFIG_MANAGER_MQTT_DEFAULT_URI,
+    .username = CONFIG_MANAGER_MQTT_DEFAULT_USERNAME,
+    .password = CONFIG_MANAGER_MQTT_DEFAULT_PASSWORD,
+    .keepalive_seconds = CONFIG_MANAGER_MQTT_DEFAULT_KEEPALIVE,
+    .default_qos = CONFIG_MANAGER_MQTT_DEFAULT_QOS,
+    .retain_enabled = CONFIG_MANAGER_MQTT_DEFAULT_RETAIN,
+};
+
+static void config_manager_copy_string(char *dest, size_t dest_size, const char *src)
+{
+    if (dest == NULL || dest_size == 0) {
+        return;
+    }
+
+    if (src == NULL) {
+        dest[0] = '\0';
+        return;
+    }
+
+    size_t copy_len = 0;
+    while (copy_len + 1 < dest_size && src[copy_len] != '\0') {
+        ++copy_len;
+    }
+
+    if (copy_len > 0) {
+        memcpy(dest, src, copy_len);
+    }
+    dest[copy_len] = '\0';
+}
+
+static void config_manager_sanitise_mqtt_config(mqtt_client_config_t *config)
+{
+    if (config == NULL) {
+        return;
+    }
+
+    if (config->keepalive_seconds == 0) {
+        config->keepalive_seconds = CONFIG_MANAGER_MQTT_DEFAULT_KEEPALIVE;
+    }
+
+    if (config->default_qos > 2U) {
+        config->default_qos = 2U;
+    }
+
+    if (config->broker_uri[0] == '\0') {
+        config_manager_copy_string(config->broker_uri,
+                                   sizeof(config->broker_uri),
+                                   CONFIG_MANAGER_MQTT_DEFAULT_URI);
+    }
+}
+
+#ifdef ESP_PLATFORM
+static void config_manager_load_mqtt_settings_from_nvs(nvs_handle_t handle)
+{
+    size_t buffer_size = sizeof(s_mqtt_config.broker_uri);
+    esp_err_t err = nvs_get_str(handle, CONFIG_MANAGER_MQTT_URI_KEY, s_mqtt_config.broker_uri, &buffer_size);
+    if (err != ESP_OK) {
+        config_manager_copy_string(s_mqtt_config.broker_uri,
+                                   sizeof(s_mqtt_config.broker_uri),
+                                   CONFIG_MANAGER_MQTT_DEFAULT_URI);
+    }
+
+    buffer_size = sizeof(s_mqtt_config.username);
+    err = nvs_get_str(handle, CONFIG_MANAGER_MQTT_USERNAME_KEY, s_mqtt_config.username, &buffer_size);
+    if (err != ESP_OK) {
+        config_manager_copy_string(s_mqtt_config.username,
+                                   sizeof(s_mqtt_config.username),
+                                   CONFIG_MANAGER_MQTT_DEFAULT_USERNAME);
+    }
+
+    buffer_size = sizeof(s_mqtt_config.password);
+    err = nvs_get_str(handle, CONFIG_MANAGER_MQTT_PASSWORD_KEY, s_mqtt_config.password, &buffer_size);
+    if (err != ESP_OK) {
+        config_manager_copy_string(s_mqtt_config.password,
+                                   sizeof(s_mqtt_config.password),
+                                   CONFIG_MANAGER_MQTT_DEFAULT_PASSWORD);
+    }
+
+    uint16_t keepalive = 0U;
+    err = nvs_get_u16(handle, CONFIG_MANAGER_MQTT_KEEPALIVE_KEY, &keepalive);
+    if (err == ESP_OK) {
+        s_mqtt_config.keepalive_seconds = keepalive;
+    }
+
+    uint8_t qos = 0U;
+    err = nvs_get_u8(handle, CONFIG_MANAGER_MQTT_QOS_KEY, &qos);
+    if (err == ESP_OK) {
+        s_mqtt_config.default_qos = qos;
+    }
+
+    uint8_t retain = 0U;
+    err = nvs_get_u8(handle, CONFIG_MANAGER_MQTT_RETAIN_KEY, &retain);
+    if (err == ESP_OK) {
+        s_mqtt_config.retain_enabled = (retain != 0U);
+    }
+
+    config_manager_sanitise_mqtt_config(&s_mqtt_config);
+}
+#else
+static void config_manager_load_mqtt_settings_from_nvs(void)
+{
+    config_manager_sanitise_mqtt_config(&s_mqtt_config);
+}
+#endif
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static char s_config_json[CONFIG_MANAGER_MAX_CONFIG_SIZE] = {0};
@@ -175,9 +295,12 @@ static void config_manager_load_persistent_settings(void)
     if (err == ESP_OK) {
         s_uart_poll_interval_ms = config_manager_clamp_poll_interval(stored_interval);
     }
+
+    config_manager_load_mqtt_settings_from_nvs(handle);
     nvs_close(handle);
 #else
     s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+    config_manager_load_mqtt_settings_from_nvs();
 #endif
 
     for (size_t i = 0; i < s_register_count; ++i) {
@@ -235,6 +358,47 @@ static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
 }
 
 #ifdef ESP_PLATFORM
+static esp_err_t config_manager_store_mqtt_config_to_nvs(const mqtt_client_config_t *config)
+{
+    if (config == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = config_manager_init_nvs();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle = 0;
+    err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_URI_KEY, config->broker_uri);
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_USERNAME_KEY, config->username);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_PASSWORD_KEY, config->password);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u16(handle, CONFIG_MANAGER_MQTT_KEEPALIVE_KEY, config->keepalive_seconds);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u8(handle, CONFIG_MANAGER_MQTT_QOS_KEY, config->default_qos);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u8(handle, CONFIG_MANAGER_MQTT_RETAIN_KEY, config->retain_enabled ? 1U : 0U);
+    }
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+
+    nvs_close(handle);
+    return err;
+}
+
 static esp_err_t config_manager_store_register_raw(uint16_t address, uint16_t raw_value)
 {
     esp_err_t err = config_manager_init_nvs();
@@ -289,6 +453,12 @@ static bool config_manager_load_register_raw(uint16_t address, uint16_t *out_val
     return true;
 }
 #else
+static esp_err_t config_manager_store_mqtt_config_to_nvs(const mqtt_client_config_t *config)
+{
+    (void)config;
+    return ESP_OK;
+}
+
 static esp_err_t config_manager_store_register_raw(uint16_t address, uint16_t raw_value)
 {
     (void)address;
@@ -688,6 +858,42 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
         return persist_err;
     }
     return snapshot_err;
+}
+
+const mqtt_client_config_t *config_manager_get_mqtt_client_config(void)
+{
+    config_manager_ensure_initialised();
+    return &s_mqtt_config;
+}
+
+esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config)
+{
+    if (config == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    config_manager_ensure_initialised();
+
+    mqtt_client_config_t updated = s_mqtt_config;
+    config_manager_copy_string(updated.broker_uri, sizeof(updated.broker_uri), config->broker_uri);
+    config_manager_copy_string(updated.username, sizeof(updated.username), config->username);
+    config_manager_copy_string(updated.password, sizeof(updated.password), config->password);
+    updated.keepalive_seconds = (config->keepalive_seconds == 0U)
+                                    ? CONFIG_MANAGER_MQTT_DEFAULT_KEEPALIVE
+                                    : config->keepalive_seconds;
+    updated.default_qos = config->default_qos;
+    updated.retain_enabled = config->retain_enabled;
+
+    config_manager_sanitise_mqtt_config(&updated);
+
+    esp_err_t err = config_manager_store_mqtt_config_to_nvs(&updated);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to persist MQTT configuration: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    s_mqtt_config = updated;
+    return ESP_OK;
 }
 
 esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length)

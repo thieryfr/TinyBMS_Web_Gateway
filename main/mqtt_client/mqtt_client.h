@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "event_bus.h"
 
@@ -23,6 +24,30 @@ typedef int esp_err_t;
 
 struct esp_mqtt_client;
 typedef struct esp_mqtt_client *esp_mqtt_client_handle_t;
+
+/**
+ * @brief Maximum length (including the terminating null byte) accepted for the
+ *        MQTT broker URI when configuring the client.
+ */
+#define MQTT_CLIENT_MAX_URI_LENGTH 128U
+
+/**
+ * @brief Maximum length (including the terminating null byte) accepted for the
+ *        MQTT username and password fields.
+ */
+#define MQTT_CLIENT_MAX_CREDENTIAL_LENGTH 64U
+
+/**
+ * @brief MQTT configuration persisted by the configuration manager.
+ */
+typedef struct {
+    char broker_uri[MQTT_CLIENT_MAX_URI_LENGTH]; /**< URI of the MQTT broker. */
+    char username[MQTT_CLIENT_MAX_CREDENTIAL_LENGTH]; /**< Optional username. */
+    char password[MQTT_CLIENT_MAX_CREDENTIAL_LENGTH]; /**< Optional password. */
+    uint16_t keepalive_seconds; /**< Keepalive interval negotiated with the broker. */
+    uint8_t default_qos;        /**< Default QoS level used for publications. */
+    bool retain_enabled;        /**< Set to true to retain status publications. */
+} mqtt_client_config_t;
 
 /**
  * @brief Identifiers for high level MQTT client events.
