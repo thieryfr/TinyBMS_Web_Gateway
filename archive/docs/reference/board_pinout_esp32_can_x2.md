@@ -16,6 +16,16 @@ configuration can be cross-referenced without opening the PDF.
 
 The default CAN1 GPIO assignments exposed through `menuconfig`
 (`GPIO7` for TX and `GPIO6` for RX) correspond to the CAN1 differential
+pair on this header, as confirmed by the upstream CAN bridge example
+(`can_demo_forward.ino`) that also ships with the ESP32-CAN-X2
+repository.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L4-L18】 The
+CAN2 lines are intentionally left free so that a secondary controller
+such as an MCP2515 can be added later if required.
+
+Autosport Labs have not yet published the ESP32 pin numbers associated
+with the UART pads on this connector. The TinyBMS gateway therefore keeps
+its UART driver on `GPIO17` (TX) and `GPIO16` (RX) until official
+documentation becomes available.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L20-L26】
 pair on this header, while the CAN2 lines are intentionally left free so
 that a secondary controller such as an MCP2515 can be added later if
 required.

@@ -29,6 +29,9 @@ Le module `can_victron` encapsule l'interface CAN (TWAI) dédiée à la communic
 
 Les broches `CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO` (par défaut `GPIO7`) et
 `CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO` (par défaut `GPIO6`) correspondent à
+la paire CAN1H/CAN1L du connecteur principal de la carte ESP32-CAN-X2, en
+alignement avec l'exemple de passerelle CAN officiel qui épingle TWAI sur
+ces GPIO.【F:main/Kconfig.projbuild†L226-L241】【F:archive/docs/reference/board_pinout_esp32_can_x2.md†L1-L26】
 la paire CAN1H/CAN1L du connecteur principal de la carte ESP32-CAN-X2.【F:main/Kconfig.projbuild†L226-L241】【F:archive/docs/reference/board_pinout_esp32_can_x2.md†L1-L18】
 
 ## Initialisation
