@@ -306,6 +306,29 @@ esp_err_t mqtt_client_apply_configuration(const mqtt_client_config_t *config)
     return ESP_OK;
 }
 
+void mqtt_client_get_state(mqtt_client_state_t *state)
+{
+    if (state == NULL) {
+        return;
+    }
+
+    memset(state, 0, sizeof(*state));
+
+    state->lock_created = (s_ctx.lock != NULL);
+
+    bool locked = mqtt_client_lock(pdMS_TO_TICKS(10));
+
+    state->initialised = s_ctx.initialised;
+    state->started = s_ctx.started;
+    state->client_handle_created = (s_ctx.client != NULL);
+    state->listener_registered = (s_ctx.listener.callback != NULL);
+    state->event_publisher_registered = (s_ctx.event_publisher != NULL);
+
+    if (locked) {
+        mqtt_client_unlock();
+    }
+}
+
 #ifdef ESP_PLATFORM
 static void mqtt_client_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {

@@ -51,6 +51,18 @@ typedef struct {
 } mqtt_client_config_t;
 
 /**
+ * @brief Runtime state of the lightweight MQTT client wrapper.
+ */
+typedef struct {
+    bool lock_created;             /**< True when the internal mutex has been created. */
+    bool initialised;              /**< True after ::mqtt_client_init succeeds. */
+    bool started;                  /**< True after ::mqtt_client_start succeeds. */
+    bool client_handle_created;    /**< True when an ESP-IDF client handle is present. */
+    bool listener_registered;      /**< True when an optional listener callback is configured. */
+    bool event_publisher_registered; /**< True when an event publisher callback is registered. */
+} mqtt_client_state_t;
+
+/**
  * @brief Identifiers for high level MQTT client events.
  */
 typedef enum {
@@ -111,6 +123,11 @@ bool mqtt_client_publish(const char *topic,
                          int qos,
                          bool retain,
                          TickType_t timeout);
+
+/**
+ * @brief Copy the internal MQTT client state into @p state for diagnostics and testing.
+ */
+void mqtt_client_get_state(mqtt_client_state_t *state);
 
 #ifdef __cplusplus
 }
