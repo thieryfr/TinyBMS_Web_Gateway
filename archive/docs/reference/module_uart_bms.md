@@ -114,7 +114,7 @@ Chaque réponse TinyBMS est décomposée selon la table de métadonnées `g_uart
 | UART_BMS_REGISTER_INTERNAL_FIRMWARE_VERSION | 0x01F6 | 1 | UART_BMS_VALUE_UINT16 | 1.0f | UART_BMS_FIELD_INTERNAL_FIRMWARE_VERSION | UART_BMS_FIELD_NONE | Internal Firmware Version | - | Reg:502 |
 
 ## API principale
-- `uart_bms_init()` : configure l'UART (GPIO, débit, buffers), installe la tâche de polling, prépare la requête standard TinyBMS, initialise le parser et le mutex de commande.【F:main/uart_bms/uart_bms.cpp†L41-L159】
+- `uart_bms_init()` : configure l'UART (GPIO, débit, buffers), installe la tâche de polling, prépare la requête standard TinyBMS, initialise le parser et le mutex de commande. Les broches proviennent des options `CONFIG_TINYBMS_UART_TX_GPIO`/`CONFIG_TINYBMS_UART_RX_GPIO` exposées dans `menuconfig`.【F:main/uart_bms/uart_bms.cpp†L41-L159】【F:main/Kconfig.projbuild†L215-L234】
 - `uart_bms_set_event_publisher()` : enregistre la fonction de publication sur le bus d’évènements.【F:main/uart_bms/uart_bms.cpp†L168-L186】
 - `uart_bms_set_poll_interval_ms()` / `uart_bms_get_poll_interval_ms()` : manipulent l’intervalle sous verrou et redémarrent la temporisation de la tâche de polling.【F:main/uart_bms/uart_bms.cpp†L188-L245】
 - `uart_bms_register_listener()` / `uart_bms_unregister_listener()` : gèrent quatre slots de callbacks C, avec miroir C++ via `uart_bms_register_shared_listener()` pour les structures `TinyBMS_LiveData`.【F:main/uart_bms/uart_bms.cpp†L247-L338】【F:main/uart_bms/uart_bms.cpp†L790-L858】
@@ -143,7 +143,7 @@ Le module `uart_bms` pilote la communication UART avec le TinyBMS : émission p�
 - **Listeners** : deux registres parallèles de 4 slots chacun : callbacks C (`uart_bms_register_listener`) et callbacks C++ (`uart_bms_register_shared_listener`) consommant la structure `TinyBMS_LiveData` partagée (`shared_data.h`).
 
 ## API principale
-- `uart_bms_init()` : configure l'UART (pins, vitesse, buffers), installe la tâche de polling, prépare la requête standard TinyBMS, initialise le parser et le mutex de commande.
+- `uart_bms_init()` : configure l'UART (pins, vitesse, buffers), installe la tâche de polling, prépare la requête standard TinyBMS, initialise le parser et le mutex de commande. Les GPIO proviennent des symboles `CONFIG_TINYBMS_UART_TX_GPIO`/`CONFIG_TINYBMS_UART_RX_GPIO` de `menuconfig`.【F:main/uart_bms/uart_bms.cpp†L41-L159】【F:main/Kconfig.projbuild†L215-L234】
 - `uart_bms_set_event_publisher()` : reçoit la fonction de publication du bus.
 - `uart_bms_set_poll_interval_ms()` : ajuste l'intervalle en respectant `[UART_BMS_MIN_POLL_INTERVAL_MS, UART_BMS_MAX_POLL_INTERVAL_MS]` avec verrou `s_poll_interval_lock`.
 - `uart_bms_register_listener()` / `uart_bms_unregister_listener()` : enregistrent/désenregistrent un callback de haut niveau.
