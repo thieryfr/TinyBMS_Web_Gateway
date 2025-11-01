@@ -85,6 +85,29 @@ Se référer au plan `docs/testing/validation_plan.md` pour les scénarios :
    - Date de déploiement et site.
 7. Archiver les artefacts (`build/`, `sdkconfig`, capture CAN) dans l'espace partagé de l'équipe.
 
+## 5bis. Plan de déploiement OTA
+
+### Fenêtre de déploiement
+- **Production** : fenêtre principale le mercredi 14/08/2024 entre 09h00 et 12h00 CET (faible trafic).
+- **Pré-production** : répétition générale la veille (13/08/2024) sur les gateways pilotes.
+- **Gel des changements** : aucun merge sur la branche `release` 48 h avant la fenêtre production.
+
+### Procédure OTA
+1. Publier l'image `tinybms-web-gateway.bin` sur le serveur OTA sécurisé (`ota.tinybms.lan`) avec un numéro de version incrémental.
+2. Mettre à jour le manifeste OTA (`ota/manifest.json`) en ajoutant la nouvelle entrée (hash SHA256, version, URL binaire).
+3. Déclencher la campagne via l'orchestrateur (`tools/ota/deploy.py --group production --version X.Y.Z`).
+4. Surveiller la télémétrie (`mqtt_bms/#/ota`) pour confirmer la progression (<5 % d'échecs attendus).
+
+### Plan de rollback
+- Conserver la version précédente disponible dans le manifeste et marquée `fallback`.
+- En cas d'erreur >5 % ou bug critique, exécuter `deploy.py --group production --version <précédente>` dans la même fenêtre.
+- Informer l'équipe Ops et QA via le canal `#tinybms-operations` pour suivi et post-mortem.
+
+### Communication
+- **Avant** : envoyer le mémo de pré-déploiement 48 h avant (rappel fenêtre, périmètre, impacts) aux équipes Firmware, Tests, Support.
+- **Pendant** : publier un fil dédié sur `#tinybms-operations` avec état d'avancement toutes les 30 min.
+- **Après** : diffuser un compte rendu (succès, incidents, temps de déploiement) et mettre à jour `CHANGELOG.md` + Confluence.
+
 ## 6. Révision & validation équipe
 1. Préparer un résumé des changements (architecture, PGN, conversions, configuration) et pointer vers les sections mises à jour :
    - `README.md` pour la vue d'ensemble.
