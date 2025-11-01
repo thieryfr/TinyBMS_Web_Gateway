@@ -25,6 +25,7 @@
 #define CONFIG_TINYBMS_CAN_BATTERY_FAMILY CONFIG_TINYBMS_CAN_BATTERY_NAME
 #endif
 
+#define PGN_INVERTER_HANDSHAKE 0x307U
 #define PGN_CVL_CCL_DCL      0x351U
 #define PGN_SOC_SOH          0x355U
 #define PGN_VOLTAGE_CURRENT  0x356U
@@ -153,6 +154,28 @@ TEST_CASE("can_conversion_charge_limits_from_bms", "[can][unit]")
     TEST_ASSERT_EQUAL_UINT16(0x0237, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8))); // 56.7 V
     TEST_ASSERT_EQUAL_UINT16(0x044C, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8))); // 110.0 A
     TEST_ASSERT_EQUAL_UINT16(0x05DC, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8))); // 150.0 A
+}
+
+TEST_CASE("can_conversion_inverter_identifier", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *channel = find_channel(PGN_INVERTER_HANDSHAKE);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT8(data.hardware_version, frame.data[0]);
+    TEST_ASSERT_EQUAL_UINT8(data.hardware_changes_version, frame.data[1]);
+    TEST_ASSERT_EQUAL_UINT8(data.firmware_version, frame.data[2]);
+    TEST_ASSERT_EQUAL_UINT8(data.firmware_flags, frame.data[3]);
+    TEST_ASSERT_EQUAL_UINT8('V', frame.data[4]);
+    TEST_ASSERT_EQUAL_UINT8('I', frame.data[5]);
+    TEST_ASSERT_EQUAL_UINT8('C', frame.data[6]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, frame.data[7]);
 }
 
 TEST_CASE("can_conversion_charge_limits_from_cvl", "[can][unit]")
