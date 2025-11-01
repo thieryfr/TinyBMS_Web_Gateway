@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "created_at": "2024-01-01T00:00:00Z",
+  "channels": {
+    "mqtt": {
+      "broker": "mqtts://broker.example.com:8883",
+      "topic": "tinybms/gateway/ota",
+      "qos": 1
+    },
+    "https": {
+      "url": "https://ota.example.com/api/v1/firmware",
+      "method": "PUT",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "name": "TinyBMS Web Gateway",
+      "filename": "TinyBMS_Web_Gateway-0.0.1.bin",
+      "size": 20,
+      "sha256": "525c14c18b9770568dbf751d2c537aa82fad438537aa6cee041acbacf9de0a5c",
+      "protocols": [
+        "mqtt",
+        "https"
+      ]
+    }
+  ]
+}
