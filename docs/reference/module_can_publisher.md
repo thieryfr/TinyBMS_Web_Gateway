@@ -50,7 +50,7 @@ classDiagram
 - **Cadence de publication** : `CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS` (défaut 0) force un envoi périodique commun ; sinon chaque canal applique sa période intrinsèque. Les délais sont convertis en ticks via `can_publisher_ms_to_ticks()` (minimum 1 tick).【F:main/can_publisher/can_publisher.c†L24-L120】
 - **Taille de buffer** : `CAN_PUBLISHER_MAX_BUFFER_SLOTS` (défini dans `can_publisher.h`) limite simultanément le nombre de PGN suivis ; le module tronque `g_can_publisher_channels` si nécessaire et dimensionne `s_event_frames`/`s_frame_buffer` en conséquence.【F:main/can_publisher/can_publisher.c†L104-L155】
 - **Timeouts** : `CAN_PUBLISHER_EVENT_TIMEOUT_MS = 50` ms pour publier sur le bus d’évènements, `CAN_PUBLISHER_LOCK_TIMEOUT_MS = 20` ms pour les accès mutex. Ces paramètres bornent la latence vers MQTT et la webapp.【F:main/can_publisher/can_publisher.c†L20-L54】
-- **Identité Victron** : chaînes configurables via `CONFIG_TINYBMS_CAN_MANUFACTURER`, `CONFIG_TINYBMS_CAN_BATTERY_NAME`, `CONFIG_TINYBMS_CAN_BATTERY_FAMILY` avec valeurs par défaut `"TinyBMS"`, `"Lithium Battery"`. Elles alimentent les PGN 0x35E/0x35F/0x382. Priorité CAN = 6, adresse source = 0xE5, ce qui produit des identifiants étendus `0x18 0x0PGN 0xE5`.【F:main/can_publisher/conversion_table.c†L15-L58】
+- **Identité Victron** : les chaînes configurables `CONFIG_TINYBMS_CAN_MANUFACTURER`, `CONFIG_TINYBMS_CAN_BATTERY_NAME`, `CONFIG_TINYBMS_CAN_BATTERY_FAMILY` restent utilisées pour 0x35E/0x371/0x382 lorsque TinyBMS n’expose pas les registres ASCII. Le PGN 0x35F s’appuie désormais directement sur les registres matériels (ID modèle, firmware, capacité). Priorité CAN = 6, adresse source = 0xE5, ce qui produit des identifiants étendus `0x18 0x0PGN 0xE5`.【F:main/can_publisher/conversion_table.c†L15-L58】
 
 ## PGN et trames CAN Victron
 La table `g_can_publisher_channels` décrit exhaustivement les trames envoyées : PGN, identifiant CAN étendu, longueur, période et fonction de remplissage à partir de `uart_bms_live_data_t`.
@@ -62,7 +62,7 @@ La table `g_can_publisher_channels` décrit exhaustivement les trames envoyées 
 | 0x356 | 0x180356E5 | 8 | 1000 | `encode_voltage_current_temperature` | Victron voltage/current/temperature |
 | 0x35A | 0x18035AE5 | 8 | 1000 | `encode_alarm_status` | Victron alarm summary |
 | 0x35E | 0x18035EE5 | 8 | 2000 | `encode_manufacturer_string` | Victron manufacturer string |
-| 0x35F | 0x18035FE5 | 8 | 2000 | `encode_battery_name` | Victron battery info |
+| 0x35F | 0x18035FE5 | 8 | 2000 | `encode_battery_identification` | Victron battery identification |
 | 0x371 | 0x180371E5 | 8 | 2000 | `encode_battery_name_part2` | Victron battery info part 2 |
 | 0x378 | 0x180378E5 | 8 | 1000 | `encode_energy_counters` | Victron energy counters |
 | 0x379 | 0x180379E5 | 8 | 5000 | `encode_installed_capacity` | Victron installed capacity |
@@ -73,7 +73,8 @@ La table `g_can_publisher_channels` décrit exhaustivement les trames envoyées 
 - **0x355 – State of Charge/Health** : encode SoC et SoH en 0.1 % (×10) avec saturation à 0…1000.【F:main/can_publisher/conversion_table.c†L381-L404】
 - **0x356 – Voltage/Current/Temperature** : tension pack (×100 V), courant signé (×10 A) et température MOSFET (×10 °C).【F:main/can_publisher/conversion_table.c†L406-L437】
 - **0x35A – Alarm Status** : couvre la matrice complète Victron : alarmes (octets 0–3) et avertissements (octets 4–7) encodés sur 2 bits (0 = OK, 1 = warning, 2 = alarm, 3 = réservé). Les seuils s’appuient sur `*_cutoff`, les limites de courant TinyBMS et la température externe `auxiliary_temperature_c`, avec hystérésis (±5 % ou +5 °C) pour les avertissements. Les bits réservés sont forcés à `0b11` et le récapitulatif global passe par `General Alarm/Warning` (byte 0 bit0-1 / byte 4 bit0-1).【F:main/can_publisher/conversion_table.c†L115-L206】【F:main/can_publisher/conversion_table.c†L434-L547】
-- **0x35E/0x35F/0x371/0x382 – Chaînes ASCII** : extraient les textes TinyBMS (registres 0x01F4–0x01F6) via `decode_ascii_from_registers`; sinon retombent sur les constantes `CONFIG_TINYBMS_CAN_*`. Le second bloc du nom batterie commence à l’octet 8 pour couvrir 16 caractères.【F:main/can_publisher/conversion_table.c†L519-L626】
+- **0x35E/0x371/0x382 – Chaînes ASCII** : extraient les textes TinyBMS (registres 0x01F4–0x01FF) via `decode_ascii_from_registers`; sinon retombent sur les constantes `CONFIG_TINYBMS_CAN_*`. Le second bloc du nom batterie commence à l’octet 8 pour couvrir 16 caractères.【F:main/can_publisher/conversion_table.c†L708-L738】
+- **0x35F – Identification TinyBMS** : agrège les registres 0x01F4/0x01F5/0x01F6/0x0132 pour encoder l’ID matériel, le firmware public, la capacité mesurée et la version interne (deux octets chacun).【F:main/can_publisher/conversion_table.c†L189-L258】
 - **0x378 – Compteurs d’énergie** : accumule Wh chargés/déchargés (`s_energy_charged_wh`, `s_energy_discharged_wh`) basés sur l’intégration courants/temps, encode deux compteurs 32 bits little-endian.【F:main/can_publisher/conversion_table.c†L140-L228】【F:main/can_publisher/conversion_table.c†L628-L654】
 - **0x379 – Capacité installée** : convertit `battery_capacity_ah`, applique SoH si disponible, retombe sur estimation `series_cell_count × 2.5 Ah` en absence de valeur, encode en Ah (×1).【F:main/can_publisher/conversion_table.c†L656-L686】
 
