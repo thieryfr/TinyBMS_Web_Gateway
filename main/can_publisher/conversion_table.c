@@ -335,14 +335,11 @@ static bool encode_battery_identification(const uart_bms_live_data_t *data,
         (void)find_register_value(data, TINY_REGISTER_PUBLIC_FIRMWARE, &firmware_word);
     }
 
-    uint16_t capacity_word = 0U;
-    if (!find_register_value(data, TINY_REGISTER_BATTERY_CAPACITY, &capacity_word)) {
-        float capacity_ah = data->battery_capacity_ah;
-        if (capacity_ah < 0.0f) {
-            capacity_ah = 0.0f;
-        }
-        capacity_word = encode_u16_scaled(capacity_ah, 100.0f, 0.0f, 0U, 0xFFFFU);
+    float capacity_ah = data->battery_capacity_ah;
+    if (!(capacity_ah > 0.0f)) {
+        capacity_ah = 0.0f;
     }
+    uint16_t capacity_word = encode_u16_scaled(capacity_ah, 100.0f, 0.0f, 0U, 0xFFFFU);
 
     frame->data[0] = (uint8_t)(model_id & 0xFFU);
     frame->data[1] = (uint8_t)((model_id >> 8U) & 0xFFU);
@@ -436,10 +433,21 @@ static const char *resolve_battery_name_string(const uart_bms_live_data_t *data)
 
 static const char *resolve_serial_number_string(const uart_bms_live_data_t *data)
 {
-    static char buffer[17];
+    static char buffer[UART_BMS_SERIAL_NUMBER_MAX_LENGTH + 1];
 
-    if (decode_ascii_from_registers(data, TINY_REGISTER_SERIAL_NUMBER, 16U, buffer, sizeof(buffer))) {
-        return buffer;
+    if (data != NULL) {
+        size_t length = (size_t)data->serial_length;
+        if (length == 0U && data->serial_number[0] != '\0') {
+            length = strnlen(data->serial_number, sizeof(data->serial_number));
+        }
+        if (length > 0U) {
+            if (length >= sizeof(buffer)) {
+                length = sizeof(buffer) - 1U;
+            }
+            memcpy(buffer, data->serial_number, length);
+            buffer[length] = '\0';
+            return buffer;
+        }
     }
 
     return CONFIG_TINYBMS_CAN_SERIAL_NUMBER;
