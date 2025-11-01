@@ -27,6 +27,10 @@ Le module `can_victron` encapsule l'interface CAN (TWAI) dédiée à la communic
 - gère un keepalive périodique pour vérifier la présence des contrôleurs Victron ;
 - fournit un callback bas niveau `can_victron_publish_frame()` utilisé par `can_publisher` pour envoyer des trames préparées.
 
+Les broches `CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO` (par défaut `GPIO7`) et
+`CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO` (par défaut `GPIO6`) correspondent à
+la paire CAN1H/CAN1L du connecteur principal de la carte ESP32-CAN-X2.【F:main/Kconfig.projbuild†L226-L241】【F:archive/docs/reference/board_pinout_esp32_can_x2.md†L1-L18】
+
 ## Initialisation
 1. `can_victron_set_event_publisher()` stocke la fonction de publication.
 2. `can_victron_init()` configure les paramètres TWAI (bitrate via `sdkconfig`, broches `CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO/RX_GPIO`) et crée la tâche `can_victron_task()` si ESP-IDF est disponible.
