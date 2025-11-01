@@ -9,18 +9,18 @@ Ce document détaille le mapping entre les mesures TinyBMS et les PGN attendus p
 
 ## PGN 0x351 — Charge Voltage / Current Limits (CVL/CCL/DCL)
 - **CVL** : privilégie le résultat du contrôleur `cvl_controller` (`can_publisher_cvl_get_latest`). À défaut, reprend `pack_voltage_v` ou la consigne `overvoltage_cutoff_mv` si disponible.
-  - Conversion : volts → entier non signé avec facteur ×100 (0,01 V).【F:main/can_publisher/conversion_table.c†L332-L384】【F:main/can_publisher/cvl_controller.c†L167-L201】
-  - Clamp : `[0, 655.35] V`.
+  - Conversion : volts → entier non signé avec facteur ×10 (0,1 V).【F:main/can_publisher/conversion_table.c†L444-L486】【F:main/can_publisher/cvl_controller.c†L167-L201】
+  - Clamp : `[0, 6553,5] dixième de volt` après encodage.
 - **CCL** : `charge_overcurrent_limit_a` avec repli sur `peak_discharge_current_limit_a` lorsque la limite de charge est absente.
-  - Conversion : ampères → entier non signé ×10 (0,1 A).【F:main/can_publisher/conversion_table.c†L332-L384】
+  - Conversion : ampères → entier non signé ×10 (0,1 A).【F:main/can_publisher/conversion_table.c†L444-L486】
 - **DCL** : `discharge_overcurrent_limit_a` avec repli sur `peak_discharge_current_limit_a`.
-  - Conversion : ampères → entier non signé ×10 (0,1 A).【F:main/can_publisher/conversion_table.c†L332-L384】
+  - Conversion : ampères → entier non signé ×10 (0,1 A).【F:main/can_publisher/conversion_table.c†L444-L486】
 
 ## PGN 0x355 — State of Charge / Health (SOC/SOH)
 - **SOC** : `live->state_of_charge_pct` (0–100 %).
-  - Conversion : pourcentage → entier non signé ×10 (0,1 %).【F:main/can_publisher/conversion_table.c†L500-L552】
+  - Conversion : pourcentage → entier non signé ×1 (1 %).【F:main/can_publisher/conversion_table.c†L491-L528】
 - **SOH** : `live->state_of_health_pct` avec défaut à 100 %.
-  - Conversion : pourcentage → entier non signé ×10 (0,1 %).【F:main/can_publisher/conversion_table.c†L553-L597】
+  - Conversion : pourcentage → entier non signé ×1 (1 %).【F:main/can_publisher/conversion_table.c†L491-L528】
 
 ## PGN 0x356 — Battery Voltage / Current / Temperature
 - **Pack voltage** : `live->pack_voltage_v`.
