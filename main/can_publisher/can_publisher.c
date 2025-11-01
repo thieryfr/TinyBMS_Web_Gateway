@@ -18,6 +18,7 @@
 #include "sdkconfig.h"
 
 #include "app_events.h"
+#include "config_manager.h"
 #include "conversion_table.h"
 #include "cvl_controller.h"
 
@@ -26,6 +27,46 @@
 
 #ifndef CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS
 #define CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS 0
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO 5
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO 4
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS 1000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS 10000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS 500
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII
+#define CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII "VIC"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_MANUFACTURER
+#define CONFIG_TINYBMS_CAN_MANUFACTURER "TinyBMS"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_NAME
+#define CONFIG_TINYBMS_CAN_BATTERY_NAME "Lithium Battery"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_FAMILY
+#define CONFIG_TINYBMS_CAN_BATTERY_FAMILY CONFIG_TINYBMS_CAN_BATTERY_NAME
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
+#define CONFIG_TINYBMS_CAN_SERIAL_NUMBER "TinyBMS-00000000"
 #endif
 
 static const char *TAG = "can_pub";
@@ -52,6 +93,7 @@ static portMUX_TYPE s_event_lock = portMUX_INITIALIZER_UNLOCKED;
 static TickType_t s_channel_period_ticks[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
 static TickType_t s_channel_deadlines[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
 
+static const config_manager_can_settings_t *can_publisher_get_settings(void);
 static bool can_publisher_periodic_mode_enabled(void);
 static TickType_t can_publisher_publish_buffer(can_publisher_registry_t *registry, TickType_t now);
 static bool can_publisher_store_frame(can_publisher_buffer_t *buffer,
@@ -137,7 +179,8 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
 
     can_publisher_cvl_init();
 
-    s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
+    const config_manager_can_settings_t *settings = can_publisher_get_settings();
+    s_publish_interval_ms = settings->publisher.period_ms;
 
     s_registry.channels = g_can_publisher_channels;
     s_registry.channel_count = g_can_publisher_channel_count;
@@ -284,7 +327,8 @@ void can_publisher_deinit(void)
     memset(s_channel_period_ticks, 0, sizeof(s_channel_period_ticks));
     memset(s_channel_deadlines, 0, sizeof(s_channel_deadlines));
 
-    s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
+    const config_manager_can_settings_t *settings = can_publisher_get_settings();
+    s_publish_interval_ms = settings->publisher.period_ms;
 
     s_frame_publisher = NULL;
     s_event_publisher = NULL;
@@ -405,5 +449,33 @@ static void can_publisher_task(void *context)
             vTaskDelay(delay_ticks);
         }
     }
+}
+
+static const config_manager_can_settings_t *can_publisher_get_settings(void)
+{
+    static const config_manager_can_settings_t defaults = {
+        .twai = {
+            .tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+            .rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+        },
+        .keepalive = {
+            .interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS,
+            .timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS,
+            .retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS,
+        },
+        .publisher = {
+            .period_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS,
+        },
+        .identity = {
+            .handshake_ascii = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII,
+            .manufacturer = CONFIG_TINYBMS_CAN_MANUFACTURER,
+            .battery_name = CONFIG_TINYBMS_CAN_BATTERY_NAME,
+            .battery_family = CONFIG_TINYBMS_CAN_BATTERY_FAMILY,
+            .serial_number = CONFIG_TINYBMS_CAN_SERIAL_NUMBER,
+        },
+    };
+
+    const config_manager_can_settings_t *settings = config_manager_get_can_settings();
+    return (settings != NULL) ? settings : &defaults;
 }
 

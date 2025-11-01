@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "esp_log.h"
 
@@ -18,6 +20,7 @@
 #ifdef ESP_PLATFORM
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "esp_spiffs.h"
 #endif
 
 #define CONFIG_MANAGER_REGISTER_EVENT_BUFFERS 4
@@ -71,6 +74,85 @@
 #define CONFIG_MANAGER_MQTT_DEFAULT_KEEPALIVE ((uint16_t)CONFIG_TINYBMS_MQTT_KEEPALIVE)
 #define CONFIG_MANAGER_MQTT_DEFAULT_QOS       ((uint8_t)CONFIG_TINYBMS_MQTT_DEFAULT_QOS)
 #define CONFIG_MANAGER_MQTT_DEFAULT_RETAIN    (CONFIG_TINYBMS_MQTT_RETAIN_STATUS != 0)
+
+#define CONFIG_MANAGER_FS_BASE_PATH "/spiffs"
+#define CONFIG_MANAGER_CONFIG_FILE  CONFIG_MANAGER_FS_BASE_PATH "/config.json"
+
+#ifndef CONFIG_TINYBMS_WIFI_STA_SSID
+#define CONFIG_TINYBMS_WIFI_STA_SSID ""
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_STA_PASSWORD
+#define CONFIG_TINYBMS_WIFI_STA_PASSWORD ""
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_STA_HOSTNAME
+#define CONFIG_TINYBMS_WIFI_STA_HOSTNAME ""
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_STA_MAX_RETRY
+#define CONFIG_TINYBMS_WIFI_STA_MAX_RETRY 5
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_AP_SSID
+#define CONFIG_TINYBMS_WIFI_AP_SSID "TinyBMS-Gateway"
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_AP_PASSWORD
+#define CONFIG_TINYBMS_WIFI_AP_PASSWORD ""
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_AP_CHANNEL
+#define CONFIG_TINYBMS_WIFI_AP_CHANNEL 1
+#endif
+
+#ifndef CONFIG_TINYBMS_WIFI_AP_MAX_CLIENTS
+#define CONFIG_TINYBMS_WIFI_AP_MAX_CLIENTS 4
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS 1000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS 10000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS 500
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS
+#define CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS 0
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO 5
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO 4
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII
+#define CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII "VIC"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_MANUFACTURER
+#define CONFIG_TINYBMS_CAN_MANUFACTURER "TinyBMS"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_NAME
+#define CONFIG_TINYBMS_CAN_BATTERY_NAME "Lithium Battery"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_FAMILY
+#define CONFIG_TINYBMS_CAN_BATTERY_FAMILY CONFIG_TINYBMS_CAN_BATTERY_NAME
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
+#define CONFIG_TINYBMS_CAN_SERIAL_NUMBER "TinyBMS-00000000"
+#endif
 
 static void config_manager_make_register_key(uint16_t address, char *out_key, size_t out_size)
 {
@@ -136,6 +218,57 @@ static mqtt_client_config_t s_mqtt_config = {
 static config_manager_mqtt_topics_t s_mqtt_topics = {0};
 static bool s_mqtt_topics_loaded = false;
 
+static config_manager_device_settings_t s_device_settings = {
+    .name = APP_DEVICE_NAME,
+};
+
+static config_manager_wifi_settings_t s_wifi_settings = {
+    .sta = {
+        .ssid = CONFIG_TINYBMS_WIFI_STA_SSID,
+        .password = CONFIG_TINYBMS_WIFI_STA_PASSWORD,
+        .hostname = CONFIG_TINYBMS_WIFI_STA_HOSTNAME,
+        .max_retry = CONFIG_TINYBMS_WIFI_STA_MAX_RETRY,
+    },
+    .ap = {
+        .ssid = CONFIG_TINYBMS_WIFI_AP_SSID,
+        .password = CONFIG_TINYBMS_WIFI_AP_PASSWORD,
+        .channel = CONFIG_TINYBMS_WIFI_AP_CHANNEL,
+        .max_clients = CONFIG_TINYBMS_WIFI_AP_MAX_CLIENTS,
+    },
+};
+
+static config_manager_can_settings_t s_can_settings = {
+    .twai = {
+        .tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+        .rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+    },
+    .keepalive = {
+        .interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS,
+        .timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS,
+        .retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS,
+    },
+    .publisher = {
+        .period_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS,
+    },
+    .identity = {
+        .handshake_ascii = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII,
+        .manufacturer = CONFIG_TINYBMS_CAN_MANUFACTURER,
+        .battery_name = CONFIG_TINYBMS_CAN_BATTERY_NAME,
+        .battery_family = CONFIG_TINYBMS_CAN_BATTERY_FAMILY,
+        .serial_number = CONFIG_TINYBMS_CAN_SERIAL_NUMBER,
+    },
+};
+
+static bool s_config_file_loaded = false;
+#ifdef ESP_PLATFORM
+static bool s_spiffs_mounted = false;
+#endif
+
+static esp_err_t config_manager_apply_config_payload(const char *json,
+                                                     size_t length,
+                                                     bool persist,
+                                                     bool apply_runtime);
+
 static void config_manager_copy_string(char *dest, size_t dest_size, const char *src)
 {
     if (dest == NULL || dest_size == 0) {
@@ -173,35 +306,80 @@ static void config_manager_copy_topics(config_manager_mqtt_topics_t *dest,
     config_manager_copy_string(dest->can_ready, sizeof(dest->can_ready), src->can_ready);
 }
 
+static const char *config_manager_effective_device_name(void)
+{
+    if (s_device_settings.name[0] != '\0') {
+        return s_device_settings.name;
+    }
+    return APP_DEVICE_NAME;
+}
+
+static void config_manager_make_default_topics_for_name(const char *device_name,
+                                                        config_manager_mqtt_topics_t *topics)
+{
+    if (topics == NULL) {
+        return;
+    }
+
+    const char *name = (device_name != NULL && device_name[0] != '\0') ? device_name : APP_DEVICE_NAME;
+
+    (void)snprintf(topics->status, sizeof(topics->status), MQTT_TOPIC_FMT_STATUS, name);
+    (void)snprintf(topics->metrics, sizeof(topics->metrics), MQTT_TOPIC_FMT_METRICS, name);
+    (void)snprintf(topics->config, sizeof(topics->config), MQTT_TOPIC_FMT_CONFIG, name);
+    (void)snprintf(topics->can_raw, sizeof(topics->can_raw), MQTT_TOPIC_FMT_CAN_STREAM, name, "raw");
+    (void)snprintf(topics->can_decoded, sizeof(topics->can_decoded), MQTT_TOPIC_FMT_CAN_STREAM, name, "decoded");
+    (void)snprintf(topics->can_ready, sizeof(topics->can_ready), MQTT_TOPIC_FMT_CAN_STREAM, name, "ready");
+}
+
+static void config_manager_update_topics_for_device_change(const char *old_name, const char *new_name)
+{
+    if (old_name == NULL || new_name == NULL || strcmp(old_name, new_name) == 0) {
+        return;
+    }
+
+    config_manager_mqtt_topics_t old_defaults = {0};
+    config_manager_mqtt_topics_t new_defaults = {0};
+    config_manager_make_default_topics_for_name(old_name, &old_defaults);
+    config_manager_make_default_topics_for_name(new_name, &new_defaults);
+
+    bool updated = false;
+    if (strcmp(s_mqtt_topics.status, old_defaults.status) == 0) {
+        config_manager_copy_string(s_mqtt_topics.status, sizeof(s_mqtt_topics.status), new_defaults.status);
+        updated = true;
+    }
+    if (strcmp(s_mqtt_topics.metrics, old_defaults.metrics) == 0) {
+        config_manager_copy_string(s_mqtt_topics.metrics, sizeof(s_mqtt_topics.metrics), new_defaults.metrics);
+        updated = true;
+    }
+    if (strcmp(s_mqtt_topics.config, old_defaults.config) == 0) {
+        config_manager_copy_string(s_mqtt_topics.config, sizeof(s_mqtt_topics.config), new_defaults.config);
+        updated = true;
+    }
+    if (strcmp(s_mqtt_topics.can_raw, old_defaults.can_raw) == 0) {
+        config_manager_copy_string(s_mqtt_topics.can_raw, sizeof(s_mqtt_topics.can_raw), new_defaults.can_raw);
+        updated = true;
+    }
+    if (strcmp(s_mqtt_topics.can_decoded, old_defaults.can_decoded) == 0) {
+        config_manager_copy_string(s_mqtt_topics.can_decoded, sizeof(s_mqtt_topics.can_decoded), new_defaults.can_decoded);
+        updated = true;
+    }
+    if (strcmp(s_mqtt_topics.can_ready, old_defaults.can_ready) == 0) {
+        config_manager_copy_string(s_mqtt_topics.can_ready, sizeof(s_mqtt_topics.can_ready), new_defaults.can_ready);
+        updated = true;
+    }
+
+    if (updated) {
+        config_manager_sanitise_mqtt_topics(&s_mqtt_topics);
+        esp_err_t err = config_manager_store_mqtt_topics_to_nvs(&s_mqtt_topics);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to persist MQTT topics after device rename: %s", esp_err_to_name(err));
+        }
+    }
+}
+
 static void config_manager_reset_mqtt_topics(void)
 {
-    (void)snprintf(s_mqtt_topics.status,
-                   sizeof(s_mqtt_topics.status),
-                   MQTT_TOPIC_FMT_STATUS,
-                   APP_DEVICE_NAME);
-    (void)snprintf(s_mqtt_topics.metrics,
-                   sizeof(s_mqtt_topics.metrics),
-                   MQTT_TOPIC_FMT_METRICS,
-                   APP_DEVICE_NAME);
-    (void)snprintf(s_mqtt_topics.config,
-                   sizeof(s_mqtt_topics.config),
-                   MQTT_TOPIC_FMT_CONFIG,
-                   APP_DEVICE_NAME);
-    (void)snprintf(s_mqtt_topics.can_raw,
-                   sizeof(s_mqtt_topics.can_raw),
-                   MQTT_TOPIC_FMT_CAN_STREAM,
-                   APP_DEVICE_NAME,
-                   "raw");
-    (void)snprintf(s_mqtt_topics.can_decoded,
-                   sizeof(s_mqtt_topics.can_decoded),
-                   MQTT_TOPIC_FMT_CAN_STREAM,
-                   APP_DEVICE_NAME,
-                   "decoded");
-    (void)snprintf(s_mqtt_topics.can_ready,
-                   sizeof(s_mqtt_topics.can_ready),
-                   MQTT_TOPIC_FMT_CAN_STREAM,
-                   APP_DEVICE_NAME,
-                   "ready");
+    config_manager_make_default_topics_for_name(config_manager_effective_device_name(), &s_mqtt_topics);
 }
 
 static void config_manager_sanitise_mqtt_topics(config_manager_mqtt_topics_t *topics)
@@ -216,6 +394,241 @@ static void config_manager_sanitise_mqtt_topics(config_manager_mqtt_topics_t *to
     config_manager_copy_string(topics->can_raw, sizeof(topics->can_raw), topics->can_raw);
     config_manager_copy_string(topics->can_decoded, sizeof(topics->can_decoded), topics->can_decoded);
     config_manager_copy_string(topics->can_ready, sizeof(topics->can_ready), topics->can_ready);
+}
+
+static const char *config_manager_memmem(const char *haystack,
+                                         size_t haystack_len,
+                                         const char *needle,
+                                         size_t needle_len)
+{
+    if (haystack == NULL || needle == NULL || needle_len == 0 || haystack_len < needle_len) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i + needle_len <= haystack_len; ++i) {
+        if (memcmp(haystack + i, needle, needle_len) == 0) {
+            return haystack + i;
+        }
+    }
+    return NULL;
+}
+
+static bool config_manager_find_object_scope(const char *json,
+                                             size_t length,
+                                             const char *field,
+                                             const char **out_start,
+                                             size_t *out_length)
+{
+    if (json == NULL || field == NULL) {
+        return false;
+    }
+
+    size_t field_len = strlen(field);
+    const char *cursor = config_manager_memmem(json, length, field, field_len);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor += field_len;
+    const char *end = json + length;
+    while (cursor < end && *cursor != ':') {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    ++cursor;
+    while (cursor < end && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+    if (cursor >= end || *cursor != '{') {
+        return false;
+    }
+
+    const char *start = cursor;
+    int depth = 0;
+    bool in_string = false;
+    bool escape = false;
+    for (const char *iter = cursor; iter < end; ++iter) {
+        char c = *iter;
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (c == '\\') {
+            escape = true;
+            continue;
+        }
+        if (c == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (c == '{') {
+            ++depth;
+            continue;
+        }
+        if (c == '}') {
+            --depth;
+            if (depth == 0) {
+                if (out_start != NULL) {
+                    *out_start = start;
+                }
+                if (out_length != NULL) {
+                    *out_length = (size_t)(iter - start + 1);
+                }
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool config_manager_extract_string_field_scope(const char *json,
+                                                      size_t length,
+                                                      const char *field,
+                                                      char *out,
+                                                      size_t out_size)
+{
+    if (json == NULL || field == NULL || out == NULL || out_size == 0) {
+        return false;
+    }
+
+    size_t field_len = strlen(field);
+    const char *cursor = config_manager_memmem(json, length, field, field_len);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor += field_len;
+    const char *end = json + length;
+    while (cursor < end && *cursor != ':') {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    ++cursor;
+    while (cursor < end && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+    if (cursor >= end || *cursor != '"') {
+        return false;
+    }
+
+    ++cursor;
+    size_t written = 0;
+    bool escape = false;
+    for (; cursor < end; ++cursor) {
+        char c = *cursor;
+        if (escape) {
+            if (written + 1 >= out_size) {
+                return false;
+            }
+            out[written++] = c;
+            escape = false;
+            continue;
+        }
+        if (c == '\\') {
+            escape = true;
+            continue;
+        }
+        if (c == '"') {
+            out[written] = '\0';
+            return true;
+        }
+        if (written + 1 >= out_size) {
+            return false;
+        }
+        out[written++] = c;
+    }
+
+    return false;
+}
+
+static bool config_manager_extract_uint32_field_scope(const char *json,
+                                                      size_t length,
+                                                      const char *field,
+                                                      uint32_t *out_value)
+{
+    if (json == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    size_t field_len = strlen(field);
+    const char *cursor = config_manager_memmem(json, length, field, field_len);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor += field_len;
+    const char *end = json + length;
+    while (cursor < end && *cursor != ':') {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    ++cursor;
+    while (cursor < end && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    char buffer[32];
+    size_t idx = 0;
+    while (cursor < end && idx + 1 < sizeof(buffer)) {
+        char c = *cursor;
+        if ((c >= '0' && c <= '9') || c == '+' || c == '-') {
+            buffer[idx++] = c;
+            ++cursor;
+            continue;
+        }
+        break;
+    }
+
+    if (idx == 0) {
+        return false;
+    }
+
+    buffer[idx] = '\0';
+    char *endptr = NULL;
+    long value = strtol(buffer, &endptr, 10);
+    if (endptr == buffer) {
+        return false;
+    }
+    if (value < 0) {
+        value = 0;
+    }
+
+    *out_value = (uint32_t)value;
+    return true;
+}
+
+static bool config_manager_extract_int32_field_scope(const char *json,
+                                                     size_t length,
+                                                     const char *field,
+                                                     int32_t *out_value)
+{
+    if (json == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    uint32_t unsigned_value = 0;
+    if (!config_manager_extract_uint32_field_scope(json, length, field, &unsigned_value)) {
+        return false;
+    }
+
+    *out_value = (int32_t)unsigned_value;
+    return true;
 }
 
 static void config_manager_ensure_topics_loaded(void)
@@ -551,6 +964,11 @@ static void config_manager_load_persistent_settings(void)
     config_manager_load_mqtt_settings_from_nvs();
 #endif
 
+    esp_err_t file_err = config_manager_load_config_file(false);
+    if (file_err != ESP_OK && file_err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "Failed to load configuration file: %s", esp_err_to_name(file_err));
+    }
+
     for (size_t i = 0; i < s_register_count; ++i) {
         const config_manager_register_descriptor_t *desc = &s_register_descriptors[i];
         uint16_t stored_raw = 0;
@@ -603,6 +1021,96 @@ static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
     (void)interval_ms;
     return ESP_OK;
 #endif
+}
+
+#ifdef ESP_PLATFORM
+static esp_err_t config_manager_mount_spiffs(void)
+{
+    if (s_spiffs_mounted) {
+        return ESP_OK;
+    }
+
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = CONFIG_MANAGER_FS_BASE_PATH,
+        .partition_label = NULL,
+        .max_files = 4,
+        .format_if_mount_failed = true,
+    };
+
+    esp_err_t err = esp_vfs_spiffs_register(&conf);
+    if (err == ESP_ERR_INVALID_STATE) {
+        s_spiffs_mounted = true;
+        return ESP_OK;
+    }
+
+    if (err == ESP_OK) {
+        s_spiffs_mounted = true;
+    }
+    return err;
+}
+#endif
+
+static esp_err_t config_manager_save_config_file(void)
+{
+#ifdef ESP_PLATFORM
+    esp_err_t mount_err = config_manager_mount_spiffs();
+    if (mount_err != ESP_OK) {
+        ESP_LOGW(TAG, "Unable to mount SPIFFS for config save: %s", esp_err_to_name(mount_err));
+        return mount_err;
+    }
+#endif
+
+    FILE *file = fopen(CONFIG_MANAGER_CONFIG_FILE, "w");
+    if (file == NULL) {
+        ESP_LOGW(TAG, "Failed to open %s for writing: errno=%d", CONFIG_MANAGER_CONFIG_FILE, errno);
+        return ESP_FAIL;
+    }
+
+    size_t written = fwrite(s_config_json, 1, s_config_length, file);
+    int flush_result = fflush(file);
+    int close_result = fclose(file);
+    if (written != s_config_length || flush_result != 0 || close_result != 0) {
+        ESP_LOGW(TAG,
+                 "Failed to write configuration file (written=%zu expected=%zu errno=%d)",
+                 written,
+                 s_config_length,
+                 errno);
+        return ESP_FAIL;
+    }
+
+    s_config_file_loaded = true;
+    return ESP_OK;
+}
+
+static esp_err_t config_manager_load_config_file(bool apply_runtime)
+{
+#ifdef ESP_PLATFORM
+    esp_err_t mount_err = config_manager_mount_spiffs();
+    if (mount_err != ESP_OK) {
+        ESP_LOGW(TAG, "Unable to mount SPIFFS for config load: %s", esp_err_to_name(mount_err));
+        return mount_err;
+    }
+#endif
+
+    FILE *file = fopen(CONFIG_MANAGER_CONFIG_FILE, "r");
+    if (file == NULL) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    size_t read = fread(buffer, 1, sizeof(buffer) - 1U, file);
+    fclose(file);
+    if (read == 0U) {
+        ESP_LOGW(TAG, "Configuration file %s is empty", CONFIG_MANAGER_CONFIG_FILE);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    buffer[read] = '\0';
+    esp_err_t err = config_manager_apply_config_payload(buffer, read, false, apply_runtime);
+    if (err == ESP_OK) {
+        s_config_file_loaded = true;
+    }
+    return err;
 }
 
 #ifdef ESP_PLATFORM
@@ -833,43 +1341,123 @@ static esp_err_t config_manager_build_config_snapshot(void)
     uint16_t port = 0U;
     config_manager_parse_mqtt_uri(s_mqtt_config.broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
 
-    int written = snprintf(s_config_json,
-                           sizeof(s_config_json),
-                           "{\"device\":\"TinyBMS Gateway\",\"version\":1,\"register_count\":%zu,"
-                           "\"uart_poll_interval_ms\":%u,\"uart_poll_interval_min_ms\":%u,"
-                           "\"uart_poll_interval_max_ms\":%u,"
-                           "\"mqtt\":{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
-                           "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,"
-                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\",
-                           "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}}",
-                           s_register_count,
-                           (unsigned)s_uart_poll_interval_ms,
-                           (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
-                           (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS,
-                           scheme,
-                           s_mqtt_config.broker_uri,
-                           host,
-                           (unsigned)port,
-                           s_mqtt_config.username,
-                           s_mqtt_config.password,
-                           (unsigned)s_mqtt_config.keepalive_seconds,
-                           (unsigned)s_mqtt_config.default_qos,
-                           s_mqtt_config.retain_enabled ? "true" : "false",
-                           s_mqtt_topics.status,
-                           s_mqtt_topics.metrics,
-                           s_mqtt_topics.config,
-                           s_mqtt_topics.can_raw,
-                           s_mqtt_topics.can_decoded,
-                           s_mqtt_topics.can_ready);
-    if (written < 0) {
-        return ESP_FAIL;
-    }
+    size_t offset = 0;
+    const char *device_name = config_manager_effective_device_name();
+    char version[16];
+    (void)snprintf(version,
+                   sizeof(version),
+                   "%u.%u.%u",
+                   APP_VERSION_MAJOR,
+                   APP_VERSION_MINOR,
+                   APP_VERSION_PATCH);
 
-    if ((size_t)written >= sizeof(s_config_json)) {
+    const config_manager_wifi_settings_t *wifi = &s_wifi_settings;
+    const config_manager_can_settings_t *can = &s_can_settings;
+
+    if (!config_manager_json_append(s_config_json, sizeof(s_config_json), &offset, "{")) {
         return ESP_ERR_INVALID_SIZE;
     }
 
-    s_config_length = (size_t)written;
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    "\"register_count\":%zu,\"uart_poll_interval_ms\":%u,"
+                                    "\"uart_poll_interval_min_ms\":%u,\"uart_poll_interval_max_ms\":%u",
+                                    s_register_count,
+                                    (unsigned)s_uart_poll_interval_ms,
+                                    (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
+                                    (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    ",\"device\":{\"name\":\"%s\",\"version\":\"%s\"}",
+                                    device_name,
+                                    version)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    ",\"uart\":{\"poll_interval_ms\":%u,\"poll_interval_min_ms\":%u,"
+                                    "\"poll_interval_max_ms\":%u}",
+                                    (unsigned)s_uart_poll_interval_ms,
+                                    (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
+                                    (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    ",\"wifi\":{\"sta\":{\"ssid\":\"%s\",\"password\":\"%s\",\"hostname\":\"%s\",\"max_retry\":%u},"
+                                    "\"ap\":{\"ssid\":\"%s\",\"password\":\"%s\",\"channel\":%u,\"max_clients\":%u}}",
+                                    wifi->sta.ssid,
+                                    wifi->sta.password,
+                                    wifi->sta.hostname,
+                                    (unsigned)wifi->sta.max_retry,
+                                    wifi->ap.ssid,
+                                    wifi->ap.password,
+                                    (unsigned)wifi->ap.channel,
+                                    (unsigned)wifi->ap.max_clients)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    ",\"can\":{\"twai\":{\"tx_gpio\":%d,\"rx_gpio\":%d},"
+                                    "\"keepalive\":{\"interval_ms\":%u,\"timeout_ms\":%u,\"retry_ms\":%u},"
+                                    "\"publisher\":{\"period_ms\":%u},"
+                                    "\"identity\":{\"handshake_ascii\":\"%s\",\"manufacturer\":\"%s\",\"battery_name\":\"%s\","
+                                    "\"battery_family\":\"%s\",\"serial_number\":\"%s\"}}",
+                                    can->twai.tx_gpio,
+                                    can->twai.rx_gpio,
+                                    (unsigned)can->keepalive.interval_ms,
+                                    (unsigned)can->keepalive.timeout_ms,
+                                    (unsigned)can->keepalive.retry_ms,
+                                    (unsigned)can->publisher.period_ms,
+                                    can->identity.handshake_ascii,
+                                    can->identity.manufacturer,
+                                    can->identity.battery_name,
+                                    can->identity.battery_family,
+                                    can->identity.serial_number)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json,
+                                    sizeof(s_config_json),
+                                    &offset,
+                                    ",\"mqtt\":{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
+                                    "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,\"
+                                    "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\","
+                                    "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}",
+                                    scheme,
+                                    s_mqtt_config.broker_uri,
+                                    host,
+                                    (unsigned)port,
+                                    s_mqtt_config.username,
+                                    s_mqtt_config.password,
+                                    (unsigned)s_mqtt_config.keepalive_seconds,
+                                    (unsigned)s_mqtt_config.default_qos,
+                                    s_mqtt_config.retain_enabled ? "true" : "false",
+                                    s_mqtt_topics.status,
+                                    s_mqtt_topics.metrics,
+                                    s_mqtt_topics.config,
+                                    s_mqtt_topics.can_raw,
+                                    s_mqtt_topics.can_decoded,
+                                    s_mqtt_topics.can_ready)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!config_manager_json_append(s_config_json, sizeof(s_config_json), &offset, "}")) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    s_config_length = offset;
     return ESP_OK;
 }
 
@@ -879,6 +1467,249 @@ static void config_manager_load_register_defaults(void)
         s_register_raw_values[i] = s_register_descriptors[i].default_raw;
     }
     s_registers_initialised = true;
+}
+
+static esp_err_t config_manager_apply_config_payload(const char *json,
+                                                     size_t length,
+                                                     bool persist,
+                                                     bool apply_runtime)
+{
+    if (json == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (length == 0U) {
+        length = strlen(json);
+    }
+    if (length >= CONFIG_MANAGER_MAX_CONFIG_SIZE) {
+        ESP_LOGW(TAG, "Config payload too large: %u bytes", (unsigned)length);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    memcpy(buffer, json, length);
+    buffer[length] = '\0';
+
+    config_manager_device_settings_t device = s_device_settings;
+    config_manager_wifi_settings_t wifi = s_wifi_settings;
+    config_manager_can_settings_t can = s_can_settings;
+    uint32_t poll_interval = s_uart_poll_interval_ms;
+    bool poll_interval_updated = false;
+
+    const char *section = NULL;
+    size_t section_len = 0;
+
+    if (config_manager_find_object_scope(buffer, length, "\"device\"", &section, &section_len)) {
+        char name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
+        if (config_manager_extract_string_field_scope(section, section_len, "\"name\"", name, sizeof(name))) {
+            config_manager_copy_string(device.name, sizeof(device.name), name);
+        }
+    }
+
+    if (config_manager_find_object_scope(buffer, length, "\"uart\"", &section, &section_len)) {
+        uint32_t poll = 0U;
+        if (config_manager_extract_uint32_field_scope(section, section_len, "\"poll_interval_ms\"", &poll)) {
+            poll_interval = config_manager_clamp_poll_interval(poll);
+            poll_interval_updated = true;
+        }
+    } else {
+        uint32_t poll = 0U;
+        if (config_manager_extract_uint32_field(buffer, "\"uart_poll_interval_ms\"", &poll)) {
+            poll_interval = config_manager_clamp_poll_interval(poll);
+            poll_interval_updated = true;
+        }
+    }
+
+    if (config_manager_find_object_scope(buffer, length, "\"wifi\"", &section, &section_len)) {
+        const char *sta_section = NULL;
+        size_t sta_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"sta\"", &sta_section, &sta_len)) {
+            char value[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
+            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"ssid\"", value, sizeof(value))) {
+                config_manager_copy_string(wifi.sta.ssid, sizeof(wifi.sta.ssid), value);
+            }
+            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"password\"", value, sizeof(value))) {
+                config_manager_copy_string(wifi.sta.password, sizeof(wifi.sta.password), value);
+            }
+            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"hostname\"", value, sizeof(value))) {
+                config_manager_copy_string(wifi.sta.hostname, sizeof(wifi.sta.hostname), value);
+            }
+            uint32_t max_retry = 0U;
+            if (config_manager_extract_uint32_field_scope(sta_section, sta_len, "\"max_retry\"", &max_retry)) {
+                if (max_retry > 255U) {
+                    max_retry = 255U;
+                }
+                wifi.sta.max_retry = (uint8_t)max_retry;
+            }
+        }
+
+        const char *ap_section = NULL;
+        size_t ap_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"ap\"", &ap_section, &ap_len)) {
+            char value[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
+            if (config_manager_extract_string_field_scope(ap_section, ap_len, "\"ssid\"", value, sizeof(value))) {
+                config_manager_copy_string(wifi.ap.ssid, sizeof(wifi.ap.ssid), value);
+            }
+            if (config_manager_extract_string_field_scope(ap_section, ap_len, "\"password\"", value, sizeof(value))) {
+                config_manager_copy_string(wifi.ap.password, sizeof(wifi.ap.password), value);
+            }
+            uint32_t channel = 0U;
+            if (config_manager_extract_uint32_field_scope(ap_section, ap_len, "\"channel\"", &channel)) {
+                if (channel < 1U) {
+                    channel = 1U;
+                }
+                if (channel > 13U) {
+                    channel = 13U;
+                }
+                wifi.ap.channel = (uint8_t)channel;
+            }
+            uint32_t max_clients = 0U;
+            if (config_manager_extract_uint32_field_scope(ap_section, ap_len, "\"max_clients\"", &max_clients)) {
+                if (max_clients < 1U) {
+                    max_clients = 1U;
+                }
+                if (max_clients > 10U) {
+                    max_clients = 10U;
+                }
+                wifi.ap.max_clients = (uint8_t)max_clients;
+            }
+        }
+    }
+
+    if (config_manager_find_object_scope(buffer, length, "\"can\"", &section, &section_len)) {
+        const char *twai_section = NULL;
+        size_t twai_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"twai\"", &twai_section, &twai_len)) {
+            int32_t gpio = 0;
+            if (config_manager_extract_int32_field_scope(twai_section, twai_len, "\"tx_gpio\"", &gpio)) {
+                if (gpio < -1) {
+                    gpio = -1;
+                }
+                if (gpio > 39) {
+                    gpio = 39;
+                }
+                can.twai.tx_gpio = (int)gpio;
+            }
+            if (config_manager_extract_int32_field_scope(twai_section, twai_len, "\"rx_gpio\"", &gpio)) {
+                if (gpio < -1) {
+                    gpio = -1;
+                }
+                if (gpio > 39) {
+                    gpio = 39;
+                }
+                can.twai.rx_gpio = (int)gpio;
+            }
+        }
+
+        const char *keepalive_section = NULL;
+        size_t keepalive_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"keepalive\"", &keepalive_section, &keepalive_len)) {
+            uint32_t value = 0U;
+            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"interval_ms\"", &value)) {
+                if (value < 10U) {
+                    value = 10U;
+                }
+                if (value > 600000U) {
+                    value = 600000U;
+                }
+                can.keepalive.interval_ms = value;
+            }
+            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"timeout_ms\"", &value)) {
+                if (value < 100U) {
+                    value = 100U;
+                }
+                if (value > 600000U) {
+                    value = 600000U;
+                }
+                can.keepalive.timeout_ms = value;
+            }
+            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"retry_ms\"", &value)) {
+                if (value < 10U) {
+                    value = 10U;
+                }
+                if (value > 600000U) {
+                    value = 600000U;
+                }
+                can.keepalive.retry_ms = value;
+            }
+        }
+
+        const char *publisher_section = NULL;
+        size_t publisher_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"publisher\"", &publisher_section, &publisher_len)) {
+            uint32_t value = 0U;
+            if (config_manager_extract_uint32_field_scope(publisher_section, publisher_len, "\"period_ms\"", &value)) {
+                if (value > 600000U) {
+                    value = 600000U;
+                }
+                can.publisher.period_ms = value;
+            }
+        }
+
+        const char *identity_section = NULL;
+        size_t identity_len = 0;
+        if (config_manager_find_object_scope(section, section_len, "\"identity\"", &identity_section, &identity_len)) {
+            char value[CONFIG_MANAGER_CAN_SERIAL_MAX_LENGTH];
+            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"handshake_ascii\"", value, sizeof(value))) {
+                config_manager_copy_string(can.identity.handshake_ascii, sizeof(can.identity.handshake_ascii), value);
+            }
+            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"manufacturer\"", value, sizeof(value))) {
+                config_manager_copy_string(can.identity.manufacturer, sizeof(can.identity.manufacturer), value);
+            }
+            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"battery_name\"", value, sizeof(value))) {
+                config_manager_copy_string(can.identity.battery_name, sizeof(can.identity.battery_name), value);
+            }
+            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"battery_family\"", value, sizeof(value))) {
+                config_manager_copy_string(can.identity.battery_family, sizeof(can.identity.battery_family), value);
+            }
+            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"serial_number\"", value, sizeof(value))) {
+                config_manager_copy_string(can.identity.serial_number, sizeof(can.identity.serial_number), value);
+            }
+        }
+    }
+
+    char previous_device_name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
+    config_manager_copy_string(previous_device_name,
+                               sizeof(previous_device_name),
+                               config_manager_effective_device_name());
+
+    s_device_settings = device;
+    s_wifi_settings = wifi;
+    s_can_settings = can;
+
+    const char *new_effective_name = config_manager_effective_device_name();
+    config_manager_update_topics_for_device_change(previous_device_name, new_effective_name);
+
+    if (poll_interval_updated) {
+        s_uart_poll_interval_ms = config_manager_clamp_poll_interval(poll_interval);
+        if (apply_runtime) {
+            uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
+        }
+        if (persist) {
+            esp_err_t persist_err = config_manager_store_poll_interval(s_uart_poll_interval_ms);
+            if (persist_err != ESP_OK) {
+                ESP_LOGW(TAG,
+                         "Failed to persist UART poll interval: %s",
+                         esp_err_to_name(persist_err));
+            }
+        }
+    } else if (apply_runtime) {
+        uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
+    }
+
+    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    if (snapshot_err == ESP_OK) {
+        config_manager_publish_config_snapshot();
+    }
+
+    if (persist && snapshot_err == ESP_OK) {
+        esp_err_t save_err = config_manager_save_config_file();
+        if (save_err != ESP_OK) {
+            snapshot_err = save_err;
+        }
+    }
+
+    return snapshot_err;
 }
 
 static bool config_manager_find_register(const char *key, size_t *index_out)
@@ -1173,6 +2004,12 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
     esp_err_t snapshot_err = config_manager_build_config_snapshot();
     if (snapshot_err == ESP_OK) {
         config_manager_publish_config_snapshot();
+        if (persist_err == ESP_OK && s_config_file_loaded) {
+            esp_err_t save_err = config_manager_save_config_file();
+            if (save_err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to update configuration file: %s", esp_err_to_name(save_err));
+            }
+        }
     }
 
     if (persist_err != ESP_OK) {
@@ -1287,28 +2124,31 @@ esp_err_t config_manager_set_config_json(const char *json, size_t length)
 
     config_manager_ensure_initialised();
 
-    if (length == 0) {
-        length = strlen(json);
-    }
+    return config_manager_apply_config_payload(json, length, true, true);
+}
 
-    if (length >= CONFIG_MANAGER_MAX_CONFIG_SIZE) {
-        ESP_LOGW(TAG, "Config payload too large: %u bytes", (unsigned)length);
-        return ESP_ERR_INVALID_SIZE;
-    }
+const config_manager_device_settings_t *config_manager_get_device_settings(void)
+{
+    config_manager_ensure_initialised();
+    return &s_device_settings;
+}
 
-    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
-    memcpy(buffer, json, length);
-    buffer[length] = '\0';
+const char *config_manager_get_device_name(void)
+{
+    config_manager_ensure_initialised();
+    return config_manager_effective_device_name();
+}
 
-    uint32_t poll_interval = 0;
-    if (!config_manager_extract_uint32_field(buffer,
-                                             "\"uart_poll_interval_ms\"",
-                                             &poll_interval)) {
-        ESP_LOGW(TAG, "Config payload missing uart_poll_interval_ms");
-        return ESP_ERR_INVALID_ARG;
-    }
+const config_manager_wifi_settings_t *config_manager_get_wifi_settings(void)
+{
+    config_manager_ensure_initialised();
+    return &s_wifi_settings;
+}
 
-    return config_manager_set_uart_poll_interval_ms(poll_interval);
+const config_manager_can_settings_t *config_manager_get_can_settings(void)
+{
+    config_manager_ensure_initialised();
+    return &s_can_settings;
 }
 
 esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, size_t *out_length)

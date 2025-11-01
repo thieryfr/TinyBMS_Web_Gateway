@@ -12,6 +12,9 @@ const state = {
     historyStorageReady: false,
     registers: new Map(),
     chart: null,
+    config: {
+        last: null,
+    },
     mqtt: {
         statusInterval: null,
         lastStatus: null,
@@ -431,6 +434,199 @@ function updateHistory(samples) {
     });
 }
 
+function setInputValue(id, value) {
+    const element = document.getElementById(id);
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    if (value === null || value === undefined) {
+        element.value = '';
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+        element.value = String(value);
+    } else {
+        element.value = String(value);
+    }
+}
+
+function populateGeneralConfigForm(config) {
+    if (!config) {
+        return;
+    }
+
+    const device = config.device || {};
+    const uart = config.uart || {};
+    const wifi = config.wifi || {};
+    const wifiSta = wifi.sta || {};
+    const wifiAp = wifi.ap || {};
+    const can = config.can || {};
+    const twai = can.twai || {};
+    const keepalive = can.keepalive || {};
+    const publisher = can.publisher || {};
+    const identity = can.identity || {};
+
+    const pollInterval = uart.poll_interval_ms ?? config.uart_poll_interval_ms ?? '';
+
+    setInputValue('device-name', device.name || '');
+    setInputValue('uart-poll-interval', pollInterval);
+
+    setInputValue('wifi-sta-ssid', wifiSta.ssid || '');
+    setInputValue('wifi-sta-password', wifiSta.password || '');
+    setInputValue('wifi-sta-hostname', wifiSta.hostname || '');
+    setInputValue('wifi-sta-max-retry', wifiSta.max_retry ?? '');
+
+    setInputValue('wifi-ap-ssid', wifiAp.ssid || '');
+    setInputValue('wifi-ap-password', wifiAp.password || '');
+    setInputValue('wifi-ap-channel', wifiAp.channel ?? '');
+    setInputValue('wifi-ap-max-clients', wifiAp.max_clients ?? '');
+
+    setInputValue('can-tx-gpio', twai.tx_gpio ?? '');
+    setInputValue('can-rx-gpio', twai.rx_gpio ?? '');
+    setInputValue('can-keepalive-interval', keepalive.interval_ms ?? '');
+    setInputValue('can-keepalive-timeout', keepalive.timeout_ms ?? '');
+    setInputValue('can-keepalive-retry', keepalive.retry_ms ?? '');
+    setInputValue('can-publisher-period', publisher.period_ms ?? '');
+
+    setInputValue('can-handshake', identity.handshake_ascii || '');
+    setInputValue('can-manufacturer', identity.manufacturer || '');
+    setInputValue('can-battery-name', identity.battery_name || '');
+    setInputValue('can-battery-family', identity.battery_family || '');
+    setInputValue('can-serial-number', identity.serial_number || '');
+}
+
+function buildGeneralConfigPayload(form) {
+    const current = state.config.last || {};
+    const wifiCurrent = current.wifi || {};
+    const wifiStaCurrent = wifiCurrent.sta || {};
+    const wifiApCurrent = wifiCurrent.ap || {};
+    const canCurrent = current.can || {};
+    const twaiCurrent = canCurrent.twai || {};
+    const keepaliveCurrent = canCurrent.keepalive || {};
+    const publisherCurrent = canCurrent.publisher || {};
+    const identityCurrent = canCurrent.identity || {};
+    const uartCurrent = current.uart || {};
+
+    const getControl = (name) => {
+        const control = form.elements.namedItem(name);
+        if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) {
+            return control;
+        }
+        return null;
+    };
+
+    const readText = (name) => {
+        const control = getControl(name);
+        if (!control) {
+            return '';
+        }
+        if (control instanceof HTMLInputElement && control.type === 'password') {
+            return control.value;
+        }
+        return control.value.trim();
+    };
+
+    const readRaw = (name) => {
+        const control = getControl(name);
+        return control ? control.value : '';
+    };
+
+    const readInt = (name, fallback = 0) => {
+        const control = getControl(name);
+        if (!control) {
+            return fallback;
+        }
+        const value = control.value.trim();
+        if (value === '') {
+            return fallback;
+        }
+        const parsed = Number.parseInt(value, 10);
+        return Number.isNaN(parsed) ? fallback : parsed;
+    };
+
+    return {
+        device: {
+            name: readText('device_name'),
+        },
+        uart: {
+            poll_interval_ms: readInt(
+                'uart_poll_interval_ms',
+                Number.parseInt(String(uartCurrent.poll_interval_ms ?? current.uart_poll_interval_ms ?? 0), 10) || 0
+            ),
+        },
+        wifi: {
+            sta: {
+                ssid: readText('wifi_sta_ssid'),
+                password: readRaw('wifi_sta_password'),
+                hostname: readText('wifi_sta_hostname'),
+                max_retry: readInt('wifi_sta_max_retry', Number.parseInt(String(wifiStaCurrent.max_retry ?? 0), 10) || 0),
+            },
+            ap: {
+                ssid: readText('wifi_ap_ssid'),
+                password: readRaw('wifi_ap_password'),
+                channel: readInt('wifi_ap_channel', Number.parseInt(String(wifiApCurrent.channel ?? 1), 10) || 1),
+                max_clients: readInt('wifi_ap_max_clients', Number.parseInt(String(wifiApCurrent.max_clients ?? 4), 10) || 4),
+            },
+        },
+        can: {
+            twai: {
+                tx_gpio: readInt('can_tx_gpio', Number.parseInt(String(twaiCurrent.tx_gpio ?? 0), 10) || 0),
+                rx_gpio: readInt('can_rx_gpio', Number.parseInt(String(twaiCurrent.rx_gpio ?? 0), 10) || 0),
+            },
+            keepalive: {
+                interval_ms: readInt(
+                    'can_keepalive_interval_ms',
+                    Number.parseInt(String(keepaliveCurrent.interval_ms ?? 0), 10) || 0
+                ),
+                timeout_ms: readInt(
+                    'can_keepalive_timeout_ms',
+                    Number.parseInt(String(keepaliveCurrent.timeout_ms ?? 0), 10) || 0
+                ),
+                retry_ms: readInt(
+                    'can_keepalive_retry_ms',
+                    Number.parseInt(String(keepaliveCurrent.retry_ms ?? 0), 10) || 0
+                ),
+            },
+            publisher: {
+                period_ms: readInt(
+                    'can_publisher_period_ms',
+                    Number.parseInt(String(publisherCurrent.period_ms ?? 0), 10) || 0
+                ),
+            },
+            identity: {
+                handshake_ascii: readText('can_handshake_ascii'),
+                manufacturer: readText('can_manufacturer'),
+                battery_name: readText('can_battery_name'),
+                battery_family: readText('can_battery_family'),
+                serial_number: readText('can_serial_number'),
+            },
+        },
+    };
+}
+
+async function fetchConfig(options = {}) {
+    const { silent = false } = options;
+    if (!silent) {
+        updateConfigStatus('Chargement de la configuration…', false, true);
+    }
+
+    try {
+        const response = await fetch('/api/config', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error('Configuration request failed');
+        }
+        const config = await response.json();
+        state.config.last = config;
+        populateGeneralConfigForm(config);
+        if (!silent) {
+            updateConfigStatus('Configuration chargée.', false, true);
+        }
+    } catch (error) {
+        console.error('Failed to load configuration', error);
+        updateConfigStatus('Impossible de charger la configuration.', true, true);
+        throw error;
+    }
+}
+
 async function fetchRegisters() {
     const response = await fetch('/api/registers');
     if (!response.ok) throw new Error('Register request failed');
@@ -531,10 +727,87 @@ async function sendRegisterUpdate(key, value) {
     }
 }
 
-function updateConfigStatus(message, isError = false) {
+async function handleGeneralConfigSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+        return;
+    }
+
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+
+    updateConfigStatus('Enregistrement de la configuration…', false, true);
+
+    try {
+        const payload = buildGeneralConfigPayload(form);
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const errorText = (await response.text()) || 'Configuration update failed';
+            throw new Error(errorText);
+        }
+
+        await fetchConfig({ silent: true });
+        updateConfigStatus('Configuration appliquée.', false, true);
+    } catch (error) {
+        console.error('Configuration update failed', error);
+        const message = error instanceof Error ? error.message : 'Erreur inconnue';
+        updateConfigStatus(`Échec de l’enregistrement: ${message}`, true, true);
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+}
+
+function handleGeneralConfigReset() {
+    if (state.config.last) {
+        populateGeneralConfigForm(state.config.last);
+        updateConfigStatus('Formulaire réinitialisé.');
+    }
+}
+
+function updateConfigStatus(message, isError = false, force = false) {
     const status = document.getElementById('config-status');
+    if (!status) {
+        return;
+    }
+
+    const currentState = status.dataset.state;
+    if (!force && currentState === 'error' && !isError) {
+        return;
+    }
+
     status.textContent = message;
     status.style.color = isError ? '#ff6b6b' : 'var(--text-secondary)';
+    status.dataset.state = isError ? 'error' : 'info';
+}
+
+function setupConfigTab() {
+    const form = document.getElementById('general-config-form');
+    if (form instanceof HTMLFormElement) {
+        form.addEventListener('submit', handleGeneralConfigSubmit);
+    }
+
+    const refreshButton = document.getElementById('config-refresh');
+    if (refreshButton instanceof HTMLButtonElement) {
+        refreshButton.addEventListener('click', () => {
+            fetchConfig().catch(() => {
+                // Errors already logged and surfaced via updateConfigStatus
+            });
+        });
+    }
+
+    const resetButton = document.getElementById('general-config-reset');
+    if (resetButton instanceof HTMLButtonElement) {
+        resetButton.addEventListener('click', handleGeneralConfigReset);
+    }
 }
 
 function pushHistorySample(sample) {
@@ -1001,6 +1274,7 @@ async function initialise() {
     setupHistoryControls();
     updateArchiveControls();
     setupMqttTab();
+    setupConfigTab();
     state.chart = new HistoryChart(document.getElementById('history-chart'));
 
     try {
@@ -1008,6 +1282,9 @@ async function initialise() {
             fetchStatus(),
             fetchLiveHistory(state.historyLimit),
             fetchRegisters(),
+            fetchConfig().catch(() => {
+                // Errors already logged and surfaced via updateConfigStatus
+            }),
             fetchMqttConfig().catch((error) => {
                 console.error('Failed to load MQTT config', error);
                 displayMqttMessage('Impossible de charger la configuration MQTT.', true);
