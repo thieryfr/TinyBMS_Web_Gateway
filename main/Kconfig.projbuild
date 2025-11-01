@@ -68,6 +68,50 @@ menu "Wi-Fi"
         default 4
 endmenu
 
+menu "MQTT"
+    config TINYBMS_MQTT_ENABLE
+        bool "Enable MQTT support"
+        default y
+
+    config TINYBMS_MQTT_BROKER_URI
+        string "Default MQTT broker URI"
+        depends on TINYBMS_MQTT_ENABLE
+        default "mqtt://tinybms.local"
+        help
+            URI used by default when establishing the MQTT connection. Can be
+            overridden at runtime through the configuration manager.
+
+    config TINYBMS_MQTT_USERNAME
+        string "Default MQTT username"
+        depends on TINYBMS_MQTT_ENABLE
+        default ""
+
+    config TINYBMS_MQTT_PASSWORD
+        string "Default MQTT password"
+        depends on TINYBMS_MQTT_ENABLE
+        default ""
+
+    config TINYBMS_MQTT_KEEPALIVE
+        int "MQTT keepalive interval (seconds)"
+        depends on TINYBMS_MQTT_ENABLE
+        range 15 600
+        default 60
+        help
+            Keepalive interval negotiated with the broker. Values outside the
+            supported range will be clamped by the configuration manager.
+
+    config TINYBMS_MQTT_DEFAULT_QOS
+        int "Default MQTT QoS"
+        depends on TINYBMS_MQTT_ENABLE
+        range 0 2
+        default 1
+
+    config TINYBMS_MQTT_RETAIN_STATUS
+        bool "Retain status publications"
+        depends on TINYBMS_MQTT_ENABLE
+        default y
+endmenu
+
 menu "CAN Publisher"
     config TINYBMS_CAN_PUBLISHER_PERIOD_MS
         int "CAN publisher period (ms)"

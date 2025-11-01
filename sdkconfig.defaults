@@ -1,2 +1,10 @@
 # Default SDK configuration for TinyBMS Web Gateway project
 # Customize via `idf.py menuconfig` and re-run configure step
+# MQTT defaults
+CONFIG_TINYBMS_MQTT_ENABLE=y
+CONFIG_TINYBMS_MQTT_BROKER_URI="mqtt://tinybms.local"
+CONFIG_TINYBMS_MQTT_USERNAME=""
+CONFIG_TINYBMS_MQTT_PASSWORD=""
+CONFIG_TINYBMS_MQTT_KEEPALIVE=60
+CONFIG_TINYBMS_MQTT_DEFAULT_QOS=1
+CONFIG_TINYBMS_MQTT_RETAIN_STATUS=y

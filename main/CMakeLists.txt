@@ -9,6 +9,7 @@ idf_component_register(SRCS
     "web_server/web_server.c"
     "config_manager/config_manager.c"
     "mqtt_client/mqtt_client.c"
+    "mqtt_gateway/mqtt_gateway.c"
     "wifi/wifi.c"
     "monitoring/monitoring.c"
     INCLUDE_DIRS "include"
@@ -20,6 +21,7 @@ idf_component_register(SRCS
                  "web_server"
                  "config_manager"
                  "mqtt_client"
+                 "mqtt_gateway"
                  "wifi"
                  "monitoring"
 )

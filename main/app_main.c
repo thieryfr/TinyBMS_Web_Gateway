@@ -8,6 +8,7 @@
 #include "web_server.h"
 #include "config_manager.h"
 #include "mqtt_client.h"
+#include "mqtt_gateway.h"
 #include "monitoring.h"
 #include "wifi.h"
 
@@ -36,6 +37,7 @@ void app_main(void)
     pgn_mapper_init();
     web_server_init();
     mqtt_client_init(NULL);
+    mqtt_gateway_init();
     monitoring_init();
 
     while (true) {
