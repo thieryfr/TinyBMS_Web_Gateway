@@ -55,6 +55,18 @@ static void append_register(uart_bms_live_data_t *data, uint16_t address, uint16
     data->register_count++;
 }
 
+static void set_register(uart_bms_live_data_t *data, uint16_t address, uint16_t value)
+{
+    TEST_ASSERT_NOT_NULL(data);
+    for (size_t i = 0; i < data->register_count; ++i) {
+        if (data->registers[i].address == address) {
+            data->registers[i].raw_value = value;
+            return;
+        }
+    }
+    append_register(data, address, value);
+}
+
 static void set_register_ascii(uart_bms_live_data_t *data, uint16_t base_address, const char *text)
 {
     TEST_ASSERT_NOT_NULL(data);
@@ -164,14 +176,16 @@ TEST_CASE("can_conversion_soc_soh_range_handling", "[can][unit]")
     };
 
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
-    TEST_ASSERT_EQUAL_UINT16(783, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
-    TEST_ASSERT_EQUAL_UINT16(920, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(78, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(92, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(0, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
 
     data.state_of_charge_pct = 135.0f;
     data.state_of_health_pct = -12.0f;
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
-    TEST_ASSERT_EQUAL_UINT16(1000, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(100, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
     TEST_ASSERT_EQUAL_UINT16(0, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(0, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
 }
 
 TEST_CASE("can_conversion_voltage_current_temperature_extremes", "[can][unit]")
@@ -197,6 +211,38 @@ TEST_CASE("can_conversion_voltage_current_temperature_extremes", "[can][unit]")
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
     TEST_ASSERT_EQUAL_INT16(-32768, (int16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
     TEST_ASSERT_EQUAL_INT16(-1200, (int16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+}
+
+TEST_CASE("can_conversion_soc_soh_high_resolution_field", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *channel = find_channel(PGN_SOC_SOH);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    uint32_t soc_register_value = 50345678U; // 50.345678 %
+    data.state_of_charge_pct = (float)soc_register_value * 0.000001f;
+    set_register(&data, 0x002E, (uint16_t)(soc_register_value & 0xFFFFU));
+    set_register(&data, 0x002F, (uint16_t)((soc_register_value >> 16U) & 0xFFFFU));
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(50, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(92, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(5035, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+
+    soc_register_value = 150432198U; // > 100 %, expect saturation
+    data.state_of_charge_pct = 150.432198f;
+    set_register(&data, 0x002E, (uint16_t)(soc_register_value & 0xFFFFU));
+    set_register(&data, 0x002F, (uint16_t)((soc_register_value >> 16U) & 0xFFFFU));
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(100, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(92, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(10000, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
 }
 
 TEST_CASE("can_conversion_alarm_levels", "[can][unit]")

@@ -392,13 +392,33 @@ static bool encode_soc_soh(const uart_bms_live_data_t *data, can_publisher_frame
 
     memset(frame->data, 0, sizeof(frame->data));
 
-    uint16_t soc_raw = encode_u16_scaled(data->state_of_charge_pct, 10.0f, 0.0f, 0U, 1000U);
-    uint16_t soh_raw = encode_u16_scaled(data->state_of_health_pct, 10.0f, 0.0f, 0U, 1000U);
+    uint16_t soc_raw = encode_u16_scaled(data->state_of_charge_pct, 1.0f, 0.0f, 0U, 100U);
+    uint16_t soh_raw = encode_u16_scaled(data->state_of_health_pct, 1.0f, 0.0f, 0U, 100U);
 
     frame->data[0] = (uint8_t)(soc_raw & 0xFFU);
     frame->data[1] = (uint8_t)((soc_raw >> 8U) & 0xFFU);
     frame->data[2] = (uint8_t)(soh_raw & 0xFFU);
     frame->data[3] = (uint8_t)((soh_raw >> 8U) & 0xFFU);
+
+    uint16_t soc_register_words[2] = {0};
+    if (read_register_block(data, 0x002EU, 2U, soc_register_words) == 2U) {
+        uint32_t soc_register_raw = (uint32_t)soc_register_words[0] |
+                                    ((uint32_t)soc_register_words[1] << 16U);
+        double high_res_scaled = (double)soc_register_raw * 0.0001;
+        long high_res_rounded = lrint(high_res_scaled);
+
+        uint16_t high_res_value = 0U;
+        if (high_res_rounded <= 0L) {
+            high_res_value = 0U;
+        } else if (high_res_rounded >= 10000L) {
+            high_res_value = 10000U;
+        } else {
+            high_res_value = (uint16_t)high_res_rounded;
+        }
+
+        frame->data[4] = (uint8_t)(high_res_value & 0xFFU);
+        frame->data[5] = (uint8_t)((high_res_value >> 8U) & 0xFFU);
+    }
 
     return true;
 }
