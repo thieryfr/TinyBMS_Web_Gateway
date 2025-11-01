@@ -14,6 +14,7 @@
 
 #include "cvl_controller.h"
 
+#define VICTRON_CAN_HANDSHAKE_ID     0x307U
 #define VICTRON_PGN_CVL_CCL_DCL      0x351U
 #define VICTRON_PGN_SOC_SOH          0x355U
 #define VICTRON_PGN_VOLTAGE_CURRENT  0x356U
@@ -38,6 +39,10 @@
 #define VICTRON_SOURCE_ADDRESS       0xE5U
 #define VICTRON_EXTENDED_ID(pgn) \
     ((((uint32_t)VICTRON_PRIORITY) << 26) | ((uint32_t)(pgn) << 8) | (uint32_t)VICTRON_SOURCE_ADDRESS)
+
+#ifndef CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII
+#define CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII "VIC"
+#endif
 
 #ifndef CONFIG_TINYBMS_CAN_MANUFACTURER
 #define CONFIG_TINYBMS_CAN_MANUFACTURER "TinyBMS"
@@ -449,6 +454,44 @@ static const char *resolve_battery_family_string(const uart_bms_live_data_t *dat
     }
 
     return CONFIG_TINYBMS_CAN_BATTERY_FAMILY;
+}
+
+static bool encode_inverter_identifier(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    memset(frame->data, 0, sizeof(frame->data));
+
+    uint16_t model_id = (uint16_t)data->hardware_version |
+                        (uint16_t)((uint16_t)data->hardware_changes_version << 8U);
+    if (model_id == 0U) {
+        (void)find_register_value(data, TINY_REGISTER_HARDWARE_VERSION, &model_id);
+    }
+
+    uint16_t firmware_word = (uint16_t)data->firmware_version |
+                              (uint16_t)((uint16_t)data->firmware_flags << 8U);
+    if (firmware_word == 0U) {
+        (void)find_register_value(data, TINY_REGISTER_PUBLIC_FIRMWARE, &firmware_word);
+    }
+
+    frame->data[0] = (uint8_t)(model_id & 0xFFU);
+    frame->data[1] = (uint8_t)((model_id >> 8U) & 0xFFU);
+    frame->data[2] = (uint8_t)(firmware_word & 0xFFU);
+    frame->data[3] = (uint8_t)((firmware_word >> 8U) & 0xFFU);
+
+    const char handshake_ascii[] = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII;
+    size_t ascii_length = strlen(handshake_ascii);
+    for (size_t i = 0; i < 3U; ++i) {
+        uint8_t value = 0U;
+        if (i < ascii_length) {
+            value = sanitize_ascii((uint8_t)handshake_ascii[i]);
+        }
+        frame->data[4U + i] = value;
+    }
+
+    return true;
 }
 
 static float sanitize_positive(float value)
@@ -972,6 +1015,14 @@ static bool encode_battery_family(const uart_bms_live_data_t *data, can_publishe
 }
 
 const can_publisher_channel_t g_can_publisher_channels[] = {
+    {
+        .pgn = VICTRON_CAN_HANDSHAKE_ID,
+        .can_id = VICTRON_CAN_HANDSHAKE_ID,
+        .dlc = 8,
+        .fill_fn = encode_inverter_identifier,
+        .description = "Victron inverter identifier handshake",
+        .period_ms = 1000U,
+    },
     {
         .pgn = VICTRON_PGN_CVL_CCL_DCL,
         .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_CVL_CCL_DCL),
