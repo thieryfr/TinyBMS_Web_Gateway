@@ -1,5 +1,6 @@
 #include "web_server.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -22,6 +23,7 @@
 #include "app_events.h"
 #include "config_manager.h"
 #include "monitoring.h"
+#include "mqtt_gateway.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -37,6 +39,7 @@
 #define WEB_SERVER_MAX_PATH     256
 #define WEB_SERVER_FILE_BUFSZ   1024
 #define WEB_SERVER_HISTORY_JSON_SIZE 4096
+#define WEB_SERVER_MQTT_JSON_SIZE    768
 
 typedef struct ws_client {
     int fd;
@@ -273,6 +276,227 @@ static esp_err_t web_server_send_file(httpd_req_t *req, const char *path)
     return ESP_OK;
 }
 
+static bool web_server_extract_json_string(const char *json, const char *field, char *out, size_t out_size)
+{
+    if (json == NULL || field == NULL || out == NULL || out_size == 0) {
+        return false;
+    }
+
+    const char *cursor = strstr(json, field);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor = strchr(cursor, ':');
+    if (cursor == NULL) {
+        return false;
+    }
+
+    ++cursor;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+
+    if (*cursor != '"') {
+        return false;
+    }
+    ++cursor;
+
+    size_t len = 0;
+    while (cursor[len] != '\0' && cursor[len] != '"') {
+        if (len + 1 >= out_size) {
+            return false;
+        }
+        out[len] = cursor[len];
+        ++len;
+    }
+
+    if (cursor[len] != '"') {
+        return false;
+    }
+
+    out[len] = '\0';
+    return true;
+}
+
+static bool web_server_extract_json_uint(const char *json, const char *field, uint32_t *out_value)
+{
+    if (json == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    const char *cursor = strstr(json, field);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor = strchr(cursor, ':');
+    if (cursor == NULL) {
+        return false;
+    }
+
+    ++cursor;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+
+    if (*cursor == '\0') {
+        return false;
+    }
+
+    char *endptr = NULL;
+    unsigned long parsed = strtoul(cursor, &endptr, 10);
+    if (endptr == cursor) {
+        return false;
+    }
+
+    *out_value = (uint32_t)parsed;
+    return true;
+}
+
+static bool web_server_extract_json_bool(const char *json, const char *field, bool *out_value)
+{
+    if (json == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    const char *cursor = strstr(json, field);
+    if (cursor == NULL) {
+        return false;
+    }
+
+    cursor = strchr(cursor, ':');
+    if (cursor == NULL) {
+        return false;
+    }
+
+    ++cursor;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+
+    if (strncmp(cursor, "true", 4) == 0) {
+        *out_value = true;
+        return true;
+    }
+    if (strncmp(cursor, "false", 5) == 0) {
+        *out_value = false;
+        return true;
+    }
+
+    return false;
+}
+
+static void web_server_parse_mqtt_uri(const char *uri,
+                                      char *scheme,
+                                      size_t scheme_size,
+                                      char *host,
+                                      size_t host_size,
+                                      uint16_t *port_out)
+{
+    if (scheme != NULL && scheme_size > 0) {
+        scheme[0] = '\0';
+    }
+
+}
+static const char *web_server_mqtt_event_to_string(mqtt_client_event_id_t id)
+{
+    switch (id) {
+        case MQTT_CLIENT_EVENT_CONNECTED:
+            return "connected";
+        case MQTT_CLIENT_EVENT_DISCONNECTED:
+            return "disconnected";
+        case MQTT_CLIENT_EVENT_SUBSCRIBED:
+            return "subscribed";
+        case MQTT_CLIENT_EVENT_PUBLISHED:
+            return "published";
+        case MQTT_CLIENT_EVENT_DATA:
+            return "data";
+        case MQTT_CLIENT_EVENT_ERROR:
+            return "error";
+        default:
+            return "unknown";
+    }
+}
+
+
+    if (host != NULL && host_size > 0) {
+        host[0] = '\0';
+    }
+    if (port_out != NULL) {
+        *port_out = 1883U;
+    }
+
+    if (uri == NULL) {
+        if (scheme != NULL && scheme_size > 0) {
+            (void)snprintf(scheme, scheme_size, "%s", "mqtt");
+        }
+        return;
+    }
+
+    const char *authority = uri;
+    const char *sep = strstr(uri, "://");
+    char scheme_buffer[16] = "mqtt";
+    if (sep != NULL) {
+        size_t len = (size_t)(sep - uri);
+        if (len >= sizeof(scheme_buffer)) {
+            len = sizeof(scheme_buffer) - 1U;
+        }
+        memcpy(scheme_buffer, uri, len);
+        scheme_buffer[len] = '\0';
+        authority = sep + 3;
+    }
+
+    for (size_t i = 0; scheme_buffer[i] != '\0'; ++i) {
+        scheme_buffer[i] = (char)tolower((unsigned char)scheme_buffer[i]);
+    }
+    if (scheme != NULL && scheme_size > 0) {
+        (void)snprintf(scheme, scheme_size, "%s", scheme_buffer);
+    }
+
+    uint16_t port = (strcmp(scheme_buffer, "mqtts") == 0) ? 8883U : 1883U;
+    if (authority == NULL || authority[0] == '\0') {
+        if (port_out != NULL) {
+            *port_out = port;
+        }
+        return;
+    }
+
+    const char *path = strpbrk(authority, "/?");
+    size_t length = (path != NULL) ? (size_t)(path - authority) : strlen(authority);
+    if (length == 0) {
+        if (port_out != NULL) {
+            *port_out = port;
+        }
+        return;
+    }
+
+    char host_buffer[MQTT_CLIENT_MAX_URI_LENGTH];
+    if (length >= sizeof(host_buffer)) {
+        length = sizeof(host_buffer) - 1U;
+    }
+    memcpy(host_buffer, authority, length);
+    host_buffer[length] = '\0';
+
+    char *colon = strrchr(host_buffer, ':');
+    if (colon != NULL) {
+        *colon = '\0';
+        ++colon;
+        char *endptr = NULL;
+        unsigned long parsed = strtoul(colon, &endptr, 10);
+        if (endptr != colon && parsed <= UINT16_MAX) {
+            port = (uint16_t)parsed;
+        }
+    }
+
+    if (host != NULL && host_size > 0) {
+        (void)snprintf(host, host_size, "%s", host_buffer);
+    }
+    if (port_out != NULL) {
+        *port_out = port;
+    }
+}
+
 static esp_err_t web_server_static_get_handler(httpd_req_t *req)
 {
     char filepath[WEB_SERVER_MAX_PATH];
@@ -372,6 +596,217 @@ static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
+}
+
+static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
+{
+    const mqtt_client_config_t *config = config_manager_get_mqtt_client_config();
+    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
+    if (config == NULL || topics == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
+        return ESP_FAIL;
+    }
+
+    char scheme[16];
+    char host[MQTT_CLIENT_MAX_URI_LENGTH];
+    uint16_t port = 0U;
+    web_server_parse_mqtt_uri(config->broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
+
+    char buffer[WEB_SERVER_MQTT_JSON_SIZE];
+    int written = snprintf(buffer,
+                           sizeof(buffer),
+                           "{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
+                           "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,"
+                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\"," 
+                           "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}",
+                           scheme,
+                           config->broker_uri,
+                           host,
+                           (unsigned)port,
+                           config->username,
+                           config->password,
+                           (unsigned)config->keepalive_seconds,
+                           (unsigned)config->default_qos,
+                           config->retain_enabled ? "true" : "false",
+                           topics->status,
+                           topics->metrics,
+                           topics->config,
+                           topics->can_raw,
+                           topics->can_decoded,
+                           topics->can_ready);
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, written);
+}
+
+static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
+{
+    if (req->content_len == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (req->content_len + 1 >= CONFIG_MANAGER_MAX_CONFIG_SIZE) {
+        httpd_resp_send_err(req, HTTPD_413_PAYLOAD_TOO_LARGE, "Payload too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    char payload[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    size_t received = 0;
+    while (received < (size_t)req->content_len) {
+        int ret = httpd_req_recv(req, payload + received, req->content_len - received);
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Read error");
+            return ESP_FAIL;
+        }
+        received += (size_t)ret;
+    }
+    payload[received] = '\0';
+
+    const mqtt_client_config_t *current = config_manager_get_mqtt_client_config();
+    const config_manager_mqtt_topics_t *current_topics = config_manager_get_mqtt_topics();
+    if (current == NULL || current_topics == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
+        return ESP_FAIL;
+    }
+
+    mqtt_client_config_t updated = *current;
+    config_manager_mqtt_topics_t topics = *current_topics;
+
+    char default_scheme[16];
+    char default_host[MQTT_CLIENT_MAX_URI_LENGTH];
+    uint16_t default_port = 0U;
+    web_server_parse_mqtt_uri(updated.broker_uri,
+                              default_scheme,
+                              sizeof(default_scheme),
+                              default_host,
+                              sizeof(default_host),
+                              &default_port);
+
+    char scheme[16];
+    (void)snprintf(scheme, sizeof(scheme), "%s", default_scheme);
+    if (web_server_extract_json_string(payload, "\"scheme\"", scheme, sizeof(scheme))) {
+        for (size_t i = 0; scheme[i] != '\0'; ++i) {
+            scheme[i] = (char)tolower((unsigned char)scheme[i]);
+        }
+    }
+
+    char host[MQTT_CLIENT_MAX_URI_LENGTH];
+    (void)snprintf(host, sizeof(host), "%s", default_host);
+    web_server_extract_json_string(payload, "\"host\"", host, sizeof(host));
+
+    uint32_t port = default_port;
+    web_server_extract_json_uint(payload, "\"port\"", &port);
+    if (port == 0U || port > UINT16_MAX) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid port");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (host[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Host is required");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    web_server_extract_json_string(payload, "\"username\"", updated.username, sizeof(updated.username));
+    web_server_extract_json_string(payload, "\"password\"", updated.password, sizeof(updated.password));
+
+    uint32_t keepalive = 0U;
+    if (web_server_extract_json_uint(payload, "\"keepalive\"", &keepalive)) {
+        updated.keepalive_seconds = (uint16_t)keepalive;
+    }
+
+    uint32_t qos = 0U;
+    if (web_server_extract_json_uint(payload, "\"default_qos\"", &qos)) {
+        if (qos > 2U) {
+            qos = 2U;
+        }
+        updated.default_qos = (uint8_t)qos;
+    }
+
+    bool retain_flag = false;
+    if (web_server_extract_json_bool(payload, "\"retain\"", &retain_flag)) {
+        updated.retain_enabled = retain_flag;
+    }
+
+    int uri_len = snprintf(updated.broker_uri,
+                           sizeof(updated.broker_uri),
+                           "%s://%s:%u",
+                           (scheme[0] != '\0') ? scheme : "mqtt",
+                           host,
+                           (unsigned)port);
+    if (uri_len < 0 || uri_len >= (int)sizeof(updated.broker_uri)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Broker URI too long");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    web_server_extract_json_string(payload, "\"status_topic\"", topics.status, sizeof(topics.status));
+    web_server_extract_json_string(payload, "\"metrics_topic\"", topics.metrics, sizeof(topics.metrics));
+    web_server_extract_json_string(payload, "\"config_topic\"", topics.config, sizeof(topics.config));
+    web_server_extract_json_string(payload, "\"can_raw_topic\"", topics.can_raw, sizeof(topics.can_raw));
+    web_server_extract_json_string(payload, "\"can_decoded_topic\"", topics.can_decoded, sizeof(topics.can_decoded));
+    web_server_extract_json_string(payload, "\"can_ready_topic\"", topics.can_ready, sizeof(topics.can_ready));
+
+    esp_err_t err = config_manager_set_mqtt_client_config(&updated);
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to update MQTT client");
+        return err;
+    }
+
+    err = config_manager_set_mqtt_topics(&topics);
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to update MQTT topics");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
+}
+
+static esp_err_t web_server_api_mqtt_status_handler(httpd_req_t *req)
+{
+    mqtt_gateway_status_t status = {0};
+    mqtt_gateway_get_status(&status);
+
+    char buffer[WEB_SERVER_MQTT_JSON_SIZE];
+    int written = snprintf(buffer,
+                           sizeof(buffer),
+                           "{\"client_started\":%s,\"connected\":%s,\"wifi_connected\":%s,\"reconnects\":%u,\"disconnects\":%u,"
+                           "\"errors\":%u,\"last_event_id\":%u,\"last_event\":\"%s\",\"last_event_timestamp_ms\":%llu,"
+                           "\"broker_uri\":\"%s\",\"status_topic\":\"%s\",\"metrics_topic\":\"%s\",\"config_topic\":\"%s\","
+                           "\"can_raw_topic\":\"%s\",\"can_decoded_topic\":\"%s\",\"can_ready_topic\":\"%s\",\"last_error\":\"%s\"}",
+                           status.client_started ? "true" : "false",
+                           status.connected ? "true" : "false",
+                           status.wifi_connected ? "true" : "false",
+                           (unsigned)status.reconnect_count,
+                           (unsigned)status.disconnect_count,
+                           (unsigned)status.error_count,
+                           (unsigned)status.last_event,
+                           web_server_mqtt_event_to_string(status.last_event),
+                           (unsigned long long)status.last_event_timestamp_ms,
+                           status.broker_uri,
+                           status.status_topic,
+                           status.metrics_topic,
+                           status.config_topic,
+                           status.can_raw_topic,
+                           status.can_decoded_topic,
+                           status.can_ready_topic,
+                           status.last_error);
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT status too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, written);
 }
 
 static esp_err_t web_server_api_history_handler(httpd_req_t *req)
@@ -766,6 +1201,30 @@ void web_server_init(void)
         .user_ctx = NULL,
     };
     httpd_register_uri_handler(s_httpd, &api_config_post);
+
+    const httpd_uri_t api_mqtt_config_get = {
+        .uri = "/api/mqtt/config",
+        .method = HTTP_GET,
+        .handler = web_server_api_mqtt_config_get_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_mqtt_config_get);
+
+    const httpd_uri_t api_mqtt_config_post = {
+        .uri = "/api/mqtt/config",
+        .method = HTTP_POST,
+        .handler = web_server_api_mqtt_config_post_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_mqtt_config_post);
+
+    const httpd_uri_t api_mqtt_status = {
+        .uri = "/api/mqtt/status",
+        .method = HTTP_GET,
+        .handler = web_server_api_mqtt_status_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_mqtt_status);
 
     const httpd_uri_t api_history = {
         .uri = "/api/history",

@@ -11,6 +11,8 @@
 #include "freertos/FreeRTOS.h"
 
 #include "app_events.h"
+#include "app_config.h"
+#include "mqtt_topics.h"
 #include "uart_bms.h"
 
 #ifdef ESP_PLATFORM
@@ -26,12 +28,18 @@
 #define CONFIG_MANAGER_REGISTER_KEY_PREFIX    "reg"
 #define CONFIG_MANAGER_REGISTER_KEY_MAX       16
 
-#define CONFIG_MANAGER_MQTT_URI_KEY       "mqtt_uri"
-#define CONFIG_MANAGER_MQTT_USERNAME_KEY  "mqtt_user"
-#define CONFIG_MANAGER_MQTT_PASSWORD_KEY  "mqtt_pass"
-#define CONFIG_MANAGER_MQTT_KEEPALIVE_KEY "mqtt_keepalive"
-#define CONFIG_MANAGER_MQTT_QOS_KEY       "mqtt_qos"
-#define CONFIG_MANAGER_MQTT_RETAIN_KEY    "mqtt_retain"
+#define CONFIG_MANAGER_MQTT_URI_KEY          "mqtt_uri"
+#define CONFIG_MANAGER_MQTT_USERNAME_KEY     "mqtt_user"
+#define CONFIG_MANAGER_MQTT_PASSWORD_KEY     "mqtt_pass"
+#define CONFIG_MANAGER_MQTT_KEEPALIVE_KEY    "mqtt_keepalive"
+#define CONFIG_MANAGER_MQTT_QOS_KEY          "mqtt_qos"
+#define CONFIG_MANAGER_MQTT_RETAIN_KEY       "mqtt_retain"
+#define CONFIG_MANAGER_MQTT_TOPIC_STATUS_KEY "mqtt_t_stat"
+#define CONFIG_MANAGER_MQTT_TOPIC_MET_KEY    "mqtt_t_met"
+#define CONFIG_MANAGER_MQTT_TOPIC_CFG_KEY    "mqtt_t_cfg"
+#define CONFIG_MANAGER_MQTT_TOPIC_RAW_KEY    "mqtt_t_crw"
+#define CONFIG_MANAGER_MQTT_TOPIC_DEC_KEY    "mqtt_t_cdc"
+#define CONFIG_MANAGER_MQTT_TOPIC_RDY_KEY    "mqtt_t_crd"
 
 #ifndef CONFIG_TINYBMS_MQTT_BROKER_URI
 #define CONFIG_TINYBMS_MQTT_BROKER_URI "mqtt://localhost"
@@ -125,6 +133,9 @@ static mqtt_client_config_t s_mqtt_config = {
     .retain_enabled = CONFIG_MANAGER_MQTT_DEFAULT_RETAIN,
 };
 
+static config_manager_mqtt_topics_t s_mqtt_topics = {0};
+static bool s_mqtt_topics_loaded = false;
+
 static void config_manager_copy_string(char *dest, size_t dest_size, const char *src)
 {
     if (dest == NULL || dest_size == 0) {
@@ -145,6 +156,173 @@ static void config_manager_copy_string(char *dest, size_t dest_size, const char 
         memcpy(dest, src, copy_len);
     }
     dest[copy_len] = '\0';
+}
+
+static void config_manager_copy_topics(config_manager_mqtt_topics_t *dest,
+                                       const config_manager_mqtt_topics_t *src)
+{
+    if (dest == NULL || src == NULL) {
+        return;
+    }
+
+    config_manager_copy_string(dest->status, sizeof(dest->status), src->status);
+    config_manager_copy_string(dest->metrics, sizeof(dest->metrics), src->metrics);
+    config_manager_copy_string(dest->config, sizeof(dest->config), src->config);
+    config_manager_copy_string(dest->can_raw, sizeof(dest->can_raw), src->can_raw);
+    config_manager_copy_string(dest->can_decoded, sizeof(dest->can_decoded), src->can_decoded);
+    config_manager_copy_string(dest->can_ready, sizeof(dest->can_ready), src->can_ready);
+}
+
+static void config_manager_reset_mqtt_topics(void)
+{
+    (void)snprintf(s_mqtt_topics.status,
+                   sizeof(s_mqtt_topics.status),
+                   MQTT_TOPIC_FMT_STATUS,
+                   APP_DEVICE_NAME);
+    (void)snprintf(s_mqtt_topics.metrics,
+                   sizeof(s_mqtt_topics.metrics),
+                   MQTT_TOPIC_FMT_METRICS,
+                   APP_DEVICE_NAME);
+    (void)snprintf(s_mqtt_topics.config,
+                   sizeof(s_mqtt_topics.config),
+                   MQTT_TOPIC_FMT_CONFIG,
+                   APP_DEVICE_NAME);
+    (void)snprintf(s_mqtt_topics.can_raw,
+                   sizeof(s_mqtt_topics.can_raw),
+                   MQTT_TOPIC_FMT_CAN_STREAM,
+                   APP_DEVICE_NAME,
+                   "raw");
+    (void)snprintf(s_mqtt_topics.can_decoded,
+                   sizeof(s_mqtt_topics.can_decoded),
+                   MQTT_TOPIC_FMT_CAN_STREAM,
+                   APP_DEVICE_NAME,
+                   "decoded");
+    (void)snprintf(s_mqtt_topics.can_ready,
+                   sizeof(s_mqtt_topics.can_ready),
+                   MQTT_TOPIC_FMT_CAN_STREAM,
+                   APP_DEVICE_NAME,
+                   "ready");
+}
+
+static void config_manager_sanitise_mqtt_topics(config_manager_mqtt_topics_t *topics)
+{
+    if (topics == NULL) {
+        return;
+    }
+
+    config_manager_copy_string(topics->status, sizeof(topics->status), topics->status);
+    config_manager_copy_string(topics->metrics, sizeof(topics->metrics), topics->metrics);
+    config_manager_copy_string(topics->config, sizeof(topics->config), topics->config);
+    config_manager_copy_string(topics->can_raw, sizeof(topics->can_raw), topics->can_raw);
+    config_manager_copy_string(topics->can_decoded, sizeof(topics->can_decoded), topics->can_decoded);
+    config_manager_copy_string(topics->can_ready, sizeof(topics->can_ready), topics->can_ready);
+}
+
+static void config_manager_ensure_topics_loaded(void)
+{
+    if (!s_mqtt_topics_loaded) {
+        config_manager_reset_mqtt_topics();
+        s_mqtt_topics_loaded = true;
+    }
+}
+
+static void config_manager_lowercase(char *value)
+{
+    if (value == NULL) {
+        return;
+    }
+
+    for (size_t i = 0; value[i] != '\0'; ++i) {
+        value[i] = (char)tolower((unsigned char)value[i]);
+    }
+}
+
+static uint16_t config_manager_default_port_for_scheme(const char *scheme)
+{
+    if (scheme != NULL && strcmp(scheme, "mqtts") == 0) {
+        return 8883U;
+    }
+    return 1883U;
+}
+
+static void config_manager_parse_mqtt_uri(const char *uri,
+                                          char *out_scheme,
+                                          size_t scheme_size,
+                                          char *out_host,
+                                          size_t host_size,
+                                          uint16_t *out_port)
+{
+    if (out_scheme != NULL && scheme_size > 0) {
+        out_scheme[0] = '\0';
+    }
+    if (out_host != NULL && host_size > 0) {
+        out_host[0] = '\0';
+    }
+    if (out_port != NULL) {
+        *out_port = 1883U;
+    }
+
+    char scheme_buffer[16] = "mqtt";
+    const char *authority = uri;
+    if (uri != NULL) {
+        const char *sep = strstr(uri, "://");
+        if (sep != NULL) {
+            size_t len = (size_t)(sep - uri);
+            if (len >= sizeof(scheme_buffer)) {
+                len = sizeof(scheme_buffer) - 1U;
+            }
+            memcpy(scheme_buffer, uri, len);
+            scheme_buffer[len] = '\0';
+            authority = sep + 3;
+        }
+    }
+
+    config_manager_lowercase(scheme_buffer);
+    if (out_scheme != NULL && scheme_size > 0) {
+        config_manager_copy_string(out_scheme, scheme_size, scheme_buffer);
+    }
+
+    uint16_t port = config_manager_default_port_for_scheme(scheme_buffer);
+    if (authority == NULL) {
+        if (out_port != NULL) {
+            *out_port = port;
+        }
+        return;
+    }
+
+    const char *path = strpbrk(authority, "/?");
+    size_t length = (path != NULL) ? (size_t)(path - authority) : strlen(authority);
+    if (length == 0) {
+        if (out_port != NULL) {
+            *out_port = port;
+        }
+        return;
+    }
+
+    char host_buffer[MQTT_CLIENT_MAX_URI_LENGTH];
+    if (length >= sizeof(host_buffer)) {
+        length = sizeof(host_buffer) - 1U;
+    }
+    memcpy(host_buffer, authority, length);
+    host_buffer[length] = '\0';
+
+    char *colon = strrchr(host_buffer, ':');
+    if (colon != NULL) {
+        *colon = '\0';
+        ++colon;
+        char *endptr = NULL;
+        unsigned long parsed = strtoul(colon, &endptr, 10);
+        if (endptr != colon && parsed <= UINT16_MAX) {
+            port = (uint16_t)parsed;
+        }
+    }
+
+    if (out_host != NULL && host_size > 0) {
+        config_manager_copy_string(out_host, host_size, host_buffer);
+    }
+    if (out_port != NULL) {
+        *out_port = port;
+    }
 }
 
 static void config_manager_sanitise_mqtt_config(mqtt_client_config_t *config)
@@ -171,6 +349,8 @@ static void config_manager_sanitise_mqtt_config(mqtt_client_config_t *config)
 #ifdef ESP_PLATFORM
 static void config_manager_load_mqtt_settings_from_nvs(nvs_handle_t handle)
 {
+    config_manager_ensure_topics_loaded();
+
     size_t buffer_size = sizeof(s_mqtt_config.broker_uri);
     esp_err_t err = nvs_get_str(handle, CONFIG_MANAGER_MQTT_URI_KEY, s_mqtt_config.broker_uri, &buffer_size);
     if (err != ESP_OK) {
@@ -213,12 +393,56 @@ static void config_manager_load_mqtt_settings_from_nvs(nvs_handle_t handle)
         s_mqtt_config.retain_enabled = (retain != 0U);
     }
 
+    buffer_size = sizeof(s_mqtt_topics.status);
+    err = nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_STATUS_KEY, s_mqtt_topics.status, &buffer_size);
+    if (err != ESP_OK) {
+        config_manager_reset_mqtt_topics();
+    }
+
+    buffer_size = sizeof(s_mqtt_topics.metrics);
+    if (nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_MET_KEY, s_mqtt_topics.metrics, &buffer_size) != ESP_OK) {
+        config_manager_copy_string(s_mqtt_topics.metrics,
+                                   sizeof(s_mqtt_topics.metrics),
+                                   s_mqtt_topics.metrics);
+    }
+
+    buffer_size = sizeof(s_mqtt_topics.config);
+    if (nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_CFG_KEY, s_mqtt_topics.config, &buffer_size) != ESP_OK) {
+        config_manager_copy_string(s_mqtt_topics.config,
+                                   sizeof(s_mqtt_topics.config),
+                                   s_mqtt_topics.config);
+    }
+
+    buffer_size = sizeof(s_mqtt_topics.can_raw);
+    if (nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_RAW_KEY, s_mqtt_topics.can_raw, &buffer_size) != ESP_OK) {
+        config_manager_copy_string(s_mqtt_topics.can_raw,
+                                   sizeof(s_mqtt_topics.can_raw),
+                                   s_mqtt_topics.can_raw);
+    }
+
+    buffer_size = sizeof(s_mqtt_topics.can_decoded);
+    if (nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_DEC_KEY, s_mqtt_topics.can_decoded, &buffer_size) != ESP_OK) {
+        config_manager_copy_string(s_mqtt_topics.can_decoded,
+                                   sizeof(s_mqtt_topics.can_decoded),
+                                   s_mqtt_topics.can_decoded);
+    }
+
+    buffer_size = sizeof(s_mqtt_topics.can_ready);
+    if (nvs_get_str(handle, CONFIG_MANAGER_MQTT_TOPIC_RDY_KEY, s_mqtt_topics.can_ready, &buffer_size) != ESP_OK) {
+        config_manager_copy_string(s_mqtt_topics.can_ready,
+                                   sizeof(s_mqtt_topics.can_ready),
+                                   s_mqtt_topics.can_ready);
+    }
+
     config_manager_sanitise_mqtt_config(&s_mqtt_config);
+    config_manager_sanitise_mqtt_topics(&s_mqtt_topics);
 }
 #else
 static void config_manager_load_mqtt_settings_from_nvs(void)
 {
+    config_manager_ensure_topics_loaded();
     config_manager_sanitise_mqtt_config(&s_mqtt_config);
+    config_manager_sanitise_mqtt_topics(&s_mqtt_topics);
 }
 #endif
 
@@ -423,6 +647,47 @@ static esp_err_t config_manager_store_mqtt_config_to_nvs(const mqtt_client_confi
     return err;
 }
 
+static esp_err_t config_manager_store_mqtt_topics_to_nvs(const config_manager_mqtt_topics_t *topics)
+{
+    if (topics == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = config_manager_init_nvs();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle = 0;
+    err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_STATUS_KEY, topics->status);
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_MET_KEY, topics->metrics);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_CFG_KEY, topics->config);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_RAW_KEY, topics->can_raw);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_DEC_KEY, topics->can_decoded);
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_TOPIC_RDY_KEY, topics->can_ready);
+    }
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+
+    nvs_close(handle);
+    return err;
+}
+
 static esp_err_t config_manager_store_register_raw(uint16_t address, uint16_t raw_value)
 {
     esp_err_t err = config_manager_init_nvs();
@@ -480,6 +745,12 @@ static bool config_manager_load_register_raw(uint16_t address, uint16_t *out_val
 static esp_err_t config_manager_store_mqtt_config_to_nvs(const mqtt_client_config_t *config)
 {
     (void)config;
+    return ESP_OK;
+}
+
+static esp_err_t config_manager_store_mqtt_topics_to_nvs(const config_manager_mqtt_topics_t *topics)
+{
+    (void)topics;
     return ESP_OK;
 }
 
@@ -555,15 +826,41 @@ static void config_manager_publish_register_change(const config_manager_register
 
 static esp_err_t config_manager_build_config_snapshot(void)
 {
+    config_manager_ensure_topics_loaded();
+
+    char scheme[16];
+    char host[MQTT_CLIENT_MAX_URI_LENGTH];
+    uint16_t port = 0U;
+    config_manager_parse_mqtt_uri(s_mqtt_config.broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
+
     int written = snprintf(s_config_json,
                            sizeof(s_config_json),
                            "{\"device\":\"TinyBMS Gateway\",\"version\":1,\"register_count\":%zu,"
                            "\"uart_poll_interval_ms\":%u,\"uart_poll_interval_min_ms\":%u,"
-                           "\"uart_poll_interval_max_ms\":%u}",
+                           "\"uart_poll_interval_max_ms\":%u,"
+                           "\"mqtt\":{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
+                           "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,"
+                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\",
+                           "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}}",
                            s_register_count,
                            (unsigned)s_uart_poll_interval_ms,
                            (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
-                           (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS);
+                           (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS,
+                           scheme,
+                           s_mqtt_config.broker_uri,
+                           host,
+                           (unsigned)port,
+                           s_mqtt_config.username,
+                           s_mqtt_config.password,
+                           (unsigned)s_mqtt_config.keepalive_seconds,
+                           (unsigned)s_mqtt_config.default_qos,
+                           s_mqtt_config.retain_enabled ? "true" : "false",
+                           s_mqtt_topics.status,
+                           s_mqtt_topics.metrics,
+                           s_mqtt_topics.config,
+                           s_mqtt_topics.can_raw,
+                           s_mqtt_topics.can_decoded,
+                           s_mqtt_topics.can_ready);
     if (written < 0) {
         return ESP_FAIL;
     }
@@ -917,8 +1214,49 @@ esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *conf
     }
 
     s_mqtt_config = updated;
-    config_manager_publish_config_snapshot();
-    return ESP_OK;
+
+    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    if (snapshot_err == ESP_OK) {
+        config_manager_publish_config_snapshot();
+    } else {
+        ESP_LOGW(TAG, "Failed to rebuild configuration snapshot: %s", esp_err_to_name(snapshot_err));
+    }
+    return snapshot_err;
+}
+
+const config_manager_mqtt_topics_t *config_manager_get_mqtt_topics(void)
+{
+    config_manager_ensure_initialised();
+    return &s_mqtt_topics;
+}
+
+esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *topics)
+{
+    if (topics == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    config_manager_ensure_initialised();
+
+    config_manager_mqtt_topics_t updated = s_mqtt_topics;
+    config_manager_copy_topics(&updated, topics);
+    config_manager_sanitise_mqtt_topics(&updated);
+
+    esp_err_t err = config_manager_store_mqtt_topics_to_nvs(&updated);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to persist MQTT topics: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    s_mqtt_topics = updated;
+
+    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    if (snapshot_err == ESP_OK) {
+        config_manager_publish_config_snapshot();
+    } else {
+        ESP_LOGW(TAG, "Failed to rebuild configuration snapshot after topic update: %s", esp_err_to_name(snapshot_err));
+    }
+    return snapshot_err;
 }
 
 esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length)

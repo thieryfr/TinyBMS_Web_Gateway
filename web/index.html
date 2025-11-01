@@ -19,6 +19,7 @@
                 <button class="tab-button" data-tab="can">Temps réel – CAN Bus</button>
                 <button class="tab-button" data-tab="history">Historique</button>
                 <button class="tab-button" data-tab="config">Configuration</button>
+                <button class="tab-button" data-tab="mqtt">MQTT</button>
             </nav>
         </header>
         <main>
@@ -128,6 +129,83 @@
                     <p id="config-status" role="status">Chargement des registres…</p>
                 </div>
                 <div id="config-registers" class="config-grid" role="form"></div>
+            </section>
+            <section id="tab-mqtt" class="tab-panel" aria-labelledby="MQTT">
+                <div class="mqtt-layout">
+                    <article class="status-card">
+                        <h2>État de la passerelle MQTT</h2>
+                        <div class="status-indicator">
+                            <span id="mqtt-connection-state" class="status-badge">--</span>
+                            <span id="mqtt-last-error" class="status-helper">Aucune erreur</span>
+                        </div>
+                        <dl class="status-kv">
+                            <div><dt>Client</dt><dd id="mqtt-client-started">--</dd></div>
+                            <div><dt>Wi-Fi</dt><dd id="mqtt-wifi-state">--</dd></div>
+                            <div><dt>Reconnexions</dt><dd id="mqtt-reconnect-count">0</dd></div>
+                            <div><dt>Déconnexions</dt><dd id="mqtt-disconnect-count">0</dd></div>
+                            <div><dt>Erreurs</dt><dd id="mqtt-error-count">0</dd></div>
+                            <div><dt>Dernier événement</dt><dd id="mqtt-last-event">--</dd></div>
+                            <div><dt>Horodatage</dt><dd id="mqtt-last-event-time">--</dd></div>
+                        </dl>
+                    </article>
+                    <article class="config-card">
+                        <h2>Configuration de la connexion</h2>
+                        <form id="mqtt-config-form" class="mqtt-form">
+                            <div class="form-row">
+                                <label for="mqtt-scheme">Schéma</label>
+                                <select id="mqtt-scheme" name="scheme">
+                                    <option value="mqtt">mqtt</option>
+                                    <option value="mqtts">mqtts</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-host">Hôte</label>
+                                <input id="mqtt-host" name="host" type="text" required>
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-port">Port</label>
+                                <input id="mqtt-port" name="port" type="number" min="1" max="65535" required>
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-username">Utilisateur</label>
+                                <input id="mqtt-username" name="username" type="text">
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-password">Mot de passe</label>
+                                <input id="mqtt-password" name="password" type="password">
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-keepalive">Keepalive (s)</label>
+                                <input id="mqtt-keepalive" name="keepalive" type="number" min="0">
+                            </div>
+                            <div class="form-row">
+                                <label for="mqtt-qos">QoS par défaut</label>
+                                <input id="mqtt-qos" name="default_qos" type="number" min="0" max="2">
+                            </div>
+                            <div class="form-row checkbox">
+                                <label for="mqtt-retain">Retenir l'état</label>
+                                <input id="mqtt-retain" name="retain" type="checkbox">
+                            </div>
+                            <fieldset class="topic-group">
+                                <legend>Topics personnalisés</legend>
+                                <label for="mqtt-status-topic">Statut</label>
+                                <input id="mqtt-status-topic" name="status_topic" type="text">
+                                <label for="mqtt-metrics-topic">Mesures</label>
+                                <input id="mqtt-metrics-topic" name="metrics_topic" type="text">
+                                <label for="mqtt-config-topic">Configuration</label>
+                                <input id="mqtt-config-topic" name="config_topic" type="text">
+                                <label for="mqtt-can-raw-topic">CAN brut</label>
+                                <input id="mqtt-can-raw-topic" name="can_raw_topic" type="text">
+                                <label for="mqtt-can-decoded-topic">CAN décodé</label>
+                                <input id="mqtt-can-decoded-topic" name="can_decoded_topic" type="text">
+                                <label for="mqtt-can-ready-topic">CAN prêts</label>
+                                <input id="mqtt-can-ready-topic" name="can_ready_topic" type="text">
+                            </fieldset>
+                            <button type="submit">Enregistrer la configuration</button>
+                            <p id="mqtt-config-message" role="status" aria-live="polite"></p>
+                        </form>
+                    </article>
+                </div>
             </section>
         </main>
     </div>

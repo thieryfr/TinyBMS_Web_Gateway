@@ -1,9 +1,16 @@
+const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
+
 const state = {
     telemetry: null,
     history: [],
     historyLimit: 120,
     registers: new Map(),
     chart: null,
+    mqtt: {
+        statusInterval: null,
+        lastStatus: null,
+        lastConfig: null,
+    },
 };
 
 class HistoryChart {
@@ -105,6 +112,9 @@ function setActiveTab(tabId) {
     document.querySelectorAll('.tab-panel').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `tab-${tabId}`);
     });
+    if (tabId === 'mqtt') {
+        refreshMqttData(true);
+    }
 }
 
 function updateBatteryView(data) {
@@ -464,16 +474,301 @@ function setupHistoryControls() {
     });
 }
 
+function setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function populateMqttForm(config) {
+    if (!config) {
+        return;
+    }
+
+    state.mqtt.lastConfig = config;
+    const topics = config.topics || {};
+
+    const setValue = (id, value) => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.value = value ?? '';
+        }
+    };
+
+    setValue('mqtt-scheme', config.scheme || 'mqtt');
+    setValue('mqtt-host', config.host || '');
+    setValue('mqtt-port', config.port != null ? String(config.port) : '');
+    setValue('mqtt-username', config.username || '');
+    setValue('mqtt-password', config.password || '');
+    setValue('mqtt-keepalive', config.keepalive != null ? String(config.keepalive) : '');
+    setValue('mqtt-qos', config.default_qos != null ? String(config.default_qos) : '');
+
+    const retainInput = document.getElementById('mqtt-retain');
+    if (retainInput) {
+        retainInput.checked = Boolean(config.retain);
+    }
+
+    setValue('mqtt-status-topic', topics.status || '');
+    setValue('mqtt-metrics-topic', topics.metrics || '');
+    setValue('mqtt-config-topic', topics.config || '');
+    setValue('mqtt-can-raw-topic', topics.can_raw || '');
+    setValue('mqtt-can-decoded-topic', topics.can_decoded || '');
+    setValue('mqtt-can-ready-topic', topics.can_ready || '');
+
+    displayMqttMessage('');
+}
+
+function displayMqttMessage(message, isError = false) {
+    const element = document.getElementById('mqtt-config-message');
+    if (!element) {
+        return;
+    }
+    element.textContent = message;
+    element.classList.toggle('error', Boolean(isError && message));
+    element.classList.toggle('success', Boolean(!isError && message));
+}
+
+function buildMqttPayload(form) {
+    const payload = {
+        scheme: form.scheme?.value || 'mqtt',
+        host: form.host?.value?.trim() || '',
+        port: Number.parseInt(form.port?.value, 10) || 0,
+        username: form.username?.value?.trim() || '',
+        password: form.password?.value || '',
+        retain: form.retain?.checked || false,
+        status_topic: form.status_topic?.value?.trim() || '',
+        metrics_topic: form.metrics_topic?.value?.trim() || '',
+        config_topic: form.config_topic?.value?.trim() || '',
+        can_raw_topic: form.can_raw_topic?.value?.trim() || '',
+        can_decoded_topic: form.can_decoded_topic?.value?.trim() || '',
+        can_ready_topic: form.can_ready_topic?.value?.trim() || '',
+    };
+
+    const keepalive = Number.parseInt(form.keepalive?.value, 10);
+    if (!Number.isNaN(keepalive)) {
+        payload.keepalive = keepalive;
+    }
+
+    const qos = Number.parseInt(form.default_qos?.value, 10);
+    if (!Number.isNaN(qos)) {
+        payload.default_qos = qos;
+    }
+
+    return payload;
+}
+
+async function fetchMqttConfig() {
+    const response = await fetch('/api/mqtt/config', { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error('MQTT config request failed');
+    }
+    const config = await response.json();
+    populateMqttForm(config);
+}
+
+async function fetchMqttStatus() {
+    const response = await fetch('/api/mqtt/status', { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error('MQTT status request failed');
+    }
+    const status = await response.json();
+    updateMqttStatus(status);
+}
+
+function updateMqttStatus(status, error) {
+    const badge = document.getElementById('mqtt-connection-state');
+    const helper = document.getElementById('mqtt-last-error');
+    if (!badge || !helper) {
+        return;
+    }
+
+    badge.className = 'status-badge';
+    helper.classList.remove('error');
+
+    const resetFields = () => {
+        setElementText('mqtt-client-started', '--');
+        setElementText('mqtt-wifi-state', '--');
+        setElementText('mqtt-reconnect-count', '--');
+        setElementText('mqtt-disconnect-count', '--');
+        setElementText('mqtt-error-count', '--');
+        setElementText('mqtt-last-event', '--');
+        setElementText('mqtt-last-event-time', '--');
+    };
+
+    if (error) {
+        resetFields();
+        badge.textContent = 'Inconnu';
+        badge.classList.add('status-badge--error');
+        helper.textContent = 'Statut indisponible';
+        helper.classList.add('error');
+        return;
+    }
+
+    if (!status) {
+        resetFields();
+        badge.textContent = 'Inconnu';
+        badge.classList.add('status-badge--disconnected');
+        helper.textContent = 'Aucune donnée';
+        return;
+    }
+
+    state.mqtt.lastStatus = status;
+
+    if (status.connected) {
+        badge.textContent = 'Connecté';
+        badge.classList.add('status-badge--connected');
+    } else if (status.client_started) {
+        badge.textContent = 'Déconnecté';
+        badge.classList.add('status-badge--disconnected');
+    } else {
+        badge.textContent = 'Arrêté';
+        badge.classList.add('status-badge--error');
+    }
+
+    const lastError = status.last_error || '';
+    if (lastError) {
+        helper.textContent = lastError;
+        helper.classList.add('error');
+    } else {
+        helper.textContent = 'Aucune erreur récente';
+    }
+
+    setElementText('mqtt-client-started', status.client_started ? 'Actif' : 'Arrêté');
+    setElementText('mqtt-wifi-state', status.wifi_connected ? 'Connecté' : 'Déconnecté');
+    setElementText('mqtt-reconnect-count', String(status.reconnects ?? 0));
+    setElementText('mqtt-disconnect-count', String(status.disconnects ?? 0));
+    setElementText('mqtt-error-count', String(status.errors ?? 0));
+    setElementText('mqtt-last-event', status.last_event || '--');
+
+    const timestamp = Number(status.last_event_timestamp_ms);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+        setElementText('mqtt-last-event-time', new Date(timestamp).toLocaleString());
+    } else {
+        setElementText('mqtt-last-event-time', '--');
+    }
+}
+
+function refreshMqttData(forceConfig = false) {
+    fetchMqttStatus().catch((statusError) => {
+        console.error('Failed to refresh MQTT status', statusError);
+        updateMqttStatus(null, statusError);
+    });
+
+    if (forceConfig || state.mqtt.lastConfig == null) {
+        fetchMqttConfig().catch((configError) => {
+            console.error('Failed to refresh MQTT config', configError);
+            displayMqttMessage('Impossible de charger la configuration MQTT.', true);
+        });
+    }
+}
+
+function startMqttStatusPolling() {
+    if (state.mqtt.statusInterval != null) {
+        return;
+    }
+    state.mqtt.statusInterval = window.setInterval(() => {
+        fetchMqttStatus().catch((error) => {
+            console.error('MQTT status poll failed', error);
+            updateMqttStatus(null, error);
+        });
+    }, MQTT_STATUS_POLL_INTERVAL_MS);
+}
+
+function stopMqttStatusPolling() {
+    if (state.mqtt.statusInterval != null) {
+        window.clearInterval(state.mqtt.statusInterval);
+        state.mqtt.statusInterval = null;
+    }
+}
+
+async function handleMqttSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+        return;
+    }
+
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+
+    displayMqttMessage('Enregistrement de la configuration…');
+
+    try {
+        const payload = buildMqttPayload(form);
+        const response = await fetch('/api/mqtt/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const errorText = (await response.text()) || 'MQTT config update failed';
+            throw new Error(errorText);
+        }
+
+        await Promise.all([
+            fetchMqttConfig(),
+            fetchMqttStatus().catch((error) => {
+                console.error('Failed to refresh MQTT status after update', error);
+                updateMqttStatus(null, error);
+            }),
+        ]);
+
+        displayMqttMessage('Configuration MQTT mise à jour.', false);
+    } catch (error) {
+        console.error('MQTT configuration update failed', error);
+        const message = error instanceof Error ? error.message : 'Échec de la mise à jour MQTT';
+        displayMqttMessage(`Échec de l’enregistrement: ${message}`, true);
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+}
+
+function setupMqttTab() {
+    const form = document.getElementById('mqtt-config-form');
+    if (form instanceof HTMLFormElement) {
+        form.addEventListener('submit', handleMqttSubmit);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopMqttStatusPolling();
+        } else {
+            refreshMqttData();
+            startMqttStatusPolling();
+        }
+    });
+}
+
 async function initialise() {
     setupTabs();
     setupHistoryControls();
+    setupMqttTab();
     state.chart = new HistoryChart(document.getElementById('history-chart'));
 
     try {
-        await Promise.all([fetchStatus(), fetchHistory(state.historyLimit), fetchRegisters()]);
+        await Promise.all([
+            fetchStatus(),
+            fetchHistory(state.historyLimit),
+            fetchRegisters(),
+            fetchMqttConfig().catch((error) => {
+                console.error('Failed to load MQTT config', error);
+                displayMqttMessage('Impossible de charger la configuration MQTT.', true);
+            }),
+            fetchMqttStatus().catch((error) => {
+                console.error('Failed to load MQTT status', error);
+                updateMqttStatus(null, error);
+            }),
+        ]);
     } catch (error) {
         console.error('Initialisation failed', error);
     }
+
+    startMqttStatusPolling();
 
     connectWebSocket('/ws/telemetry', handleTelemetryMessage);
     connectWebSocket('/ws/events', handleEventMessage);
@@ -481,4 +776,5 @@ async function initialise() {
     connectWebSocket('/ws/can', handleCanMessage);
 }
 
+window.addEventListener('beforeunload', stopMqttStatusPolling);
 window.addEventListener('DOMContentLoaded', initialise);

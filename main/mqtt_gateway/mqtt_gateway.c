@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 #include "app_config.h"
@@ -25,6 +26,7 @@
 #ifdef ESP_PLATFORM
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #else
 #ifndef ESP_LOGI
 #define ESP_LOGI(tag, fmt, ...) (void)(tag), (void)(fmt)
@@ -40,19 +42,76 @@ static const char *TAG = "mqtt_gateway";
 typedef struct {
     event_bus_subscription_handle_t subscription;
     TaskHandle_t task;
+    SemaphoreHandle_t lock;
     mqtt_client_config_t config;
     bool config_valid;
     bool mqtt_started;
     bool wifi_connected;
-    char status_topic[96];
-    char metrics_topic[96];
-    char can_raw_topic[96];
-    char can_decoded_topic[96];
-    char can_ready_topic[96];
-    char config_topic[96];
+    bool connected;
+    uint32_t reconnect_count;
+    uint32_t disconnect_count;
+    uint32_t error_count;
+    mqtt_client_event_id_t last_event;
+    int64_t last_event_timestamp_us;
+    char last_error[96];
+    char status_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char metrics_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_raw_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_decoded_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_ready_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char config_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
 } mqtt_gateway_ctx_t;
 
 static mqtt_gateway_ctx_t s_gateway = {0};
+
+static bool mqtt_gateway_lock_ctx(TickType_t timeout)
+{
+    if (s_gateway.lock == NULL) {
+        return false;
+    }
+    return xSemaphoreTake(s_gateway.lock, timeout) == pdTRUE;
+}
+
+static void mqtt_gateway_unlock_ctx(void)
+{
+    if (s_gateway.lock != NULL) {
+        (void)xSemaphoreGive(s_gateway.lock);
+    }
+}
+
+static void mqtt_gateway_set_topic(char *dest, size_t dest_size, const char *value, const char *fallback)
+{
+    if (dest == NULL || dest_size == 0) {
+        return;
+    }
+
+    const char *source = (value != NULL && value[0] != '\0') ? value : fallback;
+    if (source == NULL) {
+        dest[0] = '\0';
+        return;
+    }
+
+    size_t len = strlen(source);
+    if (len >= dest_size) {
+        len = dest_size - 1U;
+    }
+    memcpy(dest, source, len);
+    dest[len] = '\0';
+}
+
+static void mqtt_gateway_load_topics(void);
+static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error);
+static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *context);
+
+static const mqtt_client_event_listener_t s_mqtt_listener = {
+    .callback = mqtt_gateway_on_mqtt_event,
+    .context = NULL,
+};
+
+const mqtt_client_event_listener_t *mqtt_gateway_get_event_listener(void)
+{
+    return &s_mqtt_listener;
+}
 
 #ifdef ESP_PLATFORM
 static const char *mqtt_gateway_err_to_name(esp_err_t err)
@@ -120,8 +179,21 @@ static void mqtt_gateway_publish_status(const event_bus_event_t *event)
         return;
     }
 
-    bool retain = s_gateway.config.retain_enabled && MQTT_TOPIC_STATUS_RETAIN;
-    mqtt_gateway_publish(s_gateway.status_topic,
+    char topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    bool retain_flag = false;
+    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(10))) {
+        strncpy(topic, s_gateway.status_topic, sizeof(topic));
+        topic[sizeof(topic) - 1U] = '\0';
+        retain_flag = s_gateway.config.retain_enabled;
+        mqtt_gateway_unlock_ctx();
+    } else {
+        strncpy(topic, s_gateway.status_topic, sizeof(topic));
+        topic[sizeof(topic) - 1U] = '\0';
+        retain_flag = s_gateway.config.retain_enabled;
+    }
+
+    bool retain = retain_flag && MQTT_TOPIC_STATUS_RETAIN;
+    mqtt_gateway_publish(topic,
                          event->payload,
                          length,
                          MQTT_TOPIC_STATUS_QOS,
@@ -210,27 +282,165 @@ static void mqtt_gateway_publish_can_ready(const can_publisher_frame_t *frame)
                          MQTT_TOPIC_CAN_QOS,
                          MQTT_TOPIC_CAN_RETAIN);
 }
+static void mqtt_gateway_load_topics(void)
+{
+    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
+
+    char fallback_status[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_metrics[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_config[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_can_raw[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_can_decoded[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_can_ready[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+
+    (void)snprintf(fallback_status, sizeof(fallback_status), MQTT_TOPIC_FMT_STATUS, APP_DEVICE_NAME);
+    (void)snprintf(fallback_metrics, sizeof(fallback_metrics), MQTT_TOPIC_FMT_METRICS, APP_DEVICE_NAME);
+    (void)snprintf(fallback_config, sizeof(fallback_config), MQTT_TOPIC_FMT_CONFIG, APP_DEVICE_NAME);
+    (void)snprintf(fallback_can_raw, sizeof(fallback_can_raw), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "raw");
+    (void)snprintf(fallback_can_decoded, sizeof(fallback_can_decoded), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "decoded");
+    (void)snprintf(fallback_can_ready, sizeof(fallback_can_ready), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "ready");
+
+    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        return;
+    }
+static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error)
+{
+    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        return;
+    }
+
+    s_gateway.last_event = id;
+#if defined(ESP_PLATFORM)
+    s_gateway.last_event_timestamp_us = esp_timer_get_time();
+#else
+    s_gateway.last_event_timestamp_us = 0;
+#endif
+
+    switch (id) {
+        case MQTT_CLIENT_EVENT_CONNECTED:
+            s_gateway.connected = true;
+            s_gateway.reconnect_count += 1U;
+            if (error == NULL) {
+                s_gateway.last_error[0] = ' ';
+            }
+            break;
+        case MQTT_CLIENT_EVENT_DISCONNECTED:
+            s_gateway.connected = false;
+            s_gateway.disconnect_count += 1U;
+            break;
+        case MQTT_CLIENT_EVENT_ERROR:
+            s_gateway.error_count += 1U;
+            break;
+        default:
+            break;
+    }
+
+    if (error != NULL) {
+        size_t len = strlen(error);
+        if (len >= sizeof(s_gateway.last_error)) {
+            len = sizeof(s_gateway.last_error) - 1U;
+        }
+        memcpy(s_gateway.last_error, error, len);
+        s_gateway.last_error[len] = ' ';
+    }
+
+    mqtt_gateway_unlock_ctx();
+}
+
+static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *context)
+{
+    (void)context;
+    if (event == NULL) {
+        return;
+    }
+
+    const char *message = NULL;
+    switch (event->id) {
+        case MQTT_CLIENT_EVENT_CONNECTED:
+            message = NULL;
+            break;
+        case MQTT_CLIENT_EVENT_DISCONNECTED:
+            message = "MQTT client disconnected";
+            break;
+        case MQTT_CLIENT_EVENT_ERROR:
+            message = "MQTT client error";
+            break;
+        default:
+            message = NULL;
+            break;
+    }
+
+    mqtt_gateway_record_event(event->id, message);
+}
+
+
+    mqtt_gateway_set_topic(s_gateway.status_topic,
+                           sizeof(s_gateway.status_topic),
+                           topics != NULL ? topics->status : NULL,
+                           fallback_status);
+    mqtt_gateway_set_topic(s_gateway.metrics_topic,
+                           sizeof(s_gateway.metrics_topic),
+                           topics != NULL ? topics->metrics : NULL,
+                           fallback_metrics);
+    mqtt_gateway_set_topic(s_gateway.config_topic,
+                           sizeof(s_gateway.config_topic),
+                           topics != NULL ? topics->config : NULL,
+                           fallback_config);
+    mqtt_gateway_set_topic(s_gateway.can_raw_topic,
+                           sizeof(s_gateway.can_raw_topic),
+                           topics != NULL ? topics->can_raw : NULL,
+                           fallback_can_raw);
+    mqtt_gateway_set_topic(s_gateway.can_decoded_topic,
+                           sizeof(s_gateway.can_decoded_topic),
+                           topics != NULL ? topics->can_decoded : NULL,
+                           fallback_can_decoded);
+    mqtt_gateway_set_topic(s_gateway.can_ready_topic,
+                           sizeof(s_gateway.can_ready_topic),
+                           topics != NULL ? topics->can_ready : NULL,
+                           fallback_can_ready);
+
+    mqtt_gateway_unlock_ctx();
+}
+
 
 static void mqtt_gateway_stop_client(void)
 {
-    if (!s_gateway.mqtt_started) {
+    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        return;
+    }
+
+    bool was_started = s_gateway.mqtt_started;
+    if (was_started) {
+        s_gateway.mqtt_started = false;
+    }
+    mqtt_gateway_unlock_ctx();
+
+    if (!was_started) {
         return;
     }
 
     mqtt_client_stop();
-    s_gateway.mqtt_started = false;
     ESP_LOGI(TAG, "MQTT client stopped");
 }
 
 static void mqtt_gateway_start_client(void)
 {
-    if (s_gateway.mqtt_started) {
+    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        if (s_gateway.mqtt_started) {
+            mqtt_gateway_unlock_ctx();
+            return;
+        }
+        mqtt_gateway_unlock_ctx();
+    } else {
         return;
     }
 
     esp_err_t err = mqtt_client_start();
     if (err == ESP_OK) {
-        s_gateway.mqtt_started = true;
+        if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+            s_gateway.mqtt_started = true;
+            mqtt_gateway_unlock_ctx();
+        }
         ESP_LOGI(TAG, "MQTT client started");
     } else if (err == ESP_ERR_INVALID_STATE) {
         ESP_LOGW(TAG, "MQTT client start requested before configuration complete");
@@ -247,14 +457,21 @@ static void mqtt_gateway_reload_config(bool restart_client)
         return;
     }
 
-    s_gateway.config = *cfg;
-    s_gateway.config_valid = true;
+    mqtt_client_config_t snapshot = *cfg;
 
-    esp_err_t err = mqtt_client_apply_configuration(cfg);
+    esp_err_t err = mqtt_client_apply_configuration(&snapshot);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to apply MQTT configuration: %s", mqtt_gateway_err_to_name(err));
         return;
     }
+
+    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        s_gateway.config = snapshot;
+        s_gateway.config_valid = true;
+        mqtt_gateway_unlock_ctx();
+    }
+
+    mqtt_gateway_load_topics();
 
     if (restart_client) {
         if (s_gateway.mqtt_started) {
@@ -268,12 +485,18 @@ static void mqtt_gateway_handle_wifi_event(app_event_id_t id)
 {
     switch (id) {
         case APP_EVENT_ID_WIFI_STA_GOT_IP:
-            s_gateway.wifi_connected = true;
+            if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+                s_gateway.wifi_connected = true;
+                mqtt_gateway_unlock_ctx();
+            }
             mqtt_gateway_start_client();
             break;
         case APP_EVENT_ID_WIFI_STA_DISCONNECTED:
         case APP_EVENT_ID_WIFI_STA_LOST_IP:
-            s_gateway.wifi_connected = false;
+            if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+                s_gateway.wifi_connected = false;
+                mqtt_gateway_unlock_ctx();
+            }
             mqtt_gateway_stop_client();
             break;
         default:
@@ -317,6 +540,41 @@ static void mqtt_gateway_handle_event(const event_bus_event_t *event)
     }
 }
 
+void mqtt_gateway_get_status(mqtt_gateway_status_t *status)
+{
+    if (status == NULL) {
+        return;
+    }
+
+    memset(status, 0, sizeof(*status));
+
+    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        return;
+    }
+
+    status->client_started = s_gateway.mqtt_started;
+    status->connected = s_gateway.connected;
+    status->wifi_connected = s_gateway.wifi_connected;
+    status->reconnect_count = s_gateway.reconnect_count;
+    status->disconnect_count = s_gateway.disconnect_count;
+    status->error_count = s_gateway.error_count;
+    status->last_event = s_gateway.last_event;
+    status->last_event_timestamp_ms = (s_gateway.last_event_timestamp_us >= 0)
+                                         ? (uint64_t)(s_gateway.last_event_timestamp_us / 1000)
+                                         : 0;
+
+    strncpy(status->broker_uri, s_gateway.config.broker_uri, sizeof(status->broker_uri) - 1U);
+    strncpy(status->status_topic, s_gateway.status_topic, sizeof(status->status_topic) - 1U);
+    strncpy(status->metrics_topic, s_gateway.metrics_topic, sizeof(status->metrics_topic) - 1U);
+    strncpy(status->config_topic, s_gateway.config_topic, sizeof(status->config_topic) - 1U);
+    strncpy(status->can_raw_topic, s_gateway.can_raw_topic, sizeof(status->can_raw_topic) - 1U);
+    strncpy(status->can_decoded_topic, s_gateway.can_decoded_topic, sizeof(status->can_decoded_topic) - 1U);
+    strncpy(status->can_ready_topic, s_gateway.can_ready_topic, sizeof(status->can_ready_topic) - 1U);
+    strncpy(status->last_error, s_gateway.last_error, sizeof(status->last_error) - 1U);
+
+    mqtt_gateway_unlock_ctx();
+}
+
 static void mqtt_gateway_event_task(void *context)
 {
     (void)context;
@@ -336,7 +594,20 @@ static void mqtt_gateway_event_task(void *context)
 
 void mqtt_gateway_init(void)
 {
-    mqtt_gateway_format_topics(APP_DEVICE_NAME);
+    s_gateway.lock = xSemaphoreCreateMutex();
+    if (s_gateway.lock == NULL) {
+        ESP_LOGW(TAG, "Unable to create MQTT gateway mutex");
+        return;
+    }
+
+    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        s_gateway.last_event = MQTT_CLIENT_EVENT_DISCONNECTED;
+        s_gateway.last_event_timestamp_us = 0;
+        s_gateway.last_error[0] = '\0';
+        mqtt_gateway_unlock_ctx();
+    }
+
+    mqtt_gateway_load_topics();
     mqtt_gateway_reload_config(false);
 
     s_gateway.subscription = event_bus_subscribe(16, NULL, NULL);
@@ -353,6 +624,18 @@ void mqtt_gateway_init(void)
 }
 
 #else
+
+const mqtt_client_event_listener_t *mqtt_gateway_get_event_listener(void)
+{
+    return NULL;
+}
+
+void mqtt_gateway_get_status(mqtt_gateway_status_t *status)
+{
+    if (status != NULL) {
+        memset(status, 0, sizeof(*status));
+    }
+}
 
 void mqtt_gateway_init(void)
 {
