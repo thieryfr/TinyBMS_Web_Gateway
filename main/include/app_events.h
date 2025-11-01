@@ -12,6 +12,8 @@ extern "C" {
 typedef enum {
     /** JSON encoded telemetry samples emitted by the monitoring module. */
     APP_EVENT_ID_TELEMETRY_SAMPLE = 0x1000,
+    /** Aggregated TinyBMS metrics ready for MQTT publishing. */
+    APP_EVENT_ID_MQTT_METRICS = 0x1004,
     /** Human readable notification message for the UI event feed. */
     APP_EVENT_ID_UI_NOTIFICATION = 0x1001,
     /** Configuration has been updated through the REST API. */

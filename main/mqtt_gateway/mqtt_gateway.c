@@ -18,6 +18,7 @@
 #include "event_bus.h"
 #include "mqtt_client.h"
 #include "mqtt_topics.h"
+#include "tiny_mqtt_publisher.h"
 
 #ifndef CONFIG_TINYBMS_MQTT_ENABLE
 #define CONFIG_TINYBMS_MQTT_ENABLE 0
@@ -198,6 +199,26 @@ static void mqtt_gateway_publish_status(const event_bus_event_t *event)
                          length,
                          MQTT_TOPIC_STATUS_QOS,
                          retain);
+}
+
+static void mqtt_gateway_publish_metrics_message(const tiny_mqtt_publisher_message_t *message)
+{
+    if (message == NULL || message->payload == NULL || message->payload_length == 0U) {
+        return;
+    }
+
+    int qos = message->qos;
+    if (qos < 0) {
+        qos = 0;
+    } else if (qos > 2) {
+        qos = 2;
+    }
+
+    mqtt_gateway_publish(s_gateway.metrics_topic,
+                         message->payload,
+                         message->payload_length,
+                         qos,
+                         message->retain);
 }
 
 static void mqtt_gateway_publish_config(const event_bus_event_t *event)
@@ -471,6 +492,13 @@ static void mqtt_gateway_reload_config(bool restart_client)
         mqtt_gateway_unlock_ctx();
     }
 
+    tiny_mqtt_publisher_config_t metrics_cfg = {
+        .publish_interval_ms = TINY_MQTT_PUBLISH_INTERVAL_KEEP,
+        .qos = (int)snapshot.default_qos,
+        .retain = MQTT_TOPIC_METRICS_RETAIN,
+    };
+    tiny_mqtt_publisher_apply_config(&metrics_cfg);
+
     mqtt_gateway_load_topics();
 
     if (restart_client) {
@@ -513,6 +541,13 @@ static void mqtt_gateway_handle_event(const event_bus_event_t *event)
     switch (event->id) {
         case APP_EVENT_ID_TELEMETRY_SAMPLE:
             mqtt_gateway_publish_status(event);
+            break;
+        case APP_EVENT_ID_MQTT_METRICS:
+            if (event->payload != NULL && event->payload_size == sizeof(tiny_mqtt_publisher_message_t)) {
+                const tiny_mqtt_publisher_message_t *message =
+                    (const tiny_mqtt_publisher_message_t *)event->payload;
+                mqtt_gateway_publish_metrics_message(message);
+            }
             break;
         case APP_EVENT_ID_CONFIG_UPDATED:
             mqtt_gateway_publish_config(event);

@@ -9,8 +9,10 @@
 #include "config_manager.h"
 #include "mqtt_client.h"
 #include "mqtt_gateway.h"
+#include "tiny_mqtt_publisher.h"
 #include "monitoring.h"
 #include "wifi.h"
+#include "mqtt_topics.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -28,8 +30,19 @@ void app_main(void)
     mqtt_client_set_event_publisher(publish_hook);
     wifi_set_event_publisher(publish_hook);
     monitoring_set_event_publisher(publish_hook);
+    tiny_mqtt_publisher_set_event_publisher(publish_hook);
 
     config_manager_init();
+    const mqtt_client_config_t *mqtt_cfg = config_manager_get_mqtt_client_config();
+    tiny_mqtt_publisher_config_t metrics_cfg = {
+        .publish_interval_ms = 1000U,
+        .qos = MQTT_TOPIC_METRICS_QOS,
+        .retain = MQTT_TOPIC_METRICS_RETAIN,
+    };
+    if (mqtt_cfg != NULL) {
+        metrics_cfg.qos = mqtt_cfg->default_qos;
+    }
+    tiny_mqtt_publisher_init(&metrics_cfg);
     wifi_init();
     uart_bms_init();
     can_victron_init();
