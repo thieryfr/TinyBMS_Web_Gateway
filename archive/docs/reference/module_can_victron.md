@@ -32,6 +32,7 @@ Les broches `CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO` (par défaut `GPIO7`) et
 la paire CAN1H/CAN1L du connecteur principal de la carte ESP32-CAN-X2, en
 alignement avec l'exemple de passerelle CAN officiel qui épingle TWAI sur
 ces GPIO.【F:main/Kconfig.projbuild†L226-L241】【F:archive/docs/reference/board_pinout_esp32_can_x2.md†L1-L26】
+la paire CAN1H/CAN1L du connecteur principal de la carte ESP32-CAN-X2.【F:main/Kconfig.projbuild†L226-L241】【F:archive/docs/reference/board_pinout_esp32_can_x2.md†L1-L18】
 
 ## Initialisation
 1. `can_victron_set_event_publisher()` stocke la fonction de publication.
