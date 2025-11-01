@@ -1,0 +1,43 @@
+{
+  "$schema": "https://tinybms-web-gateway.local/schemas/ota-manifest.schema.json",
+  "schema_version": 1,
+  "product": {
+    "name": "TinyBMS Web Gateway",
+    "hardware": "esp32",
+    "description": "OTA manifest describing firmware deployment targets.",
+    "maintainer": "TinyBMS Team"
+  },
+  "deployment": {
+    "default_protocols": [
+      "mqtt",
+      "https"
+    ],
+    "channels": {
+      "mqtt": {
+        "broker": "mqtts://broker.example.com:8883",
+        "topic": "tinybms/gateway/ota",
+        "qos": 1,
+        "client_id": "tinybms-gateway-updater",
+        "keepalive": 60
+      },
+      "https": {
+        "url": "https://ota.example.com/api/v1/firmware",
+        "method": "PUT",
+        "headers": {
+          "Authorization": "Bearer <token>"
+        },
+        "timeout": 30
+      }
+    }
+  },
+  "documentation": {
+    "schema": "docs/ota.md"
+  },
+  "versions": [
+    {
+      "id": "0.0.1",
+      "label": "Example firmware entry included with the repository",
+      "manifest": "versions/0.0.1/ota.json"
+    }
+  ]
+}
