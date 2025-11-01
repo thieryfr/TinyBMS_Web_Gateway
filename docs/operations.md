@@ -95,12 +95,12 @@ Se référer au plan `docs/testing/validation_plan.md` pour les scénarios :
 ### Procédure OTA
 1. Publier l'image `tinybms-web-gateway.bin` sur le serveur OTA sécurisé (`ota.tinybms.lan`) avec un numéro de version incrémental.
 2. Mettre à jour le manifeste OTA (`ota/manifest.json`) en ajoutant la nouvelle entrée (hash SHA256, version, URL binaire).
-3. Déclencher la campagne via l'orchestrateur (`tools/ota/deploy.py --group production --version X.Y.Z`).
+3. Déclencher la campagne via l'orchestrateur (`python tools/ota/deploy.py --manifest ota/manifest.json --version X.Y.Z`). Utiliser `--transport mqtt` et/ou `--transport https` pour cibler un canal spécifique lors d'un déploiement partiel.
 4. Surveiller la télémétrie (`mqtt_bms/#/ota`) pour confirmer la progression (<5 % d'échecs attendus).
 
 ### Plan de rollback
 - Conserver la version précédente disponible dans le manifeste et marquée `fallback`.
-- En cas d'erreur >5 % ou bug critique, exécuter `deploy.py --group production --version <précédente>` dans la même fenêtre.
+- En cas d'erreur >5 % ou bug critique, relancer `python tools/ota/deploy.py --manifest ota/manifest.json --version <précédente>` pour réinstaller la version précédente sur l'ensemble des gateways.
 - Informer l'équipe Ops et QA via le canal `#tinybms-operations` pour suivi et post-mortem.
 
 ### Communication
