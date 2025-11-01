@@ -222,6 +222,22 @@ menu "CAN Publisher"
             latest frames at the configured cadence.
 endmenu
 
+menu "TinyBMS UART"
+    config TINYBMS_UART_TX_GPIO
+        int "TinyBMS UART TX GPIO"
+        range 0 48
+        default 37
+        help
+            GPIO used as the TinyBMS UART transmit output.
+
+    config TINYBMS_UART_RX_GPIO
+        int "TinyBMS UART RX GPIO"
+        range 0 48
+        default 36
+        help
+            GPIO used as the TinyBMS UART receive input.
+endmenu
+
 menu "Victron CAN"
     config TINYBMS_CAN_VICTRON_TX_GPIO
         int "Victron CAN TX GPIO"
