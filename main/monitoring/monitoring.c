@@ -13,6 +13,7 @@
 
 #include "app_events.h"
 #include "uart_bms.h"
+#include "history_logger.h"
 
 static const char *TAG = "monitoring";
 
@@ -165,6 +166,7 @@ static void monitoring_on_bms_update(const uart_bms_live_data_t *data, void *con
     s_latest_bms = *data;
     s_has_latest_bms = true;
     monitoring_history_push(data);
+    history_logger_handle_sample(data);
 
     esp_err_t err = monitoring_publish_telemetry_snapshot();
     if (err != ESP_OK) {

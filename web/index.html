@@ -99,15 +99,31 @@
             </section>
             <section id="tab-history" class="tab-panel" aria-labelledby="Historique">
                 <div class="history-toolbar">
-                    <label for="history-range">Nombre de points</label>
-                    <select id="history-range">
-                        <option value="60">60</option>
-                        <option value="120" selected>120</option>
-                        <option value="240">240</option>
-                        <option value="0">Tous</option>
-                    </select>
+                    <div class="history-group">
+                        <label for="history-source">Source</label>
+                        <select id="history-source">
+                            <option value="live" selected>Temps réel (RAM)</option>
+                            <option value="archive">Archives flash</option>
+                        </select>
+                    </div>
+                    <div class="history-group" id="history-range-group">
+                        <label for="history-range">Nombre de points</label>
+                        <select id="history-range">
+                            <option value="60">60</option>
+                            <option value="120" selected>120</option>
+                            <option value="240">240</option>
+                            <option value="0">Tous</option>
+                        </select>
+                    </div>
                     <button id="history-refresh">Rafraîchir</button>
                     <button id="history-export">Exporter CSV</button>
+                    <span id="history-storage-status" class="history-status" aria-live="polite">Flash: --</span>
+                </div>
+                <div id="history-archive-controls" class="history-archive-controls" aria-live="polite">
+                    <label for="history-archive-file">Archive</label>
+                    <select id="history-archive-file"></select>
+                    <button id="history-archive-download">Télécharger</button>
+                    <p id="history-archive-info" class="history-info"></p>
                 </div>
                 <canvas id="history-chart" width="800" height="320" role="img" aria-label="Évolution tension et courant"></canvas>
                 <table class="history-table">

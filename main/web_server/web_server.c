@@ -9,6 +9,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "esp_err.h"
@@ -24,6 +25,8 @@
 #include "config_manager.h"
 #include "monitoring.h"
 #include "mqtt_gateway.h"
+#include "history_logger.h"
+#include "history_fs.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -31,6 +34,10 @@
 
 #ifndef HTTPD_414_URI_TOO_LONG
 #define HTTPD_414_URI_TOO_LONG 414
+#endif
+
+#ifndef HTTPD_503_SERVICE_UNAVAILABLE
+#define HTTPD_503_SERVICE_UNAVAILABLE 503
 #endif
 
 #define WEB_SERVER_FS_BASE_PATH "/spiffs"
@@ -57,6 +64,32 @@ static ws_client_t *s_uart_clients = NULL;
 static ws_client_t *s_can_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
+
+static bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t size)
+{
+    if (buffer == NULL || size == 0) {
+        return false;
+    }
+
+    if (timestamp <= 0) {
+        buffer[0] = '\0';
+        return false;
+    }
+
+    struct tm tm_utc;
+    if (gmtime_r(&timestamp, &tm_utc) == NULL) {
+        buffer[0] = '\0';
+        return false;
+    }
+
+    size_t written = strftime(buffer, size, "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
+    if (written == 0) {
+        buffer[0] = '\0';
+        return false;
+    }
+
+    return true;
+}
 
 static void ws_client_list_add(ws_client_t **list, int fd)
 {
@@ -844,6 +877,256 @@ static esp_err_t web_server_api_history_handler(httpd_req_t *req)
     return httpd_resp_send(req, buffer, length);
 }
 
+static esp_err_t web_server_api_history_files_handler(httpd_req_t *req)
+{
+    history_logger_file_info_t *files = NULL;
+    size_t count = 0;
+    bool mounted = false;
+    esp_err_t err = history_logger_list_files(&files, &count, &mounted);
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
+        return err;
+    }
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History index unavailable");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char header[256];
+    const char *directory = history_logger_directory();
+    int written = snprintf(header,
+                           sizeof(header),
+                           "{\"flash_ready\":%s,\"directory\":\"%s\",\"count\":%u,\"files\":[",
+                           mounted ? "true" : "false",
+                           directory,
+                           (unsigned)count);
+    if (written < 0 || written >= (int)sizeof(header)) {
+        history_logger_free_file_list(files);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History response too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    esp_err_t send_err = httpd_resp_sendstr_chunk(req, header);
+    if (send_err != ESP_OK) {
+        history_logger_free_file_list(files);
+        return send_err;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const history_logger_file_info_t *info = &files[i];
+        char iso[32];
+        bool has_iso = web_server_format_iso8601(info->modified_time, iso, sizeof(iso));
+        char entry[256];
+        if (has_iso) {
+            written = snprintf(entry,
+                               sizeof(entry),
+                               "%s{\"name\":\"%s\",\"size\":%u,\"modified\":\"%s\"}",
+                               (i == 0) ? "" : ",",
+                               info->name,
+                               (unsigned)info->size_bytes,
+                               iso);
+        } else {
+            written = snprintf(entry,
+                               sizeof(entry),
+                               "%s{\"name\":\"%s\",\"size\":%u,\"modified\":null}",
+                               (i == 0) ? "" : ",",
+                               info->name,
+                               (unsigned)info->size_bytes);
+        }
+
+        if (written < 0 || written >= (int)sizeof(entry)) {
+            history_logger_free_file_list(files);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History entry too large");
+            return ESP_ERR_INVALID_SIZE;
+        }
+
+        send_err = httpd_resp_sendstr_chunk(req, entry);
+        if (send_err != ESP_OK) {
+            history_logger_free_file_list(files);
+            return send_err;
+        }
+    }
+
+    history_logger_free_file_list(files);
+    send_err = httpd_resp_sendstr_chunk(req, "]}");
+    if (send_err != ESP_OK) {
+        return send_err;
+    }
+
+    return httpd_resp_sendstr_chunk(req, NULL);
+}
+
+static esp_err_t web_server_api_history_archive_handler(httpd_req_t *req)
+{
+    char filename[64] = {0};
+    size_t limit = 0;
+    int query_len = httpd_req_get_url_query_len(req);
+    if (query_len > 0) {
+        char query[128];
+        if (query_len + 1 > (int)sizeof(query)) {
+            query_len = sizeof(query) - 1;
+        }
+        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+            (void)httpd_query_key_value(query, "file", filename, sizeof(filename));
+            char limit_str[16];
+            if (httpd_query_key_value(query, "limit", limit_str, sizeof(limit_str)) == ESP_OK) {
+                char *endptr = NULL;
+                unsigned long parsed = strtoul(limit_str, &endptr, 10);
+                if (endptr != limit_str) {
+                    limit = (size_t)parsed;
+                }
+            }
+        }
+    }
+
+    if (filename[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file parameter");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    history_logger_archive_t archive;
+    esp_err_t err = history_logger_load_archive(filename, limit, &archive);
+    if (err == ESP_ERR_INVALID_STATE) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History storage unavailable");
+        return err;
+    }
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
+        return err;
+    }
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Archive not found");
+        return err;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char header[256];
+    int written = snprintf(header,
+                           sizeof(header),
+                           "{\"file\":\"%s\",\"total\":%u,\"returned\":%u,\"samples\":[",
+                           filename,
+                           (unsigned)archive.total_samples,
+                           (unsigned)archive.returned_samples);
+    if (written < 0 || written >= (int)sizeof(header)) {
+        history_logger_free_archive(&archive);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Archive response too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    esp_err_t send_err = httpd_resp_sendstr_chunk(req, header);
+    if (send_err != ESP_OK) {
+        history_logger_free_archive(&archive);
+        return send_err;
+    }
+
+    for (size_t i = 0; i < archive.returned_samples; ++i) {
+        size_t index = (archive.start_index + i) % archive.buffer_capacity;
+        const history_logger_archive_sample_t *sample = &archive.samples[index];
+        char entry[256];
+        written = snprintf(entry,
+                           sizeof(entry),
+                           "%s{\"timestamp\":%" PRIu64 ",\"timestamp_iso\":\"%s\",\"pack_voltage\":%.3f,"
+                           "\"pack_current\":%.3f,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
+                           "\"average_temperature\":%.2f}",
+                           (i == 0) ? "" : ",",
+                           sample->timestamp_ms,
+                           sample->timestamp_iso,
+                           sample->pack_voltage_v,
+                           sample->pack_current_a,
+                           sample->state_of_charge_pct,
+                           sample->state_of_health_pct,
+                           sample->average_temperature_c);
+        if (written < 0 || written >= (int)sizeof(entry)) {
+            history_logger_free_archive(&archive);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Archive sample too large");
+            return ESP_ERR_INVALID_SIZE;
+        }
+
+        send_err = httpd_resp_sendstr_chunk(req, entry);
+        if (send_err != ESP_OK) {
+            history_logger_free_archive(&archive);
+            return send_err;
+        }
+    }
+
+    history_logger_free_archive(&archive);
+    send_err = httpd_resp_sendstr_chunk(req, "]}");
+    if (send_err != ESP_OK) {
+        return send_err;
+    }
+
+    return httpd_resp_sendstr_chunk(req, NULL);
+}
+
+static esp_err_t web_server_api_history_download_handler(httpd_req_t *req)
+{
+    char filename[64] = {0};
+    int query_len = httpd_req_get_url_query_len(req);
+    if (query_len > 0) {
+        char query[128];
+        if (query_len + 1 > (int)sizeof(query)) {
+            query_len = sizeof(query) - 1;
+        }
+        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+            (void)httpd_query_key_value(query, "file", filename, sizeof(filename));
+        }
+    }
+
+    if (filename[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file parameter");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char path[256];
+    esp_err_t resolve_err = history_logger_resolve_path(filename, path, sizeof(path));
+    if (resolve_err == ESP_ERR_NOT_SUPPORTED) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
+        return resolve_err;
+    }
+    if (resolve_err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid file name");
+        return resolve_err;
+    }
+
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Archive not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char disposition[128];
+    int written = snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", filename);
+    if (written > 0 && written < (int)sizeof(disposition)) {
+        httpd_resp_set_hdr(req, "Content-Disposition", disposition);
+    }
+
+    char buffer[WEB_SERVER_FILE_BUFSZ];
+    esp_err_t send_err = ESP_OK;
+    size_t read_bytes = 0;
+    while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        send_err = httpd_resp_send_chunk(req, buffer, read_bytes);
+        if (send_err != ESP_OK) {
+            break;
+        }
+    }
+
+    fclose(file);
+
+    if (send_err == ESP_OK) {
+        send_err = httpd_resp_send_chunk(req, NULL, 0);
+    }
+
+    return send_err;
+}
+
 static esp_err_t web_server_api_registers_get_handler(httpd_req_t *req)
 {
     char buffer[CONFIG_MANAGER_MAX_REGISTERS_JSON];
@@ -1233,6 +1516,30 @@ void web_server_init(void)
         .user_ctx = NULL,
     };
     httpd_register_uri_handler(s_httpd, &api_history);
+
+    const httpd_uri_t api_history_files = {
+        .uri = "/api/history/files",
+        .method = HTTP_GET,
+        .handler = web_server_api_history_files_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_history_files);
+
+    const httpd_uri_t api_history_archive = {
+        .uri = "/api/history/archive",
+        .method = HTTP_GET,
+        .handler = web_server_api_history_archive_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_history_archive);
+
+    const httpd_uri_t api_history_download = {
+        .uri = "/api/history/download",
+        .method = HTTP_GET,
+        .handler = web_server_api_history_download_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_history_download);
 
     const httpd_uri_t api_registers_get = {
         .uri = "/api/registers",
