@@ -26,8 +26,8 @@
 
 #define UART_BMS_UART_PORT       UART_NUM_1
 #define UART_BMS_BAUD_RATE       115200
-#define UART_BMS_TX_PIN          GPIO_NUM_17
-#define UART_BMS_RX_PIN          GPIO_NUM_16
+#define UART_BMS_TX_PIN          GPIO_NUM_37
+#define UART_BMS_RX_PIN          GPIO_NUM_36
 #define UART_BMS_RX_BUFFER_SIZE  256
 #define UART_BMS_TASK_STACK      4096
 #define UART_BMS_TASK_PRIORITY   12

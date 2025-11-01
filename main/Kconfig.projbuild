@@ -226,14 +226,14 @@ menu "Victron CAN"
     config TINYBMS_CAN_VICTRON_TX_GPIO
         int "Victron CAN TX GPIO"
         range 0 48
-        default 5
+        default 7
         help
             GPIO used as the TWAI transmit output towards the Victron bus.
 
     config TINYBMS_CAN_VICTRON_RX_GPIO
         int "Victron CAN RX GPIO"
         range 0 48
-        default 4
+        default 6
         help
             GPIO used as the TWAI receive input from the Victron bus.
 
