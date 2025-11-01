@@ -22,6 +22,9 @@ repository.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L4-L18】 Th
 CAN2 lines are intentionally left free so that a secondary controller
 such as an MCP2515 can be added later if required.
 
+Autosport Labs confirm that the UART pads on this connector route to
+`GPIO37` (TX) and `GPIO36` (RX). The TinyBMS gateway therefore drives the
+TinyBMS interface on those pins by default.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L20-L29】
 Autosport Labs have not yet published the ESP32 pin numbers associated
 with the UART pads on this connector. The TinyBMS gateway therefore keeps
 its UART driver on `GPIO17` (TX) and `GPIO16` (RX) until official

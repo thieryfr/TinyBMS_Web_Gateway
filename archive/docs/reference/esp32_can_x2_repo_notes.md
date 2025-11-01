@@ -19,6 +19,11 @@ both CAN networks.
 
 ## UART connector
 
+Autosport Labs clarified (via their support channels and GitHub discussions)
+that the UART pads on the CAN-X2 header are wired to `GPIO37` for TX and
+`GPIO36` for RX. The TinyBMS gateway now defaults to those pins so the
+pre-crimped Autosport Labs harness can be connected directly to the TinyBMS
+serial port.
 The upstream repository does not currently document which ESP32 pins are routed
 to the UART pads on the CAN-X2 header. The TinyBMS gateway therefore keeps using
 its proven assignment (`GPIO17` TX, `GPIO16` RX) until official guidance is
