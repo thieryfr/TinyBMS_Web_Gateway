@@ -3,7 +3,13 @@ const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const state = {
     telemetry: null,
     history: [],
+    liveHistory: [],
     historyLimit: 120,
+    historySource: 'live',
+    archives: [],
+    selectedArchive: null,
+    historyDirectory: '',
+    historyStorageReady: false,
     registers: new Map(),
     chart: null,
     mqtt: {
@@ -98,6 +104,45 @@ function formatNumber(value, suffix = '', fractionDigits = 2) {
         return `-- ${suffix}`.trim();
     }
     return `${Number(value).toFixed(fractionDigits)} ${suffix}`.trim();
+}
+
+function formatFileSize(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value <= 0) {
+        return '';
+    }
+    const megabytes = value / (1024 * 1024);
+    if (megabytes >= 1) {
+        return `${megabytes.toFixed(megabytes >= 10 ? 0 : 1)} Mo`;
+    }
+    const kilobytes = value / 1024;
+    if (kilobytes >= 1) {
+        return `${kilobytes.toFixed(kilobytes >= 10 ? 0 : 1)} ko`;
+    }
+    return `${value.toFixed(0)} octets`;
+}
+
+function normalizeSample(raw) {
+    const timestampMs = Number(raw.timestamp_ms ?? raw.timestamp ?? 0);
+    let timestamp = Number(raw.timestamp ?? timestampMs);
+    const iso = typeof raw.timestamp_iso === 'string' ? raw.timestamp_iso : null;
+    if ((!Number.isFinite(timestamp) || timestamp <= 0) && iso) {
+        const parsed = Date.parse(iso);
+        if (!Number.isNaN(parsed)) {
+            timestamp = parsed;
+        }
+    }
+
+    return {
+        timestamp,
+        timestamp_ms: timestampMs,
+        timestamp_iso: iso,
+        pack_voltage: Number(raw.pack_voltage ?? raw.pack_voltage_v ?? raw.packVoltage ?? raw.pack_voltage_V ?? 0),
+        pack_current: Number(raw.pack_current ?? raw.pack_current_a ?? raw.packCurrent ?? 0),
+        state_of_charge: Number(raw.state_of_charge ?? raw.state_of_charge_pct ?? raw.soc ?? 0),
+        state_of_health: Number(raw.state_of_health ?? raw.state_of_health_pct ?? raw.soh ?? 0),
+        average_temperature: Number(raw.average_temperature ?? raw.average_temperature_c ?? raw.temperature ?? 0),
+    };
 }
 
 function formatTimestamp(timestamp) {
@@ -196,15 +241,170 @@ async function fetchStatus() {
     updateBatteryView(data);
 }
 
-async function fetchHistory(limit) {
+async function fetchLiveHistory(limit) {
     const params = new URLSearchParams();
     if (limit && Number(limit) > 0) params.set('limit', String(limit));
     const response = await fetch(`/api/history?${params.toString()}`);
     if (!response.ok) throw new Error('History request failed');
     const payload = await response.json();
-    const samples = payload.samples || [];
+    const samples = (payload.samples || []).map(normalizeSample);
+    state.liveHistory = samples;
+    if (state.historySource === 'live') {
+        state.history = state.liveHistory;
+        updateHistory(state.history);
+    }
+}
+
+async function fetchArchiveSamples(file, limit) {
+    if (!file) {
+        state.history = [];
+        updateHistory([]);
+        return;
+    }
+    const params = new URLSearchParams({ file });
+    if (limit && Number(limit) > 0) params.set('limit', String(limit));
+    const response = await fetch(`/api/history/archive?${params.toString()}`);
+    if (!response.ok) throw new Error('Archive request failed');
+    const payload = await response.json();
+    const samples = (payload.samples || []).map(normalizeSample);
     state.history = samples;
     updateHistory(samples);
+}
+
+async function fetchHistory(limit) {
+    if (state.historySource === 'archive') {
+        await fetchArchiveSamples(state.selectedArchive, limit);
+        return;
+    }
+    await fetchLiveHistory(limit);
+}
+
+async function fetchHistoryArchives() {
+    const response = await fetch('/api/history/files');
+    if (!response.ok) throw new Error('Archive list request failed');
+    const payload = await response.json();
+    state.historyStorageReady = Boolean(payload.flash_ready);
+    state.historyDirectory = payload.directory || '';
+    const files = Array.isArray(payload.files) ? payload.files : [];
+    const normalized = files
+        .map((file) => {
+            const parsed = typeof file.modified === 'string' ? Date.parse(file.modified) : 0;
+            return {
+                ...file,
+                modified_ms: Number.isNaN(parsed) ? 0 : parsed,
+            };
+        })
+        .sort((a, b) => {
+            if (b.modified_ms !== a.modified_ms) {
+                return b.modified_ms - a.modified_ms;
+            }
+            return a.name.localeCompare(b.name);
+        });
+    state.archives = normalized;
+
+    if (normalized.length === 0) {
+        state.selectedArchive = null;
+    } else if (!normalized.some((entry) => entry.name === state.selectedArchive)) {
+        state.selectedArchive = normalized[0].name;
+    }
+
+    updateArchiveControls();
+}
+
+function updateArchiveControls() {
+    const controls = document.getElementById('history-archive-controls');
+    const select = document.getElementById('history-archive-file');
+    const downloadButton = document.getElementById('history-archive-download');
+    const info = document.getElementById('history-archive-info');
+    const status = document.getElementById('history-storage-status');
+    const rangeGroup = document.getElementById('history-range-group');
+    const directory = state.historyDirectory || '/history';
+
+    if (status) {
+        status.textContent = state.historyStorageReady ? 'Flash: disponible' : 'Flash: indisponible';
+        status.classList.toggle('warning', !state.historyStorageReady);
+    }
+
+    if (controls) {
+        controls.classList.toggle('active', state.historySource === 'archive');
+    }
+
+    if (rangeGroup) {
+        rangeGroup.classList.toggle('disabled', state.historySource === 'archive');
+    }
+
+    if (!select) {
+        return;
+    }
+
+    select.innerHTML = '';
+    if (state.archives.length === 0) {
+        const option = document.createElement('option');
+        option.textContent = state.historyStorageReady ? 'Aucun fichier disponible' : 'Stockage flash indisponible';
+        option.disabled = true;
+        option.selected = true;
+        select.appendChild(option);
+        select.disabled = true;
+        if (downloadButton) downloadButton.disabled = true;
+        if (info) {
+            info.textContent = state.historyStorageReady
+                ? `Répertoire: ${directory} • Aucun journal disponible pour le moment.`
+                : `Répertoire: ${directory} • Activez la mémoire flash pour l’archivage.`;
+        }
+        return;
+    }
+
+    select.disabled = false;
+    state.archives.forEach((file) => {
+        const option = document.createElement('option');
+        option.value = file.name;
+        const sizeLabel = formatFileSize(file.size ?? file.size_bytes ?? 0);
+        const modifiedLabel = Number.isFinite(file.modified_ms) && file.modified_ms > 0
+            ? new Date(file.modified_ms).toLocaleString()
+            : '';
+        const parts = [file.name];
+        if (modifiedLabel) {
+            parts.push(modifiedLabel);
+        }
+        if (sizeLabel) {
+            parts.push(sizeLabel);
+        }
+        option.textContent = parts.join(' • ');
+        option.selected = file.name === state.selectedArchive;
+        select.appendChild(option);
+    });
+
+    if (!state.selectedArchive && state.archives.length > 0) {
+        state.selectedArchive = state.archives[0].name;
+    }
+
+    if (state.selectedArchive) {
+        select.value = state.selectedArchive;
+    }
+
+    if (downloadButton) {
+        downloadButton.disabled = !state.selectedArchive;
+    }
+
+    if (info) {
+        const selected = state.archives.find((entry) => entry.name === state.selectedArchive);
+        const sizeLabel = selected ? formatFileSize(selected.size ?? selected.size_bytes ?? 0) : '';
+        const modifiedLabel = selected && Number.isFinite(selected.modified_ms) && selected.modified_ms > 0
+            ? new Date(selected.modified_ms).toLocaleString()
+            : '';
+        const detailParts = [];
+        if (selected) {
+            detailParts.push(`Sélection: ${selected.name}`);
+        }
+        if (modifiedLabel) {
+            detailParts.push(`Modifié le ${modifiedLabel}`);
+        }
+        if (sizeLabel) {
+            detailParts.push(`Taille ${sizeLabel}`);
+        }
+        const detailText = detailParts.length > 0 ? ` • ${detailParts.join(' • ')}` : '';
+        info.textContent = `Répertoire: ${directory} • ${state.archives.length} fichier(s)${detailText}`;
+    }
 }
 
 function updateHistory(samples) {
@@ -217,8 +417,11 @@ function updateHistory(samples) {
     tbody.innerHTML = '';
     samples.slice(-200).reverse().forEach((sample) => {
         const row = document.createElement('tr');
+        const timestampText = sample.timestamp_iso
+            ? new Date(sample.timestamp_iso).toLocaleString()
+            : formatTimestamp(sample.timestamp);
         row.innerHTML = `
-            <td>${formatTimestamp(sample.timestamp)}</td>
+            <td>${timestampText}</td>
             <td>${formatNumber(sample.pack_voltage, 'V')}</td>
             <td>${formatNumber(sample.pack_current, 'A')}</td>
             <td>${formatNumber(sample.state_of_charge, '%', 1)}</td>
@@ -335,19 +538,16 @@ function updateConfigStatus(message, isError = false) {
 }
 
 function pushHistorySample(sample) {
-    state.history.push({
-        timestamp: sample.timestamp,
-        pack_voltage: sample.pack_voltage,
-        pack_current: sample.pack_current,
-        state_of_charge: sample.state_of_charge,
-        state_of_health: sample.state_of_health,
-        average_temperature: sample.average_temperature,
-    });
+    const normalized = normalizeSample(sample);
+    state.liveHistory.push(normalized);
     const limit = Number(state.historyLimit || 0);
-    if (limit > 0 && state.history.length > limit) {
-        state.history.splice(0, state.history.length - limit);
+    if (limit > 0 && state.liveHistory.length > limit) {
+        state.liveHistory.splice(0, state.liveHistory.length - limit);
     }
-    updateHistory(state.history);
+    if (state.historySource === 'live') {
+        state.history = state.liveHistory;
+        updateHistory(state.history);
+    }
 }
 
 function handleTelemetryMessage(event) {
@@ -443,35 +643,87 @@ function setupTabs() {
 }
 
 function setupHistoryControls() {
+    const sourceSelect = document.getElementById('history-source');
     const select = document.getElementById('history-range');
     const refresh = document.getElementById('history-refresh');
     const exportBtn = document.getElementById('history-export');
+    const archiveSelect = document.getElementById('history-archive-file');
+    const archiveDownload = document.getElementById('history-archive-download');
 
-    select.addEventListener('change', () => {
-        state.historyLimit = Number(select.value);
-        fetchHistory(state.historyLimit).catch((error) => console.error(error));
-    });
-    refresh.addEventListener('click', () => {
-        fetchHistory(state.historyLimit).catch((error) => console.error(error));
-    });
-    exportBtn.addEventListener('click', () => {
-        const rows = state.history.map((sample) => [
-            new Date(sample.timestamp).toISOString(),
-            sample.pack_voltage,
-            sample.pack_current,
-            sample.state_of_charge,
-            sample.average_temperature,
-        ]);
-        const header = 'timestamp,pack_voltage,pack_current,state_of_charge,average_temperature';
-        const csv = [header, ...rows.map((row) => row.join(','))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'tinybms_history.csv';
-        link.click();
-        URL.revokeObjectURL(url);
-    });
+    if (sourceSelect) {
+        sourceSelect.addEventListener('change', () => {
+            state.historySource = sourceSelect.value;
+            updateArchiveControls();
+            if (state.historySource === 'archive') {
+                fetchHistoryArchives()
+                    .then(() => fetchArchiveSamples(state.selectedArchive, state.historyLimit))
+                    .catch((error) => console.error(error));
+            } else {
+                fetchLiveHistory(state.historyLimit).catch((error) => console.error(error));
+            }
+        });
+    }
+
+    if (select) {
+        select.addEventListener('change', () => {
+            state.historyLimit = Number(select.value);
+            fetchHistory(state.historyLimit).catch((error) => console.error(error));
+        });
+    }
+
+    if (refresh) {
+        refresh.addEventListener('click', () => {
+            if (state.historySource === 'archive') {
+                fetchHistoryArchives()
+                    .then(() => fetchArchiveSamples(state.selectedArchive, state.historyLimit))
+                    .catch((error) => console.error(error));
+            } else {
+                fetchLiveHistory(state.historyLimit).catch((error) => console.error(error));
+            }
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            const rows = state.history.map((sample) => [
+                sample.timestamp_iso ? sample.timestamp_iso : new Date(sample.timestamp).toISOString(),
+                sample.pack_voltage,
+                sample.pack_current,
+                sample.state_of_charge,
+                sample.average_temperature,
+            ]);
+            const header = 'timestamp,pack_voltage,pack_current,state_of_charge,average_temperature';
+            const csv = [header, ...rows.map((row) => row.join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'tinybms_history.csv';
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    if (archiveSelect) {
+        archiveSelect.addEventListener('change', () => {
+            state.selectedArchive = archiveSelect.value || null;
+            if (state.historySource === 'archive') {
+                fetchArchiveSamples(state.selectedArchive, state.historyLimit).catch((error) =>
+                    console.error(error)
+                );
+            }
+        });
+    }
+
+    if (archiveDownload) {
+        archiveDownload.addEventListener('click', () => {
+            if (!state.selectedArchive) {
+                return;
+            }
+            const url = `/api/history/download?file=${encodeURIComponent(state.selectedArchive)}`;
+            window.open(url, '_blank');
+        });
+    }
 }
 
 function setElementText(id, value) {
@@ -747,13 +999,14 @@ function setupMqttTab() {
 async function initialise() {
     setupTabs();
     setupHistoryControls();
+    updateArchiveControls();
     setupMqttTab();
     state.chart = new HistoryChart(document.getElementById('history-chart'));
 
     try {
         await Promise.all([
             fetchStatus(),
-            fetchHistory(state.historyLimit),
+            fetchLiveHistory(state.historyLimit),
             fetchRegisters(),
             fetchMqttConfig().catch((error) => {
                 console.error('Failed to load MQTT config', error);
@@ -767,6 +1020,15 @@ async function initialise() {
     } catch (error) {
         console.error('Initialisation failed', error);
     }
+
+    fetchHistoryArchives()
+        .catch((error) => {
+            console.error('Failed to load history archives', error);
+            updateArchiveControls();
+        })
+        .finally(() => {
+            updateArchiveControls();
+        });
 
     startMqttStatusPolling();
 

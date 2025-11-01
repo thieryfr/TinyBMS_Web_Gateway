@@ -12,6 +12,92 @@ menu "Infrastructure"
             single task.
 endmenu
 
+menu "Storage"
+    config TINYBMS_HISTORY_FS_ENABLE
+        bool "Enable flash history storage"
+        default y
+
+    config TINYBMS_HISTORY_FS_PARTITION_LABEL
+        string "History LittleFS partition label"
+        depends on TINYBMS_HISTORY_FS_ENABLE
+        default "historyfs"
+
+    config TINYBMS_HISTORY_FS_MOUNT_POINT
+        string "History LittleFS mount point"
+        depends on TINYBMS_HISTORY_FS_ENABLE
+        default "/history"
+
+    config TINYBMS_HISTORY_FS_FORMAT_ON_FAIL
+        bool "Format LittleFS if mount fails"
+        depends on TINYBMS_HISTORY_FS_ENABLE
+        default n
+        help
+            When enabled the filesystem is formatted if mounting the history
+            LittleFS partition fails. Leave disabled to avoid destructive
+            operations by default.
+
+    config TINYBMS_HISTORY_ENABLE
+        bool "Enable telemetry history logging"
+        depends on TINYBMS_HISTORY_FS_ENABLE
+        default y
+
+    config TINYBMS_HISTORY_DIR
+        string "History directory"
+        depends on TINYBMS_HISTORY_ENABLE
+        default "/history"
+
+    config TINYBMS_HISTORY_QUEUE_LENGTH
+        int "History queue length"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 8 256
+        default 32
+
+    config TINYBMS_HISTORY_TASK_STACK
+        int "History logger task stack (bytes)"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 2048 12288
+        default 4096
+
+    config TINYBMS_HISTORY_TASK_PRIORITY
+        int "History logger task priority"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 3 10
+        default 4
+
+    config TINYBMS_HISTORY_FLUSH_INTERVAL
+        int "Flush interval (samples)"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 1 1000
+        default 10
+
+    config TINYBMS_HISTORY_RETENTION_CHECK_INTERVAL
+        int "Retention check interval (samples)"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 1 10000
+        default 120
+
+    config TINYBMS_HISTORY_RETENTION_DAYS
+        int "Retention period (days)"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 0 3650
+        default 30
+
+    config TINYBMS_HISTORY_MAX_BYTES
+        int "Maximum storage usage (bytes)"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 0 8388608
+        default 2097152
+        help
+            Maximum cumulative size of history archives stored in LittleFS.
+            Set to 0 to disable size based pruning.
+
+    config TINYBMS_HISTORY_ARCHIVE_MAX_SAMPLES
+        int "Maximum samples returned per archive"
+        depends on TINYBMS_HISTORY_ENABLE
+        range 16 4096
+        default 1024
+endmenu
+
 menu "Wi-Fi"
     config TINYBMS_WIFI_ENABLE
         bool "Enable Wi-Fi support"

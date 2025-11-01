@@ -258,6 +258,12 @@ main {
     margin-bottom: 1.5rem;
 }
 
+.history-toolbar .history-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
 .history-toolbar label {
     color: var(--text-secondary);
     font-weight: 600;
@@ -275,6 +281,51 @@ main {
 
 .history-toolbar button:hover {
     background: rgba(0, 168, 150, 0.25);
+}
+
+.history-status {
+    margin-left: auto;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.history-status.warning {
+    color: #ffb347;
+}
+
+.history-archive-controls {
+    display: none;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.history-archive-controls.active {
+    display: flex;
+}
+
+.history-archive-controls select,
+.history-archive-controls button {
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--surface);
+    color: var(--text-primary);
+}
+
+.history-info {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+#history-range-group.disabled {
+    opacity: 0.6;
+}
+
+#history-range-group.disabled select {
+    pointer-events: none;
 }
 
 #history-chart {

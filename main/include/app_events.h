@@ -50,6 +50,10 @@ typedef enum {
     APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED = 0x1312,
     /** A client disconnected from the Wi-Fi access point. */
     APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED = 0x1313,
+    /** History flash storage successfully mounted and available. */
+    APP_EVENT_ID_STORAGE_HISTORY_READY = 0x1400,
+    /** History flash storage missing or unavailable. */
+    APP_EVENT_ID_STORAGE_HISTORY_UNAVAILABLE = 0x1401,
 } app_event_id_t;
 
 #ifdef __cplusplus

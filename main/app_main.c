@@ -13,6 +13,8 @@
 #include "monitoring.h"
 #include "wifi.h"
 #include "mqtt_topics.h"
+#include "history_fs.h"
+#include "history_logger.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -31,6 +33,8 @@ void app_main(void)
     wifi_set_event_publisher(publish_hook);
     monitoring_set_event_publisher(publish_hook);
     tiny_mqtt_publisher_set_event_publisher(publish_hook);
+    history_fs_set_event_publisher(publish_hook);
+    history_logger_set_event_publisher(publish_hook);
 
     config_manager_init();
     const mqtt_client_config_t *mqtt_cfg = config_manager_get_mqtt_client_config();
@@ -44,6 +48,7 @@ void app_main(void)
     }
     tiny_mqtt_publisher_init(&metrics_cfg);
     wifi_init();
+    history_fs_init();
     uart_bms_init();
     can_victron_init();
     can_publisher_init(publish_hook, can_victron_publish_frame);
@@ -51,6 +56,7 @@ void app_main(void)
     web_server_init();
     mqtt_client_init(mqtt_gateway_get_event_listener());
     mqtt_gateway_init();
+    history_logger_init();
     monitoring_init();
 
     while (true) {
