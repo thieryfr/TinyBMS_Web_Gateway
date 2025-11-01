@@ -13,6 +13,7 @@ idf_component_register(SRCS
     "mqtt_gateway/mqtt_gateway.c"
     "wifi/wifi.c"
     "monitoring/monitoring.c"
+    "storage/nvs_energy.c"
     INCLUDE_DIRS "include"
                  "event_bus"
                  "uart_bms"
@@ -26,4 +27,5 @@ idf_component_register(SRCS
                  "mqtt_gateway"
                  "wifi"
                  "monitoring"
+                 "storage"
 )

@@ -20,6 +20,7 @@
 #include "freertos/semphr.h"
 
 #include "app_events.h"
+#include "conversion_table.h"
 #include "uart_frame_builder.h"
 #include "uart_response_parser.h"
 
@@ -613,6 +614,13 @@ void uart_bms_init(void)
     }
 
     s_uart_initialised = true;
+
+    esp_err_t energy_err = can_publisher_conversion_restore_energy_state();
+    if (energy_err == ESP_OK) {
+        ESP_LOGI(kTag, "Energy counters restored from NVS");
+    } else if (energy_err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(kTag, "Failed to restore energy counters: %s", esp_err_to_name(energy_err));
+    }
 
     if (xTaskCreate(uart_poll_task,
                     "uart_poll",

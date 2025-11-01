@@ -10,9 +10,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_err.h"
 #include "esp_log.h"
 
 #include "cvl_controller.h"
+#include "storage/nvs_energy.h"
 
 #define VICTRON_CAN_HANDSHAKE_ID     0x307U
 #define VICTRON_PGN_CVL_CCL_DCL      0x351U
@@ -64,7 +66,15 @@ static const char *TAG = "can_conv";
 
 static double s_energy_charged_wh = 0.0;
 static double s_energy_discharged_wh = 0.0;
+static double s_energy_last_persist_charged_wh = 0.0;
+static double s_energy_last_persist_discharged_wh = 0.0;
 static uint64_t s_energy_last_timestamp_ms = 0;
+static uint64_t s_energy_last_persist_ms = 0;
+static bool s_energy_dirty = false;
+static bool s_energy_storage_ready = false;
+
+#define ENERGY_PERSIST_MIN_DELTA_WH   10.0
+#define ENERGY_PERSIST_INTERVAL_MS    60000U
 
 #define TINY_REGISTER_BATTERY_CAPACITY 0x0132U
 #define TINY_REGISTER_HARDWARE_VERSION 0x01F4U
@@ -73,11 +83,150 @@ static uint64_t s_energy_last_timestamp_ms = 0;
 #define TINY_REGISTER_SERIAL_NUMBER    0x01FAU
 #define TINY_REGISTER_BATTERY_FAMILY   0x01F8U
 
+static bool ensure_energy_storage_ready(void)
+{
+    if (s_energy_storage_ready) {
+        return true;
+    }
+
+    esp_err_t err = nvs_energy_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to initialise energy storage: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    s_energy_storage_ready = true;
+    return true;
+}
+
+static void set_energy_state_internal(double charged_wh, double discharged_wh, bool persisted)
+{
+    if (!(charged_wh > 0.0) || !isfinite(charged_wh)) {
+        charged_wh = 0.0;
+    }
+    if (!(discharged_wh > 0.0) || !isfinite(discharged_wh)) {
+        discharged_wh = 0.0;
+    }
+
+    s_energy_charged_wh = charged_wh;
+    s_energy_discharged_wh = discharged_wh;
+    s_energy_last_timestamp_ms = 0;
+
+    if (persisted) {
+        s_energy_last_persist_charged_wh = charged_wh;
+        s_energy_last_persist_discharged_wh = discharged_wh;
+        s_energy_dirty = false;
+    } else {
+        s_energy_dirty = true;
+    }
+}
+
+static esp_err_t persist_energy_state_internal(void)
+{
+    if (!ensure_energy_storage_ready()) {
+        return ESP_FAIL;
+    }
+
+    nvs_energy_state_t state = {
+        .charged_wh = (s_energy_charged_wh > 0.0) ? s_energy_charged_wh : 0.0,
+        .discharged_wh = (s_energy_discharged_wh > 0.0) ? s_energy_discharged_wh : 0.0,
+    };
+
+    esp_err_t err = nvs_energy_store(&state);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to persist energy counters: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    s_energy_last_persist_charged_wh = state.charged_wh;
+    s_energy_last_persist_discharged_wh = state.discharged_wh;
+    s_energy_dirty = false;
+    return ESP_OK;
+}
+
 void can_publisher_conversion_reset_state(void)
 {
-    s_energy_charged_wh = 0.0;
-    s_energy_discharged_wh = 0.0;
-    s_energy_last_timestamp_ms = 0;
+    set_energy_state_internal(0.0, 0.0, true);
+    s_energy_last_persist_ms = 0;
+
+    if (ensure_energy_storage_ready()) {
+        esp_err_t err = nvs_energy_clear();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to clear stored energy counters: %s", esp_err_to_name(err));
+        }
+    }
+}
+
+void can_publisher_conversion_set_energy_state(double charged_wh, double discharged_wh)
+{
+    set_energy_state_internal(charged_wh, discharged_wh, false);
+}
+
+void can_publisher_conversion_get_energy_state(double *charged_wh, double *discharged_wh)
+{
+    if (charged_wh != NULL) {
+        *charged_wh = s_energy_charged_wh;
+    }
+    if (discharged_wh != NULL) {
+        *discharged_wh = s_energy_discharged_wh;
+    }
+}
+
+esp_err_t can_publisher_conversion_restore_energy_state(void)
+{
+    if (!ensure_energy_storage_ready()) {
+        return ESP_FAIL;
+    }
+
+    nvs_energy_state_t state = {0};
+    esp_err_t err = nvs_energy_load(&state);
+    if (err == ESP_OK) {
+        set_energy_state_internal(state.charged_wh, state.discharged_wh, true);
+        s_energy_last_persist_ms = 0;
+        ESP_LOGI(TAG,
+                 "Restored energy counters charged=%.1f Wh discharged=%.1f Wh",
+                 state.charged_wh,
+                 state.discharged_wh);
+    } else if (err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "Failed to load energy counters: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
+esp_err_t can_publisher_conversion_persist_energy_state(void)
+{
+    esp_err_t err = persist_energy_state_internal();
+    if (err == ESP_OK) {
+        s_energy_last_persist_ms = 0;
+    }
+    return err;
+}
+
+static void maybe_persist_energy(uint64_t timestamp_ms)
+{
+    if (!s_energy_dirty || timestamp_ms == 0U) {
+        return;
+    }
+
+    if (s_energy_last_persist_ms != 0U) {
+        if (timestamp_ms <= s_energy_last_persist_ms) {
+            return;
+        }
+        uint64_t elapsed = timestamp_ms - s_energy_last_persist_ms;
+        if (elapsed < ENERGY_PERSIST_INTERVAL_MS) {
+            return;
+        }
+    }
+
+    double delta_in = fabs(s_energy_charged_wh - s_energy_last_persist_charged_wh);
+    double delta_out = fabs(s_energy_discharged_wh - s_energy_last_persist_discharged_wh);
+    if (delta_in < ENERGY_PERSIST_MIN_DELTA_WH && delta_out < ENERGY_PERSIST_MIN_DELTA_WH) {
+        return;
+    }
+
+    if (persist_energy_state_internal() == ESP_OK) {
+        s_energy_last_persist_ms = timestamp_ms;
+    }
 }
 
 static inline uint16_t clamp_u16(int32_t value)
@@ -407,6 +556,14 @@ static void update_energy_counters(const uart_bms_live_data_t *data)
     if (s_energy_discharged_wh < 0.0) {
         s_energy_discharged_wh = 0.0;
     }
+
+    double delta_in = fabs(s_energy_charged_wh - s_energy_last_persist_charged_wh);
+    double delta_out = fabs(s_energy_discharged_wh - s_energy_last_persist_discharged_wh);
+    if (delta_in >= ENERGY_PERSIST_MIN_DELTA_WH || delta_out >= ENERGY_PERSIST_MIN_DELTA_WH) {
+        s_energy_dirty = true;
+    }
+
+    maybe_persist_energy(current_ts);
 }
 
 static const char *resolve_manufacturer_string(const uart_bms_live_data_t *data)
