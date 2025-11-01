@@ -94,6 +94,26 @@ Les valeurs sont mises à zéro si TinyBMS ne fournit pas les registres ; les ch
 - Chaîne ASCII (8 caractères) lue depuis les registres 0x01F8–0x01FF ; repli sur `CONFIG_TINYBMS_CAN_BATTERY_FAMILY` si vide ou non renseignée.【F:main/can_publisher/conversion_table.c†L726-L738】
 - Utilisé par Victron pour regrouper les profils de charge.
 
+## PGN 0x370 — Battery Name Part 1
+- `encode_battery_name_part1()` diffuse les 8 premiers caractères du nom batterie (registre 0x01F6) et retombe sur `CONFIG_TINYBMS_CAN_BATTERY_NAME` en absence de données TinyBMS.【F:main/can_publisher/conversion_table.c†L640-L650】
+- Trame périodique 2 s, complémentaire de la partie 2 (0x371).
+
+## PGN 0x372 — Module Status Counts
+- `encode_module_status_counts()` publie quatre compteurs (OK, charge bloquée, décharge bloquée, offline) basés sur les limites dynamiques (`max_*_current_limit_a`), les bits d’alerte et la présence d’un timestamp valide.【F:main/can_publisher/conversion_table.c†L652-L689】
+- Chaque compteur est encodé sur 16 bits little endian conformément à la matrice Victron.
+
+## PGN 0x373 — Cell Voltage & Temperature Extremes
+- `encode_cell_voltage_temperature_extremes()` encode les tensions extrêmes en mV et les températures en Kelvin (Celsius + 273,15).【F:main/can_publisher/conversion_table.c†L691-L712】
+- Les valeurs proviennent directement de `uart_bms_live_data_t` (`min_cell_mv`, `max_cell_mv`, `pack_temperature_min_c`, `pack_temperature_max_c`).
+
+## PGN 0x374–0x377 — Cell/Temperature Identifiers
+- Les trames 0x374 à 0x377 embarquent des chaînes synthétiques (`MINVxxxx`, `MAXVxxxx`, `MINT±xxx`, `MAXT±xxx`) construites par `encode_min/max_cell_identifier()` et `encode_min/max_temp_identifier()`.【F:main/can_publisher/conversion_table.c†L714-L747】
+- Ces identifiants facilitent le diagnostic Victron sans accès à l’index de cellule TinyBMS.
+
+## PGN 0x380 / 0x381 — Serial Number Parts
+- `encode_serial_number_part1/part2()` lit la fenêtre ASCII à partir de 0x01FA et applique un fallback `CONFIG_TINYBMS_CAN_SERIAL_NUMBER` si le BMS ne fournit pas de texte.【F:main/can_publisher/conversion_table.c†L749-L768】
+- Deux trames consécutives couvrent jusqu’à 16 caractères.
+
 ## Validation
 - `test/test_can_conversion.c` couvre les cas nominaux et extrêmes pour chaque PGN.
 - `docs/testing/validation_plan.md` décrit les captures CAN à réaliser sur banc Victron.

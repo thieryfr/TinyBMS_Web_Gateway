@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -19,9 +20,18 @@
 #define VICTRON_PGN_ALARMS           0x35AU
 #define VICTRON_PGN_MANUFACTURER     0x35EU
 #define VICTRON_PGN_BATTERY_INFO     0x35FU
+#define VICTRON_PGN_BMS_NAME_PART1   0x370U
 #define VICTRON_PGN_BMS_NAME_PART2   0x371U
+#define VICTRON_PGN_MODULE_STATUS    0x372U
+#define VICTRON_PGN_CELL_EXTREMES    0x373U
+#define VICTRON_PGN_MIN_CELL_ID      0x374U
+#define VICTRON_PGN_MAX_CELL_ID      0x375U
+#define VICTRON_PGN_MIN_TEMP_ID      0x376U
+#define VICTRON_PGN_MAX_TEMP_ID      0x377U
 #define VICTRON_PGN_ENERGY_COUNTERS  0x378U
 #define VICTRON_PGN_INSTALLED_CAP    0x379U
+#define VICTRON_PGN_SERIAL_PART1     0x380U
+#define VICTRON_PGN_SERIAL_PART2     0x381U
 #define VICTRON_PGN_BATTERY_FAMILY   0x382U
 
 #define VICTRON_PRIORITY             6U
@@ -41,6 +51,10 @@
 #define CONFIG_TINYBMS_CAN_BATTERY_FAMILY CONFIG_TINYBMS_CAN_BATTERY_NAME
 #endif
 
+#ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
+#define CONFIG_TINYBMS_CAN_SERIAL_NUMBER "TinyBMS-00000000"
+#endif
+
 static const char *TAG = "can_conv";
 
 static double s_energy_charged_wh = 0.0;
@@ -51,6 +65,7 @@ static uint64_t s_energy_last_timestamp_ms = 0;
 #define TINY_REGISTER_HARDWARE_VERSION 0x01F4U
 #define TINY_REGISTER_PUBLIC_FIRMWARE  0x01F5U
 #define TINY_REGISTER_INTERNAL_FW      0x01F6U
+#define TINY_REGISTER_SERIAL_NUMBER    0x01FAU
 #define TINY_REGISTER_BATTERY_FAMILY   0x01F8U
 
 void can_publisher_conversion_reset_state(void)
@@ -414,6 +429,17 @@ static const char *resolve_battery_name_string(const uart_bms_live_data_t *data)
     return CONFIG_TINYBMS_CAN_BATTERY_NAME;
 }
 
+static const char *resolve_serial_number_string(const uart_bms_live_data_t *data)
+{
+    static char buffer[17];
+
+    if (decode_ascii_from_registers(data, TINY_REGISTER_SERIAL_NUMBER, 16U, buffer, sizeof(buffer))) {
+        return buffer;
+    }
+
+    return CONFIG_TINYBMS_CAN_SERIAL_NUMBER;
+}
+
 static const char *resolve_battery_family_string(const uart_bms_live_data_t *data)
 {
     static char buffer[17];
@@ -463,12 +489,18 @@ static bool encode_charge_limits(const uart_bms_live_data_t *data, can_publisher
             cvl_v = (float)data->overvoltage_cutoff_mv / 1000.0f;
         }
 
-        ccl_a = sanitize_positive(data->charge_overcurrent_limit_a);
+        ccl_a = sanitize_positive(data->max_charge_current_limit_a);
+        if (ccl_a <= 0.0f) {
+            ccl_a = sanitize_positive(data->charge_overcurrent_limit_a);
+        }
         if (ccl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
             ccl_a = sanitize_positive(data->peak_discharge_current_limit_a);
         }
 
-        dcl_a = sanitize_positive(data->discharge_overcurrent_limit_a);
+        dcl_a = sanitize_positive(data->max_discharge_current_limit_a);
+        if (dcl_a <= 0.0f) {
+            dcl_a = sanitize_positive(data->discharge_overcurrent_limit_a);
+        }
         if (dcl_a <= 0.0f && data->peak_discharge_current_limit_a > 0.0f) {
             dcl_a = sanitize_positive(data->peak_discharge_current_limit_a);
         }
@@ -703,6 +735,170 @@ static bool encode_ascii_field(const uart_bms_live_data_t *data,
     return true;
 }
 
+static bool encode_battery_name_part1(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    const char *resolved = resolve_battery_name_string(data);
+    return encode_ascii_field(data, resolved, 0x01F6U, 0U, frame);
+}
+
+static bool encode_module_status_counts(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    memset(frame->data, 0, sizeof(frame->data));
+
+    bool offline = (data->timestamp_ms == 0U);
+    float charge_limit = sanitize_positive(data->max_charge_current_limit_a);
+    float discharge_limit = sanitize_positive(data->max_discharge_current_limit_a);
+
+    uint16_t modules_ok = offline ? 0U : 1U;
+    uint16_t blocking_charge = (charge_limit <= 0.0f) ? 1U : 0U;
+    uint16_t blocking_discharge = (discharge_limit <= 0.0f) ? 1U : 0U;
+    uint16_t offline_count = offline ? 1U : 0U;
+
+    if (data->warning_bits != 0U && blocking_charge == 0U) {
+        blocking_charge = 1U;
+    }
+    if (data->alarm_bits != 0U && blocking_discharge == 0U) {
+        blocking_discharge = 1U;
+    }
+
+    if (offline_count > 0U) {
+        modules_ok = 0U;
+    }
+
+    frame->data[0] = (uint8_t)(modules_ok & 0xFFU);
+    frame->data[1] = (uint8_t)((modules_ok >> 8U) & 0xFFU);
+    frame->data[2] = (uint8_t)(blocking_charge & 0xFFU);
+    frame->data[3] = (uint8_t)((blocking_charge >> 8U) & 0xFFU);
+    frame->data[4] = (uint8_t)(blocking_discharge & 0xFFU);
+    frame->data[5] = (uint8_t)((blocking_discharge >> 8U) & 0xFFU);
+    frame->data[6] = (uint8_t)(offline_count & 0xFFU);
+    frame->data[7] = (uint8_t)((offline_count >> 8U) & 0xFFU);
+
+    return true;
+}
+
+static bool encode_cell_voltage_temperature_extremes(const uart_bms_live_data_t *data,
+                                                     can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    memset(frame->data, 0, sizeof(frame->data));
+
+    uint16_t min_mv = data->min_cell_mv;
+    uint16_t max_mv = data->max_cell_mv;
+
+    uint16_t min_k = encode_u16_scaled(data->pack_temperature_min_c, 1.0f, 273.15f, 0U, 0xFFFFU);
+    uint16_t max_k = encode_u16_scaled(data->pack_temperature_max_c, 1.0f, 273.15f, 0U, 0xFFFFU);
+
+    frame->data[0] = (uint8_t)(min_mv & 0xFFU);
+    frame->data[1] = (uint8_t)((min_mv >> 8U) & 0xFFU);
+    frame->data[2] = (uint8_t)(max_mv & 0xFFU);
+    frame->data[3] = (uint8_t)((max_mv >> 8U) & 0xFFU);
+    frame->data[4] = (uint8_t)(min_k & 0xFFU);
+    frame->data[5] = (uint8_t)((min_k >> 8U) & 0xFFU);
+    frame->data[6] = (uint8_t)(max_k & 0xFFU);
+    frame->data[7] = (uint8_t)((max_k >> 8U) & 0xFFU);
+
+    return true;
+}
+
+static void encode_identifier_string(const char *text, can_publisher_frame_t *frame)
+{
+    memset(frame->data, 0, sizeof(frame->data));
+    copy_ascii_padded(frame->data, frame->dlc, text, 0U);
+}
+
+static bool encode_min_cell_identifier(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    char buffer[9] = {0};
+    unsigned value = data->min_cell_mv;
+    if (value > 9999U) {
+        value = 9999U;
+    }
+    (void)snprintf(buffer, sizeof(buffer), "MINV%04u", value);
+    encode_identifier_string(buffer, frame);
+    return true;
+}
+
+static bool encode_max_cell_identifier(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    char buffer[9] = {0};
+    unsigned value = data->max_cell_mv;
+    if (value > 9999U) {
+        value = 9999U;
+    }
+    (void)snprintf(buffer, sizeof(buffer), "MAXV%04u", value);
+    encode_identifier_string(buffer, frame);
+    return true;
+}
+
+static int clamp_temperature_identifier(float value_c)
+{
+    if (!isfinite(value_c)) {
+        return 0;
+    }
+    long rounded = lrintf(value_c);
+    if (rounded < -999L) {
+        rounded = -999L;
+    }
+    if (rounded > 999L) {
+        rounded = 999L;
+    }
+    return (int)rounded;
+}
+
+static bool encode_min_temp_identifier(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    char buffer[9] = {0};
+    int temp_c = clamp_temperature_identifier(data->pack_temperature_min_c);
+    (void)snprintf(buffer, sizeof(buffer), "MINT%+04d", temp_c);
+    encode_identifier_string(buffer, frame);
+    return true;
+}
+
+static bool encode_max_temp_identifier(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    char buffer[9] = {0};
+    int temp_c = clamp_temperature_identifier(data->pack_temperature_max_c);
+    (void)snprintf(buffer, sizeof(buffer), "MAXT%+04d", temp_c);
+    encode_identifier_string(buffer, frame);
+    return true;
+}
+
+static bool encode_serial_number_part1(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    const char *resolved = resolve_serial_number_string(data);
+    return encode_ascii_field(data, resolved, TINY_REGISTER_SERIAL_NUMBER, 0U, frame);
+}
+
+static bool encode_serial_number_part2(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
+{
+    const char *resolved = resolve_serial_number_string(data);
+    return encode_ascii_field(data, resolved, TINY_REGISTER_SERIAL_NUMBER, 8U, frame);
+}
+
 static bool encode_energy_counters(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
 {
     if (data == NULL || frame == NULL) {
@@ -825,12 +1021,68 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
         .period_ms = 2000U,
     },
     {
+        .pgn = VICTRON_PGN_BMS_NAME_PART1,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BMS_NAME_PART1),
+        .dlc = 8,
+        .fill_fn = encode_battery_name_part1,
+        .description = "Victron battery info part 1",
+        .period_ms = 2000U,
+    },
+    {
         .pgn = VICTRON_PGN_BMS_NAME_PART2,
         .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BMS_NAME_PART2),
         .dlc = 8,
         .fill_fn = encode_battery_name_part2,
         .description = "Victron battery info part 2",
         .period_ms = 2000U,
+    },
+    {
+        .pgn = VICTRON_PGN_MODULE_STATUS,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MODULE_STATUS),
+        .dlc = 8,
+        .fill_fn = encode_module_status_counts,
+        .description = "Victron module status counts",
+        .period_ms = 1000U,
+    },
+    {
+        .pgn = VICTRON_PGN_CELL_EXTREMES,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_CELL_EXTREMES),
+        .dlc = 8,
+        .fill_fn = encode_cell_voltage_temperature_extremes,
+        .description = "Victron cell voltage & temperature extremes",
+        .period_ms = 1000U,
+    },
+    {
+        .pgn = VICTRON_PGN_MIN_CELL_ID,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MIN_CELL_ID),
+        .dlc = 8,
+        .fill_fn = encode_min_cell_identifier,
+        .description = "Victron min cell identifier",
+        .period_ms = 1000U,
+    },
+    {
+        .pgn = VICTRON_PGN_MAX_CELL_ID,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MAX_CELL_ID),
+        .dlc = 8,
+        .fill_fn = encode_max_cell_identifier,
+        .description = "Victron max cell identifier",
+        .period_ms = 1000U,
+    },
+    {
+        .pgn = VICTRON_PGN_MIN_TEMP_ID,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MIN_TEMP_ID),
+        .dlc = 8,
+        .fill_fn = encode_min_temp_identifier,
+        .description = "Victron min temperature identifier",
+        .period_ms = 1000U,
+    },
+    {
+        .pgn = VICTRON_PGN_MAX_TEMP_ID,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MAX_TEMP_ID),
+        .dlc = 8,
+        .fill_fn = encode_max_temp_identifier,
+        .description = "Victron max temperature identifier",
+        .period_ms = 1000U,
     },
     {
         .pgn = VICTRON_PGN_ENERGY_COUNTERS,
@@ -846,6 +1098,22 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
         .dlc = 8,
         .fill_fn = encode_installed_capacity,
         .description = "Victron installed capacity",
+        .period_ms = 5000U,
+    },
+    {
+        .pgn = VICTRON_PGN_SERIAL_PART1,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_SERIAL_PART1),
+        .dlc = 8,
+        .fill_fn = encode_serial_number_part1,
+        .description = "Victron serial number part 1",
+        .period_ms = 5000U,
+    },
+    {
+        .pgn = VICTRON_PGN_SERIAL_PART2,
+        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_SERIAL_PART2),
+        .dlc = 8,
+        .fill_fn = encode_serial_number_part2,
+        .description = "Victron serial number part 2",
         .period_ms = 5000U,
     },
     {

@@ -58,6 +58,8 @@ typedef struct {
     uint16_t undervoltage_cutoff_mv;
     float discharge_overcurrent_limit_a;
     float charge_overcurrent_limit_a;
+    float max_discharge_current_limit_a;
+    float max_charge_current_limit_a;
     float peak_discharge_current_limit_a;
     float overheat_cutoff_c;
     float low_temp_charge_cutoff_c;

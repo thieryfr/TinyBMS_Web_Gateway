@@ -31,9 +31,18 @@
 #define PGN_ALARMS           0x35AU
 #define PGN_MANUFACTURER     0x35EU
 #define PGN_BATTERY_INFO     0x35FU
+#define PGN_BMS_NAME_PART1   0x370U
 #define PGN_BMS_NAME_PART2   0x371U
+#define PGN_MODULE_STATUS    0x372U
+#define PGN_CELL_EXTREMES    0x373U
+#define PGN_MIN_CELL_ID      0x374U
+#define PGN_MAX_CELL_ID      0x375U
+#define PGN_MIN_TEMP_ID      0x376U
+#define PGN_MAX_TEMP_ID      0x377U
 #define PGN_ENERGY_COUNTERS  0x378U
 #define PGN_INSTALLED_CAP    0x379U
+#define PGN_SERIAL_PART1     0x380U
+#define PGN_SERIAL_PART2     0x381U
 #define PGN_BATTERY_FAMILY   0x382U
 
 static const can_publisher_channel_t *find_channel(uint16_t pgn)
@@ -109,6 +118,8 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.undervoltage_cutoff_mv = 44800U;
     data.discharge_overcurrent_limit_a = 140.0f;
     data.charge_overcurrent_limit_a = 120.0f;
+    data.max_discharge_current_limit_a = 150.0f;
+    data.max_charge_current_limit_a = 110.0f;
     data.peak_discharge_current_limit_a = 200.0f;
     data.overheat_cutoff_c = 75.0f;
     data.low_temp_charge_cutoff_c = -5.0f;
@@ -118,9 +129,12 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.firmware_version = 0x56U;
     data.firmware_flags = 0x78U;
     data.internal_firmware_version = 0x9ABCU;
+    set_register(&data, 0x0066U, 1500U);
+    set_register(&data, 0x0067U, 1100U);
     append_register(&data, 0x0132U, 28000U);
     set_register_ascii(&data, 0x01F4U, "TinyBMS Maker");
     set_register_ascii(&data, 0x01F6U, "Nominal Pack 48V");
+    set_register_ascii(&data, 0x01FAU, "SN1234567890ABCD");
     return data;
 }
 
@@ -137,8 +151,8 @@ TEST_CASE("can_conversion_charge_limits_from_bms", "[can][unit]")
 
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
     TEST_ASSERT_EQUAL_UINT16(0x0237, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8))); // 56.7 V
-    TEST_ASSERT_EQUAL_UINT16(0x04B0, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8))); // 120.0 A
-    TEST_ASSERT_EQUAL_UINT16(0x0578, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8))); // 140.0 A
+    TEST_ASSERT_EQUAL_UINT16(0x044C, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8))); // 110.0 A
+    TEST_ASSERT_EQUAL_UINT16(0x05DC, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8))); // 150.0 A
 }
 
 TEST_CASE("can_conversion_charge_limits_from_cvl", "[can][unit]")
@@ -194,6 +208,121 @@ TEST_CASE("can_conversion_soc_soh_range_handling", "[can][unit]")
     TEST_ASSERT_EQUAL_UINT16(100, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
     TEST_ASSERT_EQUAL_UINT16(0, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
     TEST_ASSERT_EQUAL_UINT16(0, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+}
+
+TEST_CASE("can_conversion_battery_name_part1_ascii", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *channel = find_channel(PGN_BMS_NAME_PART1);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("Nominal ", frame.data, 8);
+}
+
+TEST_CASE("can_conversion_module_status_counts", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *channel = find_channel(PGN_MODULE_STATUS);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(1U, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(0U, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(0U, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(0U, (uint16_t)(frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+
+    data.max_charge_current_limit_a = 0.0f;
+    data.max_discharge_current_limit_a = 0.0f;
+    data.warning_bits = 1U;
+    data.alarm_bits = 1U;
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(1U, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(1U, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(1U, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+
+    data.timestamp_ms = 0U;
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(0U, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(1U, (uint16_t)(frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+}
+
+TEST_CASE("can_conversion_cell_extremes_pgn", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *channel = find_channel(PGN_CELL_EXTREMES);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(data.min_cell_mv, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(data.max_cell_mv, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(297U, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+    TEST_ASSERT_EQUAL_UINT16(307U, (uint16_t)(frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+}
+
+TEST_CASE("can_conversion_cell_identifier_strings", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *min_cell = find_channel(PGN_MIN_CELL_ID);
+    const can_publisher_channel_t *max_cell = find_channel(PGN_MAX_CELL_ID);
+    const can_publisher_channel_t *min_temp = find_channel(PGN_MIN_TEMP_ID);
+    const can_publisher_channel_t *max_temp = find_channel(PGN_MAX_TEMP_ID);
+    TEST_ASSERT_NOT_NULL(min_cell);
+    TEST_ASSERT_NOT_NULL(max_cell);
+    TEST_ASSERT_NOT_NULL(min_temp);
+    TEST_ASSERT_NOT_NULL(max_temp);
+
+    can_publisher_frame_t frame = { .id = min_cell->can_id, .dlc = min_cell->dlc };
+    TEST_ASSERT_TRUE(min_cell->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("MINV3400", frame.data, 8);
+
+    frame.id = max_cell->can_id;
+    frame.dlc = max_cell->dlc;
+    TEST_ASSERT_TRUE(max_cell->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("MAXV3485", frame.data, 8);
+
+    frame.id = min_temp->can_id;
+    frame.dlc = min_temp->dlc;
+    TEST_ASSERT_TRUE(min_temp->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("MINT+024", frame.data, 8);
+
+    frame.id = max_temp->can_id;
+    frame.dlc = max_temp->dlc;
+    TEST_ASSERT_TRUE(max_temp->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("MAXT+034", frame.data, 8);
+}
+
+TEST_CASE("can_conversion_serial_number_frames", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    const can_publisher_channel_t *part1 = find_channel(PGN_SERIAL_PART1);
+    const can_publisher_channel_t *part2 = find_channel(PGN_SERIAL_PART2);
+    TEST_ASSERT_NOT_NULL(part1);
+    TEST_ASSERT_NOT_NULL(part2);
+
+    can_publisher_frame_t frame = { .id = part1->can_id, .dlc = part1->dlc };
+    TEST_ASSERT_TRUE(part1->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("SN123456", frame.data, 8);
+
+    frame.id = part2->can_id;
+    frame.dlc = part2->dlc;
+    TEST_ASSERT_TRUE(part2->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("7890ABCD", frame.data, 8);
 }
 
 TEST_CASE("can_conversion_voltage_current_temperature_extremes", "[can][unit]")
