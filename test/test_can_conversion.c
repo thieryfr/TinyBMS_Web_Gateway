@@ -99,6 +99,7 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.state_of_charge_pct = 78.3f;
     data.state_of_health_pct = 92.0f;
     data.average_temperature_c = 28.0f;
+    data.auxiliary_temperature_c = 27.0f;
     data.mosfet_temperature_c = 31.0f;
     data.pack_temperature_min_c = 24.0f;
     data.pack_temperature_max_c = 34.0f;
@@ -110,6 +111,7 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.charge_overcurrent_limit_a = 120.0f;
     data.peak_discharge_current_limit_a = 200.0f;
     data.overheat_cutoff_c = 75.0f;
+    data.low_temp_charge_cutoff_c = -5.0f;
     data.register_count = 0;
     set_register_ascii(&data, 0x01F4U, "TinyBMS Maker");
     set_register_ascii(&data, 0x01F6U, "Nominal Pack 48V");
@@ -269,8 +271,71 @@ TEST_CASE("can_conversion_alarm_levels", "[can][unit]")
 
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
     TEST_ASSERT_EQUAL_UINT8(0xA2, frame.data[0]);
-    TEST_ASSERT_EQUAL_UINT8(0x1A, frame.data[1]);
-    TEST_ASSERT_EQUAL_UINT8(0x02, frame.data[7]);
+    TEST_ASSERT_EQUAL_UINT8(0x32, frame.data[1]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[2]);
+    TEST_ASSERT_EQUAL_UINT8(0xFE, frame.data[3]);
+    TEST_ASSERT_EQUAL_UINT8(0xA2, frame.data[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x02, frame.data[5]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[6]);
+    TEST_ASSERT_EQUAL_UINT8(0xF2, frame.data[7]);
+}
+
+TEST_CASE("can_conversion_alarm_status_warning_levels", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    float overvoltage_v = (float)data.overvoltage_cutoff_mv / 1000.0f;
+    data.pack_voltage_v = overvoltage_v * 0.97f;
+    data.pack_temperature_max_c = data.overheat_cutoff_c * 0.92f;
+    data.mosfet_temperature_c = data.pack_temperature_max_c;
+    data.pack_temperature_min_c = -4.0f;
+    data.auxiliary_temperature_c = data.low_temp_charge_cutoff_c + 1.0f;
+    data.max_cell_mv = 3450U;
+    data.min_cell_mv = 3390U;
+    data.pack_current_a = -data.discharge_overcurrent_limit_a * 0.85f;
+
+    const can_publisher_channel_t *channel = find_channel(PGN_ALARMS);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT8(0x00, frame.data[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x30, frame.data[1]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[2]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x45, frame.data[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x51, frame.data[5]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[6]);
+    TEST_ASSERT_EQUAL_UINT8(0xF1, frame.data[7]);
+}
+
+TEST_CASE("can_conversion_alarm_status_charge_current_levels", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+    data.pack_current_a = data.charge_overcurrent_limit_a * 1.05f;
+    data.max_cell_mv = 3400U;
+    data.min_cell_mv = 3400U;
+
+    const can_publisher_channel_t *channel = find_channel(PGN_ALARMS);
+    TEST_ASSERT_NOT_NULL(channel);
+
+    can_publisher_frame_t frame = {
+        .id = channel->can_id,
+        .dlc = channel->dlc,
+    };
+
+    TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT8(0x02, frame.data[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x30, frame.data[1]);
+    TEST_ASSERT_EQUAL_UINT8(0xFE, frame.data[2]);
+    TEST_ASSERT_EQUAL_UINT8(0xFC, frame.data[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x02, frame.data[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, frame.data[5]);
+    TEST_ASSERT_EQUAL_UINT8(0xFE, frame.data[6]);
+    TEST_ASSERT_EQUAL_UINT8(0xF0, frame.data[7]);
 }
 
 TEST_CASE("can_conversion_manufacturer_and_battery_strings", "[can][unit]")
