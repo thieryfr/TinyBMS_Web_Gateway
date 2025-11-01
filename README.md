@@ -61,7 +61,9 @@ Les conversions TinyBMS → Victron s'appuient sur le tableau `main/can_publishe
 - **0x355 SOC/SOH** : pourcentage sur 0,1 % à partir des registres d'état TinyBMS.
 - **0x356 Tension/Courant** : tension pack en 0,01 V, courant en 0,1 A signé.
 - **0x35A Alarmes** : bits d'états pour surtension, sous-tension, température, etc.
-- **0x35E/0x35F/0x371/0x378/0x379/0x382** : métadonnées (fabricant, nom batterie, capacité, énergie cumulée, famille) dérivées des paramètres configurables `CONFIG_TINYBMS_CAN_*`.
+- **0x35E/0x371/0x382** : chaînes ASCII (fabricant, nom batterie, famille) extraites des registres TinyBMS lorsque disponibles, sinon des constantes `CONFIG_TINYBMS_CAN_*`.
+- **0x35F** : identification matérielle (ID modèle, firmware public/interne, capacité en service) directement lue dans les registres TinyBMS 0x01F4/0x01F5/0x01F6/0x0132.
+- **0x378/0x379** : compteurs d'énergie cumulée et capacité installée.
 
 Le détail des champs, sources TinyBMS et formules de conversion est consolidé dans `docs/pgn_conversions.md`, qui complète la feuille `docs/pgn_mapping.xlsx` pour les besoins d'intégration Victron.【F:docs/pgn_conversions.md†L1-L126】
 

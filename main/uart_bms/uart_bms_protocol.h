@@ -16,7 +16,7 @@ extern "C" {
 /**
  * @brief Number of 16-bit register words requested in each TinyBMS poll.
  */
-#define UART_BMS_REGISTER_WORD_COUNT 30
+#define UART_BMS_REGISTER_WORD_COUNT 38
 
 /**
  * @brief Enumerates the logical TinyBMS registers that are polled over UART.

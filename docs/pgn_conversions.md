@@ -67,10 +67,17 @@ externes calculées par le pont.【F:main/can_publisher/conversion_table.c†L11
 Les seuils « charge basse température » utilisent désormais le registre TinyBMS 0x0140 (`low_temp_charge_cutoff_c`), ajouté à la
 trame UART pour récupérer la consigne de coupure de charge basse température.【F:main/uart_bms/uart_bms_protocol.c†L229-L260】【F:main/uart_bms/uart_response_parser.cpp†L234-L255】
 
-## PGN 0x35E / 0x35F / 0x371 — Informations fabricant & nom
-- **0x35E Manufacturer** : chaîne `CONFIG_TINYBMS_CAN_MANUFACTURER` tronquée/padée à 8 caractères.【F:main/can_publisher/conversion_table.c†L299-L335】
-- **0x35F Battery info** : `CONFIG_TINYBMS_CAN_BATTERY_NAME` (8 caractères max).【F:main/can_publisher/conversion_table.c†L336-L371】
-- **0x371 Name part 2** : suite du nom ou informations libres (8 caractères).【F:main/can_publisher/conversion_table.c†L372-L408】
+## PGN 0x35E / 0x371 — Informations fabricant & nom
+- **0x35E Manufacturer** : chaîne `CONFIG_TINYBMS_CAN_MANUFACTURER` tronquée/padée à 8 caractères (ou valeur lue sur les registres 0x01F4/0x01F5 si disponibles).【F:main/can_publisher/conversion_table.c†L708-L718】
+- **0x371 Name part 2** : suite du nom batterie (`CONFIG_TINYBMS_CAN_BATTERY_NAME` ou registres 0x01F6/0x01F7) encodée sur 8 octets.【F:main/can_publisher/conversion_table.c†L719-L725】
+
+## PGN 0x35F — Identification TinyBMS
+- **Octets 0-1 — Model ID** : combinaison `hardware_version` (LSB) / `hardware_changes_version` (MSB) issue du registre 0x01F4.【F:main/can_publisher/conversion_table.c†L189-L216】【F:main/uart_bms/uart_bms.h†L58-L63】
+- **Octets 2-3 — Firmware public & flags** : registre 0x01F5 (firmware public en LSB, indicateurs en MSB).【F:main/can_publisher/conversion_table.c†L217-L241】
+- **Octets 4-5 — Capacité en ligne** : registre 0x0132 (0,01 Ah) conservé brut pour reporter la capacité mesurée par TinyBMS.【F:main/can_publisher/conversion_table.c†L242-L249】
+- **Octets 6-7 — Firmware interne** : registre 0x01F6 (version interne 16 bits).【F:main/can_publisher/conversion_table.c†L250-L258】
+
+Les valeurs sont mises à zéro si TinyBMS ne fournit pas les registres ; les champs sont saturés à 0xFFFF en cas de débordement.
 
 ## PGN 0x378 — Energy Counters
 - **Charge Wh** : accumulateur interne `s_energy_charged_wh` (double) mis à jour à chaque appel via `update_energy_counters()`.
@@ -84,8 +91,8 @@ trame UART pour récupérer la consigne de coupure de charge basse température.
 - Conversion : Ah → entier non signé ×1 (1 Ah).【F:main/can_publisher/conversion_table.c†L574-L599】
 
 ## PGN 0x382 — Battery Family
-- Encodage ASCII (8 caractères) de `CONFIG_TINYBMS_CAN_BATTERY_FAMILY`.
-- Utilisé par Victron pour regrouper les profils de charge.【F:main/can_publisher/conversion_table.c†L636-L702】
+- Chaîne ASCII (8 caractères) lue depuis les registres 0x01F8–0x01FF ; repli sur `CONFIG_TINYBMS_CAN_BATTERY_FAMILY` si vide ou non renseignée.【F:main/can_publisher/conversion_table.c†L726-L738】
+- Utilisé par Victron pour regrouper les profils de charge.
 
 ## Validation
 - `test/test_can_conversion.c` couvre les cas nominaux et extrêmes pour chaque PGN.

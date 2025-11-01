@@ -113,6 +113,12 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.overheat_cutoff_c = 75.0f;
     data.low_temp_charge_cutoff_c = -5.0f;
     data.register_count = 0;
+    data.hardware_version = 0x12U;
+    data.hardware_changes_version = 0x34U;
+    data.firmware_version = 0x56U;
+    data.firmware_flags = 0x78U;
+    data.internal_firmware_version = 0x9ABCU;
+    append_register(&data, 0x0132U, 28000U);
     set_register_ascii(&data, 0x01F4U, "TinyBMS Maker");
     set_register_ascii(&data, 0x01F6U, "Nominal Pack 48V");
     return data;
@@ -357,7 +363,14 @@ TEST_CASE("can_conversion_manufacturer_and_battery_strings", "[can][unit]")
     frame.id = battery->can_id;
     frame.dlc = battery->dlc;
     TEST_ASSERT_TRUE(battery->fill_fn(&data, &frame));
-    TEST_ASSERT_EQUAL_MEMORY("Nominal ", frame.data, 8);
+    TEST_ASSERT_EQUAL_UINT16(0x3412U,
+                             (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8))); // HW/changes
+    TEST_ASSERT_EQUAL_UINT16(0x7856U,
+                             (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8))); // Public FW/flags
+    TEST_ASSERT_EQUAL_UINT16(28000U,
+                             (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8))); // Capacity ×100
+    TEST_ASSERT_EQUAL_UINT16(0x9ABCU,
+                             (uint16_t)(frame.data[6] | ((uint16_t)frame.data[7] << 8))); // Internal FW
 
     frame.id = part2->can_id;
     frame.dlc = part2->dlc;
@@ -366,6 +379,9 @@ TEST_CASE("can_conversion_manufacturer_and_battery_strings", "[can][unit]")
 
     frame.id = family->can_id;
     frame.dlc = family->dlc;
+    set_register_ascii(&data, 0x01F8U, "Family16");
+    TEST_ASSERT_TRUE(family->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_MEMORY("Family16", frame.data, 8);
     data.register_count = 0;
     TEST_ASSERT_TRUE(family->fill_fn(&data, &frame));
     size_t family_length = strlen(CONFIG_TINYBMS_CAN_BATTERY_FAMILY);

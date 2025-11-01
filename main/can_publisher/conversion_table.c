@@ -47,6 +47,12 @@ static double s_energy_charged_wh = 0.0;
 static double s_energy_discharged_wh = 0.0;
 static uint64_t s_energy_last_timestamp_ms = 0;
 
+#define TINY_REGISTER_BATTERY_CAPACITY 0x0132U
+#define TINY_REGISTER_HARDWARE_VERSION 0x01F4U
+#define TINY_REGISTER_PUBLIC_FIRMWARE  0x01F5U
+#define TINY_REGISTER_INTERNAL_FW      0x01F6U
+#define TINY_REGISTER_BATTERY_FAMILY   0x01F8U
+
 void can_publisher_conversion_reset_state(void)
 {
     s_energy_charged_wh = 0.0;
@@ -288,6 +294,54 @@ static uint32_t encode_energy_wh(double energy_wh)
     return (uint32_t)(scaled + 0.5);
 }
 
+static bool encode_battery_identification(const uart_bms_live_data_t *data,
+                                          can_publisher_frame_t *frame)
+{
+    if (data == NULL || frame == NULL) {
+        return false;
+    }
+
+    memset(frame->data, 0, sizeof(frame->data));
+
+    uint16_t model_id = (uint16_t)data->hardware_version |
+                        (uint16_t)((uint16_t)data->hardware_changes_version << 8U);
+    if (model_id == 0U) {
+        (void)find_register_value(data, TINY_REGISTER_HARDWARE_VERSION, &model_id);
+    }
+
+    uint16_t firmware_word = (uint16_t)data->firmware_version |
+                              (uint16_t)((uint16_t)data->firmware_flags << 8U);
+    if (firmware_word == 0U) {
+        (void)find_register_value(data, TINY_REGISTER_PUBLIC_FIRMWARE, &firmware_word);
+    }
+
+    uint16_t capacity_word = 0U;
+    if (!find_register_value(data, TINY_REGISTER_BATTERY_CAPACITY, &capacity_word)) {
+        float capacity_ah = data->battery_capacity_ah;
+        if (capacity_ah < 0.0f) {
+            capacity_ah = 0.0f;
+        }
+        capacity_word = encode_u16_scaled(capacity_ah, 100.0f, 0.0f, 0U, 0xFFFFU);
+    }
+
+    frame->data[0] = (uint8_t)(model_id & 0xFFU);
+    frame->data[1] = (uint8_t)((model_id >> 8U) & 0xFFU);
+    frame->data[2] = (uint8_t)(firmware_word & 0xFFU);
+    frame->data[3] = (uint8_t)((firmware_word >> 8U) & 0xFFU);
+    frame->data[4] = (uint8_t)(capacity_word & 0xFFU);
+    frame->data[5] = (uint8_t)((capacity_word >> 8U) & 0xFFU);
+
+    uint16_t internal_fw = data->internal_firmware_version;
+    if (internal_fw == 0U) {
+        (void)find_register_value(data, TINY_REGISTER_INTERNAL_FW, &internal_fw);
+    }
+
+    frame->data[6] = (uint8_t)(internal_fw & 0xFFU);
+    frame->data[7] = (uint8_t)((internal_fw >> 8U) & 0xFFU);
+
+    return true;
+}
+
 static void update_energy_counters(const uart_bms_live_data_t *data)
 {
     if (data == NULL) {
@@ -364,7 +418,7 @@ static const char *resolve_battery_family_string(const uart_bms_live_data_t *dat
 {
     static char buffer[17];
 
-    if (decode_ascii_from_registers(data, 0x01F6U, 16U, buffer, sizeof(buffer))) {
+    if (decode_ascii_from_registers(data, TINY_REGISTER_BATTERY_FAMILY, 16U, buffer, sizeof(buffer))) {
         return buffer;
     }
 
@@ -709,12 +763,6 @@ static bool encode_manufacturer_string(const uart_bms_live_data_t *data, can_pub
     return encode_ascii_field(data, resolved, 0x01F4U, 0U, frame);
 }
 
-static bool encode_battery_name(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
-{
-    const char *resolved = resolve_battery_name_string(data);
-    return encode_ascii_field(data, resolved, 0x01F6U, 0U, frame);
-}
-
 static bool encode_battery_name_part2(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
 {
     const char *resolved = resolve_battery_name_string(data);
@@ -724,7 +772,7 @@ static bool encode_battery_name_part2(const uart_bms_live_data_t *data, can_publ
 static bool encode_battery_family(const uart_bms_live_data_t *data, can_publisher_frame_t *frame)
 {
     const char *resolved = resolve_battery_family_string(data);
-    return encode_ascii_field(data, resolved, 0x01F6U, 0U, frame);
+    return encode_ascii_field(data, resolved, TINY_REGISTER_BATTERY_FAMILY, 0U, frame);
 }
 
 const can_publisher_channel_t g_can_publisher_channels[] = {
@@ -772,8 +820,8 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
         .pgn = VICTRON_PGN_BATTERY_INFO,
         .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BATTERY_INFO),
         .dlc = 8,
-        .fill_fn = encode_battery_name,
-        .description = "Victron battery info",
+        .fill_fn = encode_battery_identification,
+        .description = "Victron battery identification",
         .period_ms = 2000U,
     },
     {

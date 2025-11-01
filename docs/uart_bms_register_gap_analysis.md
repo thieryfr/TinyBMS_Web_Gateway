@@ -64,7 +64,7 @@ Les registres suivants, pourtant requis par la matrice consolidée, ne figurent 
 - 102 / 103 — limites dynamiques de courant de charge/décharge (CCL/DCL).
 - 504 / 505 — sérialisation du numéro de série en deux blocs ASCII.
 
-Aucun identifiant 0x0066/0x0067 (Reg 102/103) ou 0x01F8–0x01F9 (Reg 504/505) n'est présent dans la table des registres polled (cf. liste d'adresses 0x0020–0x01F6).【F:main/uart_bms/uart_bms_protocol.c†L5-L315】
+Les registres 0x0066/0x0067 (Reg 102/103) restent absents, mais la fenêtre 0x01F8–0x01FF (Reg 504+) est désormais intégrée à la séquence de poll afin d’alimenter les chaînes « Battery Family ».【F:main/uart_bms/uart_bms_protocol.c†L5-L343】
 
 ## 3. Écarts fonctionnels à combler
 
