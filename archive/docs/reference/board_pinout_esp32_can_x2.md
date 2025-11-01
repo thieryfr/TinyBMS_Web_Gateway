@@ -28,3 +28,11 @@ TinyBMS interface on those pins by default, and exposes the assignment via
 `Component config → TinyBMS Web Gateway → TinyBMS UART` in
 `menuconfig` for installations that need to remap the serial
 channel.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L20-L29】【F:main/Kconfig.projbuild†L215-L234】
+TinyBMS interface on those pins by default.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L20-L29】
+Autosport Labs have not yet published the ESP32 pin numbers associated
+with the UART pads on this connector. The TinyBMS gateway therefore keeps
+its UART driver on `GPIO17` (TX) and `GPIO16` (RX) until official
+documentation becomes available.【F:archive/docs/reference/esp32_can_x2_repo_notes.md†L20-L26】
+pair on this header, while the CAN2 lines are intentionally left free so
+that a secondary controller such as an MCP2515 can be added later if
+required.
