@@ -169,6 +169,12 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                         case UART_BMS_FIELD_BALANCING_BITS:
                             legacy_out->balancing_bits = raw;
                             break;
+                        case UART_BMS_FIELD_MAX_DISCHARGE_CURRENT:
+                            legacy_out->max_discharge_current_limit_a = scaled;
+                            break;
+                        case UART_BMS_FIELD_MAX_CHARGE_CURRENT:
+                            legacy_out->max_charge_current_limit_a = scaled;
+                            break;
                         case UART_BMS_FIELD_PEAK_DISCHARGE_CURRENT_LIMIT:
                             legacy_out->peak_discharge_current_limit_a = scaled;
                             break;
@@ -231,6 +237,12 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                         case UART_BMS_FIELD_BALANCING_BITS:
                             shared_out->balancing_bits = raw;
                             break;
+                        case UART_BMS_FIELD_MAX_DISCHARGE_CURRENT:
+                            shared_out->max_discharge_current = raw;
+                            break;
+                        case UART_BMS_FIELD_MAX_CHARGE_CURRENT:
+                            shared_out->max_charge_current = raw;
+                            break;
                         case UART_BMS_FIELD_PEAK_DISCHARGE_CURRENT_LIMIT:
                             shared_out->max_discharge_current = static_cast<uint16_t>(scaled * 10.0f);
                             break;
@@ -245,7 +257,6 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                             break;
                         case UART_BMS_FIELD_CHARGE_OVER_CURRENT_LIMIT:
                             shared_out->charge_overcurrent_a = static_cast<uint16_t>(scaled);
-                            shared_out->max_charge_current = static_cast<uint16_t>(scaled * 10.0f);
                             break;
                         case UART_BMS_FIELD_OVERHEAT_CUTOFF:
                             shared_out->overheat_cutoff_c = static_cast<uint16_t>(scaled);
