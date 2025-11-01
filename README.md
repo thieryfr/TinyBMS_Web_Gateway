@@ -57,8 +57,8 @@ Une description détaillée (diagrammes de flux, responsabilités par tâche, co
 ## PGN Victron & conversions TinyBMS
 Les conversions TinyBMS → Victron s'appuient sur le tableau `main/can_publisher/conversion_table.c` et les définitions de `docs/bridge_pgn_defs.h`. Chaque PGN encode des échelles spécifiques :
 
-- **0x351 CVL/CCL/DCL** : tension en 0,01 V, courants en 0,1 A ; limites dynamiques basées sur les registres TinyBMS et les éventuelles réductions logicielles.
-- **0x355 SOC/SOH** : pourcentage sur 0,1 % à partir des registres d'état TinyBMS.
+- **0x351 CVL/CCL/DCL** : tension en 0,1 V, courants en 0,1 A ; limites dynamiques basées sur les registres TinyBMS et les éventuelles réductions logicielles.
+- **0x355 SOC/SOH** : pourcentage sur 1 % à partir des registres d'état TinyBMS.
 - **0x356 Tension/Courant** : tension pack en 0,01 V, courant en 0,1 A signé.
 - **0x35A Alarmes** : bits d'états pour surtension, sous-tension, température, etc.
 - **0x35E/0x371/0x382** : chaînes ASCII (fabricant, nom batterie, famille) extraites des registres TinyBMS lorsque disponibles, sinon des constantes `CONFIG_TINYBMS_CAN_*`.
