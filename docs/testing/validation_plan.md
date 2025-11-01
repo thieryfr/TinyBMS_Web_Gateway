@@ -66,3 +66,34 @@ sudo ./tools/can_capture.sh can0 capture.log
 1. Lancer `idf.py test` pour valider automatiquement les conversions.
 2. Utiliser `tools/can_capture.sh` lors des essais terrain pour capturer les trames réelles.
 3. Comparer les valeurs décodées avec les enregistrements TinyBMS (SOC, CVL, alarmes) et s'assurer du respect des critères ci-dessus.
+
+## 5. Validation terrain obligatoire
+
+Une validation terrain est requise avant toute diffusion OTA majeure afin de confirmer le comportement CAN/Victron dans un environnement complet.
+
+### 5.1 Préparation
+- **Fenêtre** : réaliser l'essai durant la semaine du 29/07/2024, une fois la stabilisation firmware (étape 1) et la campagne d'endurance (étape 2) clôturées.
+- **Lieu** : site pilote Victron (atelier R&D, bâtiment B, baie d'essais n°3) disposant d'un banc Victron MultiPlus et d'une batterie LiFePO4 instrumentée.
+- **Équipe** : 1 ingénieur Tests (lead), 1 ingénieur Firmware (support), 1 représentant Intégration Client.
+
+### 5.2 Matériel requis
+- 1 gateway TinyBMS Web Gateway flashée avec la build candidate.
+- 1 interface CAN-to-USB (PeakCAN ou CANable) avec portable Linux.
+- 1 alimentation stabilisée 12 V / 10 A pour le banc Victron.
+- 1 tablette/PC pour accès UI web et monitoring MQTT.
+- Outils de capture : `candump`, `mosquitto_sub`, scripts d'analyse `tools/`.
+
+### 5.3 Check-list d'exécution
+1. **Initialisation** : consigner le hash Git, la version ESP-IDF et l'ID de configuration TinyBMS utilisée.
+2. **Connexion** : brancher la gateway sur le bus CAN Victron, alimenter, vérifier la séquence de boot (logs `wifi`, `can_victron`).
+3. **Keepalive** : capturer 10 minutes de trafic CAN et vérifier le respect des critères §3 (PGN, périodicité, CVL).
+4. **Alarmes** : forcer deux scénarios (surtension, surtempérature) et confirmer la propagation des alarmes dans les trames et l'UI web.
+5. **Intégration Victron** : vérifier la mise à jour de l'état batterie dans le GX (SOC, courant, tension) et le déclenchement éventuel de relais.
+6. **MQTT/Cloud** (si activé) : valider la remontée des mesures via le broker de test et comparer aux captures CAN.
+7. **Clôture** : documenter anomalies/pistes dans le ticket QA, archiver logs CAN, captures écran UI, rapport Victron.
+
+### 5.4 Critères de réussite terrain
+- 0 erreur critique dans les logs firmware sur la durée de l'essai.
+- Alignement ±2 % entre SOC Victron et SOC TinyBMS sur l'ensemble des mesures.
+- Alarmes critiques relayées en moins de 5 s sur le GX et via MQTT.
+- Rapport d'essai validé par QA et stocké dans l'espace partagé.
