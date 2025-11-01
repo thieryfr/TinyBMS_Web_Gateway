@@ -51,7 +51,8 @@ enum class TinyLiveDataField : uint8_t {
     CellUndervoltageMv,
     DischargeOvercurrentA,
     ChargeOvercurrentA,
-    OverheatCutoffC
+    OverheatCutoffC,
+    BatteryCapacityAh
 };
 
 struct TinyRegisterMetadata {

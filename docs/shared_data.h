@@ -53,6 +53,11 @@ struct TinyBMS_LiveData {
     uint16_t balancing_bits;     // Bitfield: active cell balancing
     uint16_t max_discharge_current; // 0.1A
     uint16_t max_charge_current;    // 0.1A
+    float discharge_current_limit_a; // A
+    float charge_current_limit_a;    // A
+    float battery_capacity_ah;       // Ah
+    char serial_number[17];          // ASCII, null-terminated
+    uint8_t serial_length;           // Valid character count in serial_number
     float soc_percent;           // 0–100%
     float soh_percent;           // 0–100%
     uint16_t cell_imbalance_mv;  // Max - Min cell diff (mV)
@@ -175,9 +180,11 @@ struct TinyBMS_LiveData {
                 break;
             case TinyLiveDataField::MaxChargeCurrent:
                 max_charge_current = static_cast<uint16_t>(raw_value);
+                charge_current_limit_a = scaled_value;
                 break;
             case TinyLiveDataField::MaxDischargeCurrent:
                 max_discharge_current = static_cast<uint16_t>(raw_value);
+                discharge_current_limit_a = scaled_value;
                 break;
             case TinyLiveDataField::OnlineStatus:
                 online_status = static_cast<uint16_t>(raw_value);
@@ -199,6 +206,9 @@ struct TinyBMS_LiveData {
                 break;
             case TinyLiveDataField::ChargeOvercurrentA:
                 charge_overcurrent_a = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::BatteryCapacityAh:
+                battery_capacity_ah = scaled_value;
                 break;
             case TinyLiveDataField::OverheatCutoffC:
                 overheat_cutoff_c = static_cast<uint16_t>(raw_value);

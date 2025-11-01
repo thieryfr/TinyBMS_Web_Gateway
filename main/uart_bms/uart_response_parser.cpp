@@ -1,5 +1,6 @@
 #include "uart_response_parser.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include "esp_log.h"
@@ -11,6 +12,9 @@ constexpr uint8_t kTinyBmsPreamble = 0xAA;
 constexpr uint8_t kTinyBmsOpcodeReadIndividual = 0x09;
 constexpr size_t kFrameHeaderSize = 3;  // preamble + opcode + payload length
 constexpr size_t kCrcSize = 2;
+constexpr uint16_t kSerialNumberBaseAddress = 0x01FA;
+constexpr size_t kSerialNumberWordCount = 8;
+constexpr size_t kSerialNumberCharCount = UART_BMS_SERIAL_NUMBER_MAX_LENGTH;
 
 TinyRegisterValueType toTinyValueType(uart_bms_value_type_t value_type)
 {
@@ -36,6 +40,89 @@ int32_t toSignedRaw(uint16_t value)
 }
 
 const char* kLogTag = "uart_parser";
+
+uint8_t sanitize_ascii(uint8_t value)
+{
+    value &= 0x7FU;
+    if (value < 0x20U && value != 0U) {
+        value = 0x20U;
+    }
+    return value;
+}
+
+size_t find_poll_index(uint16_t address, size_t register_count)
+{
+    for (size_t i = 0; i < register_count; ++i) {
+        if (g_uart_bms_poll_addresses[i] == address) {
+            return i;
+        }
+    }
+    return register_count;
+}
+
+size_t decode_ascii_field(uint16_t base_address,
+                          size_t expected_word_count,
+                          size_t expected_char_count,
+                          const uint16_t* raw_words,
+                          size_t register_count,
+                          char* out_buffer,
+                          size_t buffer_size)
+{
+    if (out_buffer == nullptr || buffer_size == 0) {
+        return 0;
+    }
+
+    std::memset(out_buffer, 0, buffer_size);
+
+    if (raw_words == nullptr || register_count == 0) {
+        return 0;
+    }
+
+    size_t start_index = find_poll_index(base_address, register_count);
+    if (start_index >= register_count) {
+        return 0;
+    }
+
+    size_t available_words = std::min(expected_word_count, register_count - start_index);
+    if (available_words == 0) {
+        return 0;
+    }
+
+    size_t max_chars = std::min(expected_char_count, buffer_size - 1);
+    bool has_non_zero = false;
+    size_t length = 0;
+
+    for (size_t i = 0; i < max_chars; ++i) {
+        size_t word_offset = i / 2U;
+        if (word_offset >= available_words) {
+            break;
+        }
+
+        uint16_t raw = raw_words[start_index + word_offset];
+        uint8_t byte = (i % 2U == 0U) ? static_cast<uint8_t>(raw & 0xFFU)
+                                      : static_cast<uint8_t>((raw >> 8U) & 0xFFU);
+        byte = sanitize_ascii(byte);
+        out_buffer[i] = static_cast<char>(byte);
+        if (byte != 0U && byte != ' ') {
+            has_non_zero = true;
+        }
+        if (byte != 0U) {
+            length = i + 1U;
+        }
+    }
+
+    while (length > 0U && (out_buffer[length - 1U] == '\0' || out_buffer[length - 1U] == ' ')) {
+        out_buffer[length - 1U] = '\0';
+        --length;
+    }
+
+    if (!has_non_zero) {
+        std::memset(out_buffer, 0, buffer_size);
+        return 0;
+    }
+
+    return length;
+}
 }  // namespace
 
 UartResponseParser::UartResponseParser() = default;
@@ -239,12 +326,17 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                             break;
                         case UART_BMS_FIELD_MAX_DISCHARGE_CURRENT:
                             shared_out->max_discharge_current = raw;
+                            shared_out->discharge_current_limit_a = scaled;
                             break;
                         case UART_BMS_FIELD_MAX_CHARGE_CURRENT:
                             shared_out->max_charge_current = raw;
+                            shared_out->charge_current_limit_a = scaled;
                             break;
                         case UART_BMS_FIELD_PEAK_DISCHARGE_CURRENT_LIMIT:
                             shared_out->max_discharge_current = static_cast<uint16_t>(scaled * 10.0f);
+                            break;
+                        case UART_BMS_FIELD_BATTERY_CAPACITY:
+                            shared_out->battery_capacity_ah = scaled;
                             break;
                         case UART_BMS_FIELD_OVERVOLTAGE_CUTOFF:
                             shared_out->cell_overvoltage_mv = raw;
@@ -462,6 +554,28 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
         shared_out->cell_imbalance_mv = (shared_out->max_cell_mv > shared_out->min_cell_mv)
                                             ? static_cast<uint16_t>(shared_out->max_cell_mv - shared_out->min_cell_mv)
                                             : 0;
+    }
+
+    if ((legacy_out != nullptr || shared_out != nullptr) && register_count > 0U) {
+        char serial_buffer[UART_BMS_SERIAL_NUMBER_MAX_LENGTH + 1] = {0};
+        size_t serial_length = decode_ascii_field(kSerialNumberBaseAddress,
+                                                  kSerialNumberWordCount,
+                                                  kSerialNumberCharCount,
+                                                  raw_words,
+                                                  register_count,
+                                                  serial_buffer,
+                                                  sizeof(serial_buffer));
+
+        if (serial_length > 0U) {
+            if (legacy_out != nullptr) {
+                std::memcpy(legacy_out->serial_number, serial_buffer, serial_length + 1U);
+                legacy_out->serial_length = static_cast<uint8_t>(serial_length);
+            }
+            if (shared_out != nullptr) {
+                std::memcpy(shared_out->serial_number, serial_buffer, serial_length + 1U);
+                shared_out->serial_length = static_cast<uint8_t>(serial_length);
+            }
+        }
     }
 }
 

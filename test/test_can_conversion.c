@@ -130,6 +130,9 @@ static uart_bms_live_data_t make_nominal_sample(void)
     data.firmware_version = 0x56U;
     data.firmware_flags = 0x78U;
     data.internal_firmware_version = 0x9ABCU;
+    strncpy(data.serial_number, "SN1234567890ABCD", sizeof(data.serial_number) - 1U);
+    data.serial_number[sizeof(data.serial_number) - 1U] = '\0';
+    data.serial_length = (uint8_t)strlen(data.serial_number);
     set_register(&data, 0x0066U, 1500U);
     set_register(&data, 0x0067U, 1100U);
     append_register(&data, 0x0132U, 28000U);
