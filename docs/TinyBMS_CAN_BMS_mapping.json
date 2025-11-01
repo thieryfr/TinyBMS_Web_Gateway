@@ -1,0 +1,1030 @@
+{
+  "bms_can_mapping": {
+    "0x351": {
+      "name": "BMS Charge Parameters",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Charge Voltage Limit (CVL)",
+          "scale": 0.1,
+          "unit": "V",
+          "offset": 0,
+          "tiny_reg": null,
+          "tiny_name": "Charge Voltage Limit (CVL)",
+          "tiny_type": null,
+          "tiny_scale_unit": "0.1 V",
+          "mapping_type": "Compute",
+          "inputs": ["fullyChargedVoltage", "maxCellVoltage", "bmsTemp", "minChargeVoltage"],
+          "formula": "CVL as per calculated with code",
+          "priority": 1,
+          "comment": "Dynamic CVL per code as develop before"
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "Max Charge Current Limit (CCL)",
+          "scale": 0.1,
+          "unit": "A",
+          "signed": true,
+          "tiny_reg": 103,
+          "tiny_name": "Max Charge Current",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "0.1 A",
+          "mapping_type": "Compute",
+          "inputs": ["maxChargeCurrent", "bmsTemp", "soc"],
+          "scale_tiny_to_can": 1,
+          "formula": "CCL = min(maxChargeCurrent, tempDerate, socDerate)",
+          "priority": 1,
+          "comment": "Positive value expected by Victron"
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "Max Discharge Current Limit (DCL)",
+          "scale": 0.1,
+          "unit": "A",
+          "signed": true,
+          "tiny_reg": 102,
+          "tiny_name": "Max Discharge Current",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "0.1 A",
+          "mapping_type": "Compute",
+          "inputs": ["maxDischargeCurrent", "bmsTemp", "soc"],
+          "scale_tiny_to_can": 1,
+          "formula": "DCL = min(maxDischargeCurrent, tempDerate, socDerate)",
+          "priority": 1,
+          "comment": "Positive value expected by Victron"
+        },
+        {
+          "bytes": "6-7",
+          "victron_field": "Discharge Voltage Limit",
+          "scale": 0.1,
+          "unit": "V",
+          "offset": 0,
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non utilisé"
+        }
+      ]
+    },
+
+    "0x355": {
+      "name": "BMS State of Charge & Health",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "State Of Charge (SOC)",
+          "scale": 1,
+          "unit": "%",
+          "tiny_reg": 46,
+          "tiny_name": "State Of Charge",
+          "tiny_type": "UINT32",
+          "tiny_scale_unit": "0.002 %",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 0.002,
+          "formula": "round(SOC * 0.002)",
+          "priority": 2,
+          "comment": "Also fill hi-res if used"
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "State Of Health (SOH)",
+          "scale": 1,
+          "unit": "%",
+          "tiny_reg": 45,
+          "tiny_name": "State Of Health",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "0.002 %",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 0.002,
+          "formula": "round(SOH * 0.002)",
+          "priority": 2,
+          "comment": "—"
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "High Resolution SOC (optionnel)",
+          "scale": 0.01,
+          "unit": "%",
+          "tiny_reg": 46,
+          "tiny_name": "State Of Charge",
+          "tiny_type": "UINT32",
+          "tiny_scale_unit": "0.002 %",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 0.0001,
+          "formula": "round(SOC * 0.0001)",
+          "priority": 2,
+          "comment": "Optional high-res field"
+        }
+      ]
+    },
+
+    "0x356": {
+      "name": "BMS Voltage, Current, Temperature",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Battery Voltage",
+          "scale": 0.01,
+          "unit": "V",
+          "signed": true,
+          "tiny_reg": 36,
+          "tiny_name": "Battery Pack Voltage",
+          "tiny_type": "FLOAT",
+          "tiny_scale_unit": "1 V",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 100,
+          "formula": "voltage * 100 → 0.01V",
+          "priority": 2,
+          "comment": "Quantize to 0.01 V"
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "Battery Current",
+          "scale": 0.1,
+          "unit": "A",
+          "signed": true,
+          "tiny_reg": 38,
+          "tiny_name": "Battery Pack Current",
+          "tiny_type": "FLOAT",
+          "tiny_scale_unit": "1 A",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 10,
+          "formula": "current * 10 (charge +, discharge –)",
+          "priority": 2,
+          "comment": "Sign: charge + / discharge –"
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "Battery Temperature",
+          "scale": 0.1,
+          "unit": "°C",
+          "signed": true,
+          "tiny_reg": 48,
+          "tiny_name": "Internal Temperature",
+          "tiny_type": "INT16",
+          "tiny_scale_unit": "0.1 °C",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "temp",
+          "priority": 2,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x35A": {
+      "name": "BMS Alarms & Warnings",
+      "pgn": 59904,
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0 bits 0-1",
+          "victron_field": "General Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "0 bits 2-3",
+          "victron_field": "Battery High Voltage Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "36.315",
+          "tiny_name": "Battery High Voltage Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packVoltage", "highVoltageCutoff"],
+          "formula": "if packVoltage > highVoltageCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Alarm (hard threshold)"
+        },
+        {
+          "bytes": "0 bits 4-5",
+          "victron_field": "Battery Low Voltage Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "36.316",
+          "tiny_name": "Battery Low Voltage Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packVoltage", "lowVoltageCutoff"],
+          "formula": "if packVoltage < lowVoltageCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Alarm (hard threshold)"
+        },
+        {
+          "bytes": "0 bits 6-7",
+          "victron_field": "Battery High Temp Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "113.318",
+          "tiny_name": "Battery High Temperature Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["maxTemp", "highTempCutoff"],
+          "formula": "if maxTemp > highTempCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Alarm from Tiny temperature set"
+        },
+        {
+          "bytes": "1 bits 0-1",
+          "victron_field": "Battery Low Temp Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "113.319",
+          "tiny_name": "Battery Low Temperature Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["minTemp", "lowTempCutoff"],
+          "formula": "if minTemp < lowTempCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Alarm from Tiny temperature set"
+        },
+        {
+          "bytes": "1 bits 2-3",
+          "victron_field": "Battery High Temp Charge Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "42.319",
+          "tiny_name": "Battery High Temp Charge Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["externalTemp", "highTempChargeCutoff"],
+          "formula": "if externalTemp > highTempChargeCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Charge temp alarm"
+        },
+        {
+          "bytes": "1 bits 4-5",
+          "victron_field": "Battery Low Temp Charge Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "1 bits 6-7",
+          "victron_field": "Battery High Current Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "38.317",
+          "tiny_name": "Battery High Current Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packCurrent", "overCurrentCutoff"],
+          "formula": "if packCurrent > overCurrentCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Over-current alarm"
+        },
+        {
+          "bytes": "2 bits 0-1",
+          "victron_field": "Battery High Charge Current Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "38.318",
+          "tiny_name": "Battery High Charge Current Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packCurrent", "overChargeCurrentCutoff"],
+          "formula": "if packCurrent > overChargeCurrentCutoff then 1 else 0",
+          "priority": 3,
+          "comment": "Charge over-current alarm"
+        },
+        {
+          "bytes": "2 bits 2-3",
+          "victron_field": "Contactor Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "2 bits 4-5",
+          "victron_field": "Short Circuit Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "2 bits 6-7",
+          "victron_field": "BMS Internal Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "3 bits 0-1",
+          "victron_field": "Cell Imbalance Alarm",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": 52,
+          "tiny_name": "Cell Imbalance Alarm",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["balancingState"],
+          "formula": "if balancingState != 0 then 1 else 0",
+          "priority": 4,
+          "comment": "Imbalance present"
+        },
+        {
+          "bytes": "3 bits 2-7",
+          "victron_field": "Reserved",
+          "scale": 1,
+          "unit": "reserved",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Reserved"
+        },
+        {
+          "bytes": "4 bits 0-1",
+          "victron_field": "General Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "4 bits 2-3",
+          "victron_field": "Battery High Voltage Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "36.315",
+          "tiny_name": "Battery High Voltage Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packVoltage", "highVoltageCutoff"],
+          "formula": "if packVoltage > (highVoltageCutoff*0.8) then 1 else 0",
+          "priority": 4,
+          "comment": "Early warning @80%"
+        },
+        {
+          "bytes": "4 bits 4-5",
+          "victron_field": "Battery Low Voltage Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "36.316",
+          "tiny_name": "Battery Low Voltage Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packVoltage", "lowVoltageCutoff"],
+          "formula": "if packVoltage < (lowVoltageCutoff*1.2) then 1 else 0",
+          "priority": 4,
+          "comment": "Early warning @120%"
+        },
+        {
+          "bytes": "4 bits 6-7",
+          "victron_field": "Battery High Temp Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "113.318",
+          "tiny_name": "Battery High Temperature Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["maxTemp", "highTempCutoff"],
+          "formula": "if maxTemp > (highTempCutoff*0.8) then 1 else 0",
+          "priority": 4,
+          "comment": "Early warning @80%"
+        },
+        {
+          "bytes": "5 bits 0-1",
+          "victron_field": "Battery Low Temp Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "113.319",
+          "tiny_name": "Battery Low Temperature Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["minTemp", "lowTempCutoff"],
+          "formula": "if minTemp < (lowTempCutoff*1.2) then 1 else 0",
+          "priority": 4,
+          "comment": "Early warning @120%"
+        },
+        {
+          "bytes": "5 bits 2-3",
+          "victron_field": "Battery High Temp Charge Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "42.319",
+          "tiny_name": "Battery High Temp Charge Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["externalTemp", "highTempChargeCutoff"],
+          "formula": "if externalTemp > (highTempChargeCutoff*0.8) then 1 else 0",
+          "priority": 4,
+          "comment": "Charge warning @80%"
+        },
+        {
+          "bytes": "5 bits 4-5",
+          "victron_field": "Battery Low Temp Charge Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "42.32",
+          "tiny_name": "Battery Low Temp Charge Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["externalTemp", "lowTempChargeCutoff"],
+          "formula": "if externalTemp < lowTempChargeCutoff then 1 else 0",
+          "priority": 4,
+          "comment": "Charge temp warning"
+        },
+        {
+          "bytes": "5 bits 6-7",
+          "victron_field": "Battery High Current Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": "38.317",
+          "tiny_name": "Battery High Current Warning",
+          "tiny_type": "UINT8",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Compute",
+          "inputs": ["packCurrent", "overCurrentCutoff"],
+          "formula": "if packCurrent > (overCurrentCutoff*0.8) then 1 else 0",
+          "priority": 4,
+          "comment": "Current warning @80%"
+        },
+        {
+          "bytes": "6 bits 0-1",
+          "victron_field": "Battery High Charge Current Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "6 bits 2-3",
+          "victron_field": "Contactor Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "6 bits 4-5",
+          "victron_field": "Short Circuit Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "6 bits 6-7",
+          "victron_field": "BMS Internal Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "7 bits 0-1",
+          "victron_field": "Cell Imbalance Warning",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "7 bits 2-3",
+          "victron_field": "System Status (online/offline)",
+          "scale": 1,
+          "unit": "enum",
+          "tiny_reg": 50,
+          "tiny_name": "Online Status",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "Extract from bitfield (e.g., 0x91=Charging as online)",
+          "priority": null,
+          "comment": "—"
+        },
+        {
+          "bytes": "7 bits 4-7",
+          "victron_field": "Reserved",
+          "scale": 1,
+          "unit": "reserved",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Reserved"
+        }
+      ]
+    },
+
+    "0x35E": {
+      "name": "Manufacturer Name",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Manufacturer Name",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": 500,
+          "tiny_name": "Manufacturer Name",
+          "tiny_type": "String",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "string",
+          "priority": null,
+          "comment": "Hardcoded \"Enepaq\""
+        }
+      ]
+    },
+
+    "0x35F": {
+      "name": "Battery Model & Capacity",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Battery Model ID",
+          "scale": 1,
+          "unit": "ID",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "Firmware Version",
+          "scale": 1,
+          "unit": "version",
+          "tiny_reg": 501,
+          "tiny_name": "Firmware Version",
+          "tiny_type": "UINT32",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "big-endian",
+          "priority": null,
+          "comment": "—"
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "Online Capacity",
+          "scale": 1,
+          "unit": "Ah",
+          "tiny_reg": 306,
+          "tiny_name": "Battery Capacity",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "0.01 Ah",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 100,
+          "formula": "capacity * 100",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x370": {
+      "name": "Battery/BMS Name Part 1",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Battery/BMS Name Part 1",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x371": {
+      "name": "Battery/BMS Name Part 2",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Battery/BMS Name Part 2",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x372": {
+      "name": "Module Status Counts",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Number of Modules OK",
+          "scale": 1,
+          "unit": "count",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "Number of Modules Blocking Charge",
+          "scale": 1,
+          "unit": "count",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "Number of Modules Blocking Discharge",
+          "scale": 1,
+          "unit": "count",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "6-7",
+          "victron_field": "Number of Modules Offline",
+          "scale": 1,
+          "unit": "count",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x373": {
+      "name": "Cell Voltage & Temperature Extremes",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Min Cell Voltage",
+          "scale": 1,
+          "unit": "mV",
+          "tiny_reg": 40,
+          "tiny_name": "Min Cell Voltage",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "1 mV",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "min_cell_mv",
+          "priority": null,
+          "comment": "—"
+        },
+        {
+          "bytes": "2-3",
+          "victron_field": "Max Cell Voltage",
+          "scale": 1,
+          "unit": "mV",
+          "tiny_reg": 41,
+          "tiny_name": "Max Cell Voltage",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "1 mV",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "max_cell_mv",
+          "priority": null,
+          "comment": "—"
+        },
+        {
+          "bytes": "4-5",
+          "victron_field": "Lowest Cell Temperature",
+          "scale": 1,
+          "unit": "K",
+          "tiny_reg": 113,
+          "tiny_name": "Min Pack Temperature",
+          "tiny_type": "INT8",
+          "tiny_scale_unit": "1 °C",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "temp + 273.15 → K",
+          "priority": null,
+          "comment": "—"
+        },
+        {
+          "bytes": "6-7",
+          "victron_field": "Highest Cell Temperature",
+          "scale": 1,
+          "unit": "K",
+          "tiny_reg": 113,
+          "tiny_name": "Max Pack Temperature",
+          "tiny_type": "INT8",
+          "tiny_scale_unit": "1 °C",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "temp + 273.15 → K",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x374": {
+      "name": "Min Cell Voltage ID String",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Min Cell Voltage ID String",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x375": {
+      "name": "Max Cell Voltage ID String",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Max Cell Voltage ID String",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x376": {
+      "name": "Min Cell Temp ID String",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Min Cell Temp ID String",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x377": {
+      "name": "Max Cell Temp ID String",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Max Cell Temp ID String",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x378": {
+      "name": "Cumulative Energy",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-3",
+          "victron_field": "Energy In (cumulé)",
+          "scale": 100,
+          "unit": "Wh",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        },
+        {
+          "bytes": "4-7",
+          "victron_field": "Energy Out (cumulé)",
+          "scale": 100,
+          "unit": "Wh",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "Non impl."
+        }
+      ]
+    },
+
+    "0x379": {
+      "name": "Installed Capacity",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-1",
+          "victron_field": "Installed Capacity",
+          "scale": 1,
+          "unit": "Ah",
+          "tiny_reg": 306,
+          "tiny_name": "Battery Capacity",
+          "tiny_type": "UINT16",
+          "tiny_scale_unit": "0.01 Ah",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 100,
+          "formula": "capacity * 100",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x380": {
+      "name": "Serial Number Part 1",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Serial Number Part 1",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": 504,
+          "tiny_name": "Serial Number (part 1)",
+          "tiny_type": "String",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "Convert to ASCII",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x381": {
+      "name": "Serial Number Part 2",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Serial Number Part 2",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": 505,
+          "tiny_name": "Serial Number (part 2)",
+          "tiny_type": "String",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "Convert to ASCII",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x382": {
+      "name": "Battery Family Name",
+      "pgn": "N/A",
+      "interval": "À l'initialisation",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Battery Family Name",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": 502,
+          "tiny_name": "Battery Family",
+          "tiny_type": "String",
+          "tiny_scale_unit": "-",
+          "mapping_type": "Direct",
+          "scale_tiny_to_can": 1,
+          "formula": "string",
+          "priority": null,
+          "comment": "—"
+        }
+      ]
+    },
+
+    "0x305": {
+      "name": "Keepalive from GX to BMS",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-7",
+          "victron_field": "Keepalive",
+          "scale": 1,
+          "unit": "hex",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "From GX, no Tiny mapping"
+        }
+      ]
+    },
+
+    "0x307": {
+      "name": "Inverter Identifier",
+      "pgn": "N/A",
+      "interval": "1 s",
+      "fields": [
+        {
+          "bytes": "0-3",
+          "victron_field": "Inverter Fixed Identifier",
+          "scale": 1,
+          "unit": "hex",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "From GX, no Tiny mapping"
+        },
+        {
+          "bytes": "4-6",
+          "victron_field": "Inverter ASCII String \"VIC\"",
+          "scale": 1,
+          "unit": "string",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "From GX, no Tiny mapping"
+        },
+        {
+          "bytes": "7",
+          "victron_field": "Reserved Byte",
+          "scale": 1,
+          "unit": "hex",
+          "tiny_reg": null,
+          "tiny_name": null,
+          "mapping_type": null,
+          "comment": "From GX, no Tiny mapping"
+        }
+      ]
+    }
+  }
+}
