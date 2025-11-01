@@ -69,7 +69,7 @@ La table `g_can_publisher_channels` décrit exhaustivement les trames envoyées 
 | 0x382 | 0x180382E5 | 8 | 5000 | `encode_battery_family` | Victron battery family |
 
 ## Détails des encodeurs PGN
-- **0x351 – Charge/Discharge Limits** : encode CVL (×100 V), CCL/DCL (×10 A) selon la logique DVCC (`can_publisher_cvl_get_latest`). En absence de contrôle DVCC, derive les limites depuis les registres TinyBMS (overvoltage cutoff, surintensités, courant de pointe).【F:main/can_publisher/conversion_table.c†L332-L379】
+- **0x351 – Charge/Discharge Limits** : encode CVL (×10 V), CCL/DCL (×10 A) selon la logique DVCC (`can_publisher_cvl_get_latest`). En absence de contrôle DVCC, derive les limites depuis les registres TinyBMS (overvoltage cutoff, surintensités, courant de pointe).【F:main/can_publisher/conversion_table.c†L332-L379】
 - **0x355 – State of Charge/Health** : encode SoC et SoH en 0.1 % (×10) avec saturation à 0…1000.【F:main/can_publisher/conversion_table.c†L381-L404】
 - **0x356 – Voltage/Current/Temperature** : tension pack (×100 V), courant signé (×10 A) et température MOSFET (×10 °C).【F:main/can_publisher/conversion_table.c†L406-L437】
 - **0x35A – Alarm Status** : agrège quatre indicateurs (sous/surtension, température haute/basse) + déséquilibre cellulaire, SoC bas/haut. Chaque bitfield utilise des niveaux 2 bits (0 = OK, 1 = Warning, 2 = Alarm) avec byte 7 reflétant le niveau global.【F:main/can_publisher/conversion_table.c†L439-L517】

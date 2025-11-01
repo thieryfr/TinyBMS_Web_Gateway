@@ -370,7 +370,7 @@ static bool encode_charge_limits(const uart_bms_live_data_t *data, can_publisher
         }
     }
 
-    uint16_t cvl_raw = encode_u16_scaled(cvl_v, 100.0f, 0.0f, 0U, 0xFFFFU);
+    uint16_t cvl_raw = encode_u16_scaled(cvl_v, 10.0f, 0.0f, 0U, 0xFFFFU);
     uint16_t ccl_raw = encode_u16_scaled(ccl_a, 10.0f, 0.0f, 0U, 0xFFFFU);
     uint16_t dcl_raw = encode_u16_scaled(dcl_a, 10.0f, 0.0f, 0U, 0xFFFFU);
 

@@ -116,7 +116,7 @@ TEST_CASE("can_conversion_charge_limits_from_bms", "[can][unit]")
     };
 
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
-    TEST_ASSERT_EQUAL_UINT16(0x162C, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8))); // 56.7 V
+    TEST_ASSERT_EQUAL_UINT16(0x0237, (uint16_t)(frame.data[0] | ((uint16_t)frame.data[1] << 8))); // 56.7 V
     TEST_ASSERT_EQUAL_UINT16(0x04B0, (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8))); // 120.0 A
     TEST_ASSERT_EQUAL_UINT16(0x0578, (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8))); // 140.0 A
 }
@@ -147,7 +147,7 @@ TEST_CASE("can_conversion_charge_limits_from_cvl", "[can][unit]")
     uint16_t ccl_raw = (uint16_t)(frame.data[2] | ((uint16_t)frame.data[3] << 8));
     uint16_t dcl_raw = (uint16_t)(frame.data[4] | ((uint16_t)frame.data[5] << 8));
 
-    TEST_ASSERT_EQUAL_UINT16((uint16_t)lrintf(cvl_result.result.cvl_voltage_v * 100.0f), cvl_raw);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)lrintf(cvl_result.result.cvl_voltage_v * 10.0f), cvl_raw);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)lrintf(cvl_result.result.ccl_limit_a * 10.0f), ccl_raw);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)lrintf(cvl_result.result.dcl_limit_a * 10.0f), dcl_raw);
 }
