@@ -23,6 +23,20 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms);
 const mqtt_client_config_t *config_manager_get_mqtt_client_config(void);
 esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config);
 
+#define CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH 96
+
+typedef struct {
+    char status[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char metrics[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char config[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_raw[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_decoded[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char can_ready[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+} config_manager_mqtt_topics_t;
+
+const config_manager_mqtt_topics_t *config_manager_get_mqtt_topics(void);
+esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *topics);
+
 #define CONFIG_MANAGER_MAX_CONFIG_SIZE 2048
 #define CONFIG_MANAGER_MAX_REGISTERS_JSON 4096
 
