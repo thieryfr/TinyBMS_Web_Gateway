@@ -41,8 +41,8 @@ Le module `web_server` expose l'interface HTTP/WS de l'application :
 ## Endpoints REST principaux
 - `GET /api/status` : récupère `monitoring_get_status_json()` et y adjoint l'état MQTT/Wi-Fi.
 - `GET /api/history` : `monitoring_get_history_json()` (limite via `limit=` dans la query).
-- `GET /api/config` : appelle `config_manager_get_config_json()`.
-- `POST /api/config` : lit un corps JSON, invoque `config_manager_set_config_json()` et publie une notification.
+- `GET /api/config` : appelle `config_manager_get_config_json()` pour retourner le snapshot courante (issue des macros, de NVS et du fichier `/spiffs/config.json`).【F:main/web_server/web_server.c†L580-L602】
+- `POST /api/config` : lit un corps JSON, invoque `config_manager_set_config_json()` (validation + persistance SPIFFS/NVS) puis renvoie `{ "status": "updated" }`. Toute mise à jour valide régénère `/spiffs/config.json` pour un prochain boot.【F:main/web_server/web_server.c†L604-L649】【F:main/config_manager/config_manager.c†L1048-L1161】
 - `GET /api/registers` & `POST /api/registers` : interfaces de lecture/écriture des registres TinyBMS via `config_manager` et `uart_bms`.
 - `POST /api/ota` : réception d'un firmware et publication de `APP_EVENT_ID_OTA_UPLOAD_READY`.
 - `GET /api/mqtt` : exposition de l'état courant de `mqtt_gateway_get_status()`.

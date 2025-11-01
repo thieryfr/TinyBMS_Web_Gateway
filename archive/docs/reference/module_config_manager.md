@@ -38,6 +38,12 @@ classDiagram
 ## Rôle et responsabilités
 `config_manager` centralise la configuration persistante du portail TinyBMS : paramètres MQTT, intervalle de scrutation UART, mapping des registres modifiables et topics MQTT. Il fournit une API JSON consommée par le serveur HTTP, applique les changements côté système et publie `APP_EVENT_ID_CONFIG_UPDATED` pour notifier les autres modules.【F:main/config_manager/config_manager.c†L33-L210】【F:main/include/app_events.h†L16-L24】
 
+## Cycle de démarrage et valeurs par défaut
+- **Macro-compilation** : au premier démarrage, toutes les structures internes (`s_device_settings`, `s_wifi_settings`, `s_can_settings`, etc.) sont initialisées avec les macros `CONFIG_TINYBMS_*` issues de `sdkconfig`/`sdkconfig.defaults` ou des gardes `#define` présents dans `config_manager.c`. Exemples : URI MQTT (`CONFIG_TINYBMS_MQTT_BROKER_URI`), SSID/AP Wi-Fi (`CONFIG_TINYBMS_WIFI_*`), broches TWAI (`CONFIG_TINYBMS_CAN_VICTRON_{TX,RX}_GPIO`), identité Victron (`CONFIG_TINYBMS_CAN_*`).【F:main/config_manager/config_manager.c†L71-L168】【F:sdkconfig.defaults†L24-L30】
+- **Chargement NVS** : `config_manager_load_persistent_settings()` ouvre l’espace `gateway_cfg` pour restaurer l’intervalle UART, la configuration MQTT et les topics précédemment persistés ; chaque valeur est clampée/validée avant application.【F:main/config_manager/config_manager.c†L912-L1046】
+- **Fichier SPIFFS** : `config_manager_load_config_file()` tente ensuite de lire `/spiffs/config.json`. En cas d’absence (`ESP_ERR_NOT_FOUND`), les valeurs par défaut restent actives. Dès qu’un JSON valide est appliqué (via API REST ou autre), `config_manager_save_config_file()` crée/met à jour ce fichier afin qu’il soit rejoué aux démarrages suivants.【F:main/config_manager/config_manager.c†L1048-L1161】【F:main/config_manager/config_manager.c†L227-L256】
+- **Snapshot JSON** : après consolidation (macros + NVS + fichier), `config_manager_build_config_snapshot()` sérialise l’état courant dans `s_config_json`, utilisé pour répondre à `/api/config` et notifier l’interface web.【F:main/config_manager/config_manager.c†L1696-L1712】
+
 ## Paramètres de persistance (NVS)
 - **Espace de noms** : `gateway_cfg` (`CONFIG_MANAGER_NAMESPACE`). Toutes les clés sont stockées dans cette partition.【F:main/config_manager/config_manager.c†L23-L48】
 - **Clés principales** :

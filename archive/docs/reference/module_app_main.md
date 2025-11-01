@@ -55,7 +55,7 @@ La boucle finale `while(true) { vTaskDelay(1000); }` maintient le thread princip
 - **CAN** : `can_publisher_init()` est initialisé après `can_victron_init()` afin de disposer du callback `can_victron_publish_frame`. Les trames prêtes sont publiées sur le bus (`APP_EVENT_ID_CAN_FRAME_READY`) puis envoyées physiquement via TWAI.【F:main/app_main.c†L24-L37】【F:main/can_publisher/can_publisher.c†L87-L205】
 
 ## Considérations de configuration
-- Les modules consomment les paramètres persistés (`config_manager`) dès leur init : poll interval UART, identifiants MQTT, topics personnalisés, etc.【F:main/config_manager/config_manager.c†L300-L379】【F:main/uart_bms/uart_bms.cpp†L188-L245】
+- Les modules consomment les paramètres persistés (`config_manager`) dès leur init : poll interval UART, identifiants MQTT, topics personnalisés, etc. Lorsque `/spiffs/config.json` est absent, `config_manager` retombe automatiquement sur les macros `CONFIG_TINYBMS_*` définies à la compilation avant de persister la première configuration reçue via `/api/config`.【F:main/config_manager/config_manager.c†L71-L168】【F:main/config_manager/config_manager.c†L912-L1161】
 - Toute nouvelle brique doit déclarer un `*_set_event_publisher()` et idéalement un `*_init()` idempotent pour s’intégrer au flux sans perturber la configuration existante.
 
 ## Extensibilité et tests
