@@ -1,0 +1,136 @@
+source,can_id,victron_field,bytes,scale,offset,unit,signed,formula,mapping_type,compute_inputs,tiny_reg,tiny_name,tiny_type,tiny_scale_unit,scale_tiny_to_can,priority,interval,comment,pgn
+excel,0x351,Charge Voltage Limit (CVL),0-1,0.1,0,V,,CVL = code already done,Compute,"fullyChargedVoltage,maxCellVoltage,bmsTemp,minChargeVoltage",-,Charge Voltage Limit (CVL),-,0.1 V,,1,1 s,Dynamic CVL per code (reduce via cell V & temp),
+excel,0x351,Max Charge Current Limit (CCL),2-3,0.1,0,A,true,"CCL = min(maxChargeCurrent, tempDerate, socDerate)",Compute,"maxChargeCurrent,bmsTemp,soc",103,Max Charge Current,UINT16,0.1 A,×1→(0.1A),1,1 s,Positive value expected by Victron,
+excel,0x351,Max Discharge Current Limit (DCL),4-5,0.1,0,A,true,"DCL = min(maxDischargeCurrent, tempDerate, socDerate)",Compute,"maxDischargeCurrent,bmsTemp,soc",102,Max Discharge Current,UINT16,0.1 A,×1→(0.1A),1,1 s,Positive value expected by Victron,
+excel,0x351,Discharge Voltage Limit (non utilisé),6-7,0.1,0,V,,,,,,,,,,,1 s,,
+excel,0x355,State Of Charge (SOC),0-1,1,0,%,,SOC from Tiny high-res,Direct,,46,State Of Charge,UINT32,0.002 %,×0.002→% (round),2,1 s,Also fill hi-res if used,
+excel,0x355,State Of Health (SOH),2-3,1,0,%,,SOH from Tiny,Direct,,45,State Of Health,UINT16,0.002 %,×0.002→% (round),2,1 s,—,
+excel,0x355,High Resolution SOC (optionnel),4-5,0.01,0,%,,High-res SOC from Tiny,Direct,,46,State Of Charge,UINT32,0.002 %,×0.0001→0.01% (round),2,1 s,Optional high-res field,
+excel,0x356,Battery Voltage,0-1,0.01,0,V,true,Quantize to 0.01 V,Direct,,36,Battery Pack Voltage,FLOAT,1 V,×100,2,1 s,—,
+excel,0x356,Battery Current,2-3,0.1,0,A,true,Sign: charge + / discharge –,Direct,,38,Battery Pack Current,FLOAT,1 A,×10,2,1 s,—,
+excel,0x356,Battery Temperature,4-5,0.1,0,°C,true,—,Direct,,48,Internal Temperature,INT16,0.1 °C,×1→(0.1°C),2,1 s,—,
+excel,0x35A,ISO Request (PGN demandé),0-2,1,0,PGN,,,,,,,,,,, Bytes 3-7: Réservé (0xFF),,
+excel,0x35A,General Alarm (non impl.),0 bits 0-1,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Battery High Voltage Alarm,0 bits 2-3,,,,,if packVoltage > highVoltageCutoff then 1 else 0,Compute,"packVoltage,highVoltageCutoff",36.315,Battery High Voltage Alarm,UINT8,-,,3,1 s,Alarm (hard threshold),
+excel,0x35A,Battery Low Voltage Alarm,0 bits 4-5,,,,,if packVoltage < lowVoltageCutoff then 1 else 0,Compute,"packVoltage,lowVoltageCutoff",36.316,Battery Low Voltage Alarm,UINT8,-,,3,1 s,Alarm (hard threshold),
+excel,0x35A,Battery High Temp Alarm,0 bits 6-7,,,,,if maxTemp > highTempCutoff then 1 else 0,Compute,"maxTemp,highTempCutoff",113.318,Battery High Temperature Alarm,UINT8,-,,3,1 s,Alarm from Tiny temperature set,
+excel,0x35A,Battery Low Temp Alarm,1 bits 0-1,,,,,if minTemp < lowTempCutoff then 1 else 0,Compute,"minTemp,lowTempCutoff",113.319,Battery Low Temperature Alarm,UINT8,-,,3,1 s,Alarm from Tiny temperature set,
+excel,0x35A,Battery High Temp Charge Alarm,1 bits 2-3,,,,,if externalTemp > highTempChargeCutoff then 1 else 0,Compute,"externalTemp,highTempChargeCutoff",42.319,Battery High Temp Charge Alarm,UINT8,-,,3,1 s,Charge temp alarm,
+excel,0x35A,Battery Low Temp Charge Alarm,1 bits 4-5,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Battery High Current Alarm,1 bits 6-7,,,,,if packCurrent > overCurrentCutoff then 1 else 0,Compute,"packCurrent,overCurrentCutoff",38.317,Battery High Current Alarm,UINT8,-,,3,1 s,Over-current alarm,
+excel,0x35A,Battery High Charge Current Alarm,2 bits 0-1,,,,,if packCurrent > overChargeCurrentCutoff then 1 else 0,Compute,"packCurrent,overChargeCurrentCutoff",38.318,Battery High Charge Current Alarm,UINT8,-,,3,1 s,Charge over-current alarm,
+excel,0x35A,Contactor Alarm (non impl.),2 bits 2-3,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Short Circuit Alarm (non impl.),2 bits 4-5,,,,,,,,,,,,,,1 s,,
+excel,0x35A,BMS Internal Alarm,2 bits 6-7,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Cell Imbalance Alarm,3 bits 0-1,,,,,if balancingState != 0 then 1 else 0,Compute,balancingState,52,Cell Imbalance Alarm,UINT8,-,,4,1 s,Imbalance present,
+excel,0x35A,Reserved (x3),3 bits 2-7,,,,,,,,,,,,,,1 s,,
+excel,0x35A,General Warning (non impl.),4 bits 0-1,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Battery High Voltage Warning,4 bits 2-3,,,,,if packVoltage > (highVoltageCutoff*0.8) then 1 else 0,Compute,"packVoltage,highVoltageCutoff",36.315,Battery High Voltage Warning,UINT8,-,,4,1 s,Early warning @80%,
+excel,0x35A,Battery Low Voltage Warning,4 bits 4-5,,,,,if packVoltage < (lowVoltageCutoff*1.2) then 1 else 0,Compute,"packVoltage,lowVoltageCutoff",36.316,Battery Low Voltage Warning,UINT8,-,,4,1 s,Early warning @120%,
+excel,0x35A,Battery High Temp Warning,4 bits 6-7,,,,,if maxTemp > (highTempCutoff*0.8) then 1 else 0,Compute,"maxTemp,highTempCutoff",113.318,Battery High Temperature Warning,UINT8,-,,4,1 s,Early warning @80%,
+excel,0x35A,Battery Low Temp Warning,5 bits 0-1,,,,,if minTemp < (lowTempCutoff*1.2) then 1 else 0,Compute,"minTemp,lowTempCutoff",113.319,Battery Low Temperature Warning,UINT8,-,,4,1 s,Early warning @120%,
+excel,0x35A,Battery High Temp Charge Warning,5 bits 2-3,,,,,if externalTemp > (highTempChargeCutoff*0.8) then 1 else 0,Compute,"externalTemp,highTempChargeCutoff",42.319,Battery High Temp Charge Warning,UINT8,-,,4,1 s,Charge warning @80%,
+excel,0x35A,Battery Low Temp Charge Warning,5 bits 4-5,,,,,if externalTemp < lowTempChargeCutoff then 1 else 0,Compute,"externalTemp,lowTempChargeCutoff",42.32,Battery Low Temp Charge Warning,UINT8,-,,4,1 s,Charge temp warning,
+excel,0x35A,Battery High Current Warning,5 bits 6-7,,,,,if packCurrent > (overCurrentCutoff*0.8) then 1 else 0,Compute,"packCurrent,overCurrentCutoff",38.317,Battery High Current Warning,UINT8,-,,4,1 s,Current warning @80%,
+excel,0x35A,Battery High Charge Current Warning,6 bits 0-1,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Contactor Warning (non impl.),6 bits 2-3,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Short Circuit Warning (non impl.),6 bits 4-5,,,,,,,,,,,,,,1 s,,
+excel,0x35A,BMS Internal Warning,6 bits 6-7,,,,,,,,,,,,,,1 s,,
+excel,0x35A,Cell Imbalance Warning,7 bits 0-1,,,,,,,,,,,,,,1 s,,
+excel,0x35A,System Status (online/offline),7 bits 2-3,,,,,"Extract from bitfield (e.g., 0x91=Charging as online)",Direct,,50,Online Status,UINT16,-,×1,,1 s,—,
+excel,0x35A,Reserved (reste byte 7),7 bits 4-7,,,,,,,,,,,,,,1 s,,
+excel,0x35E,Manufacturer Name,0-7,,,,,,Direct,,500,Manufacturer Name,String,-,×1,"Hardcoded ""Enepaq""",À l'initialisation,,
+excel,0x35F,Battery Model ID,0-1,1,0,ID,,,,,,,,,,,À l'initialisation,,
+excel,0x35F,Firmware Version,2-3,1,0,version,,,Direct,,501,Firmware Version,UINT32,-,×1,,À l'initialisation,,
+excel,0x35F,Online Capacity,4-5,1,0,Ah,,,Direct,,306,Battery Capacity,UINT16,0.01 Ah,×100,,À l'initialisation,,
+excel,0x370,Battery/BMS Name Part 1,0-7,,,,,,,,,,,,,,À l'initialisation,,
+excel,0x371,Battery/BMS Name Part 2,0-7,,,,,,,,,,,,,,À l'initialisation,,
+excel,0x372,Number of Modules OK,0-1,1,0,count,,,,,,,,,,,1 s,,
+excel,0x372,Number of Modules Blocking Charge,2-3,1,0,count,,,,,,,,,,,1 s,,
+excel,0x372,Number of Modules Blocking Discharge,4-5,1,0,count,,,,,,,,,,,1 s,,
+excel,0x372,Number of Modules Offline,6-7,1,0,count,,,,,,,,,,,1 s,,
+excel,0x373,Min Cell Voltage,0-1,1,0,mV,,,Direct,,40,Min Cell Voltage,UINT16,1 mV,×1,,1 s,,
+excel,0x373,Max Cell Voltage,2-3,1,0,mV,,,Direct,,41,Max Cell Voltage,UINT16,1 mV,×1,,1 s,,
+excel,0x373,Lowest Cell Temperature,4-5,1,0,K,,,Direct,,113,Min Pack Temperature,INT8,1 °C,+273.15 → K,,1 s,,
+excel,0x373,Highest Cell Temperature,6-7,1,0,K,,,Direct,,113,Max Pack Temperature,INT8,1 °C,+273.15 → K,,1 s,,
+excel,0x374,Min Cell Voltage ID String,0-7,,,,,,,,,,,,,,1 s,,
+excel,0x375,Max Cell Voltage ID String,0-7,,,,,,,,,,,,,,1 s,,
+excel,0x376,Min Cell Temp ID String,0-7,,,,,,,,,,,,,,1 s,,
+excel,0x377,Max Cell Temp ID String,0-7,,,,,,,,,,,,,,1 s,,
+excel,0x378,Energy In (cumulé),0-3,100,0,Wh,,,,,,,,,,,1 s,,
+excel,0x378,Energy Out (cumulé),4-7,100,0,Wh,,,,,,,,,,,1 s,,
+excel,0x379,Installed Capacity,0-1,1,0,Ah,,,Direct,,306,Battery Capacity,UINT16,0.01 Ah,×100,,À l'initialisation,,
+excel,0x380,Serial Number Part 1,0-7,,,,,,Direct,,504,Serial Number (part 1),String,-,Convert to ASCII,,À l'initialisation,,
+excel,0x381,Serial Number Part 2,0-7,,,,,,Direct,,505,Serial Number (part 2),String,-,Convert to ASCII,,À l'initialisation,,
+excel,0x382,Battery Family Name,0-7,,,,,,Direct,,502,Battery Family,String,-,×1,,À l'initialisation,,
+excel,0x305,Keepalive from GX to BMS,0-7,,,,,,,,,,,,,,1 s,,
+excel,0x307,Inverter Fixed Identifier,0-3,1,0,hex,,,,,,,,,,,1 s,,
+excel,0x307,"Inverter ASCII String ""VIC""",4-6,1,0,string,,,,,,,,,,,1 s,,
+excel,0x307,Reserved Byte,7,1,0,hex,,,,,,,,,,,1 s,,
+json,0x351,Charge Voltage Limit (CVL),0-1,0.1,0,V,,CVL as per calculated with code,Compute,"fullyChargedVoltage,maxCellVoltage,bmsTemp,minChargeVoltage",,Charge Voltage Limit (CVL),,0.1 V,,1,1 s,Dynamic CVL per code as develop before,N/A
+json,0x351,Max Charge Current Limit (CCL),2-3,0.1,,A,true,"CCL = min(maxChargeCurrent, tempDerate, socDerate)",Compute,"maxChargeCurrent,bmsTemp,soc",103,Max Charge Current,UINT16,0.1 A,1,1,1 s,Positive value expected by Victron,N/A
+json,0x351,Max Discharge Current Limit (DCL),4-5,0.1,,A,true,"DCL = min(maxDischargeCurrent, tempDerate, socDerate)",Compute,"maxDischargeCurrent,bmsTemp,soc",102,Max Discharge Current,UINT16,0.1 A,1,1,1 s,Positive value expected by Victron,N/A
+json,0x351,Discharge Voltage Limit,6-7,0.1,0,V,,,,,,,,,,,1 s,Non utilisé,N/A
+json,0x355,State Of Charge (SOC),0-1,1,,%,,round(SOC * 0.002),Direct,,46,State Of Charge,UINT32,0.002 %,0.002,2,1 s,Also fill hi-res if used,N/A
+json,0x355,State Of Health (SOH),2-3,1,,%,,round(SOH * 0.002),Direct,,45,State Of Health,UINT16,0.002 %,0.002,2,1 s,—,N/A
+json,0x355,High Resolution SOC (optionnel),4-5,0.01,,%,,round(SOC * 0.0001),Direct,,46,State Of Charge,UINT32,0.002 %,0.0001,2,1 s,Optional high-res field,N/A
+json,0x356,Battery Voltage,0-1,0.01,,V,true,voltage * 100 → 0.01V,Direct,,36,Battery Pack Voltage,FLOAT,1 V,100,2,1 s,Quantize to 0.01 V,N/A
+json,0x356,Battery Current,2-3,0.1,,A,true,"current * 10 (charge +, discharge –)",Direct,,38,Battery Pack Current,FLOAT,1 A,10,2,1 s,Sign: charge + / discharge –,N/A
+json,0x356,Battery Temperature,4-5,0.1,,°C,true,temp,Direct,,48,Internal Temperature,INT16,0.1 °C,1,2,1 s,—,N/A
+json,0x35A,General Alarm,0 bits 0-1,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Battery High Voltage Alarm,0 bits 2-3,1,,enum,,if packVoltage > highVoltageCutoff then 1 else 0,Compute,"packVoltage,highVoltageCutoff",36.315,Battery High Voltage Alarm,UINT8,-,,3,1 s,Alarm (hard threshold),59904
+json,0x35A,Battery Low Voltage Alarm,0 bits 4-5,1,,enum,,if packVoltage < lowVoltageCutoff then 1 else 0,Compute,"packVoltage,lowVoltageCutoff",36.316,Battery Low Voltage Alarm,UINT8,-,,3,1 s,Alarm (hard threshold),59904
+json,0x35A,Battery High Temp Alarm,0 bits 6-7,1,,enum,,if maxTemp > highTempCutoff then 1 else 0,Compute,"maxTemp,highTempCutoff",113.318,Battery High Temperature Alarm,UINT8,-,,3,1 s,Alarm from Tiny temperature set,59904
+json,0x35A,Battery Low Temp Alarm,1 bits 0-1,1,,enum,,if minTemp < lowTempCutoff then 1 else 0,Compute,"minTemp,lowTempCutoff",113.319,Battery Low Temperature Alarm,UINT8,-,,3,1 s,Alarm from Tiny temperature set,59904
+json,0x35A,Battery High Temp Charge Alarm,1 bits 2-3,1,,enum,,if externalTemp > highTempChargeCutoff then 1 else 0,Compute,"externalTemp,highTempChargeCutoff",42.319,Battery High Temp Charge Alarm,UINT8,-,,3,1 s,Charge temp alarm,59904
+json,0x35A,Battery Low Temp Charge Alarm,1 bits 4-5,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Battery High Current Alarm,1 bits 6-7,1,,enum,,if packCurrent > overCurrentCutoff then 1 else 0,Compute,"packCurrent,overCurrentCutoff",38.317,Battery High Current Alarm,UINT8,-,,3,1 s,Over-current alarm,59904
+json,0x35A,Battery High Charge Current Alarm,2 bits 0-1,1,,enum,,if packCurrent > overChargeCurrentCutoff then 1 else 0,Compute,"packCurrent,overChargeCurrentCutoff",38.318,Battery High Charge Current Alarm,UINT8,-,,3,1 s,Charge over-current alarm,59904
+json,0x35A,Contactor Alarm,2 bits 2-3,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Short Circuit Alarm,2 bits 4-5,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,BMS Internal Alarm,2 bits 6-7,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Cell Imbalance Alarm,3 bits 0-1,1,,enum,,if balancingState != 0 then 1 else 0,Compute,balancingState,52,Cell Imbalance Alarm,UINT8,-,,4,1 s,Imbalance present,59904
+json,0x35A,Reserved,3 bits 2-7,1,,reserved,,,,,,,,,,,1 s,Reserved,59904
+json,0x35A,General Warning,4 bits 0-1,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Battery High Voltage Warning,4 bits 2-3,1,,enum,,if packVoltage > (highVoltageCutoff*0.8) then 1 else 0,Compute,"packVoltage,highVoltageCutoff",36.315,Battery High Voltage Warning,UINT8,-,,4,1 s,Early warning @80%,59904
+json,0x35A,Battery Low Voltage Warning,4 bits 4-5,1,,enum,,if packVoltage < (lowVoltageCutoff*1.2) then 1 else 0,Compute,"packVoltage,lowVoltageCutoff",36.316,Battery Low Voltage Warning,UINT8,-,,4,1 s,Early warning @120%,59904
+json,0x35A,Battery High Temp Warning,4 bits 6-7,1,,enum,,if maxTemp > (highTempCutoff*0.8) then 1 else 0,Compute,"maxTemp,highTempCutoff",113.318,Battery High Temperature Warning,UINT8,-,,4,1 s,Early warning @80%,59904
+json,0x35A,Battery Low Temp Warning,5 bits 0-1,1,,enum,,if minTemp < (lowTempCutoff*1.2) then 1 else 0,Compute,"minTemp,lowTempCutoff",113.319,Battery Low Temperature Warning,UINT8,-,,4,1 s,Early warning @120%,59904
+json,0x35A,Battery High Temp Charge Warning,5 bits 2-3,1,,enum,,if externalTemp > (highTempChargeCutoff*0.8) then 1 else 0,Compute,"externalTemp,highTempChargeCutoff",42.319,Battery High Temp Charge Warning,UINT8,-,,4,1 s,Charge warning @80%,59904
+json,0x35A,Battery Low Temp Charge Warning,5 bits 4-5,1,,enum,,if externalTemp < lowTempChargeCutoff then 1 else 0,Compute,"externalTemp,lowTempChargeCutoff",42.32,Battery Low Temp Charge Warning,UINT8,-,,4,1 s,Charge temp warning,59904
+json,0x35A,Battery High Current Warning,5 bits 6-7,1,,enum,,if packCurrent > (overCurrentCutoff*0.8) then 1 else 0,Compute,"packCurrent,overCurrentCutoff",38.317,Battery High Current Warning,UINT8,-,,4,1 s,Current warning @80%,59904
+json,0x35A,Battery High Charge Current Warning,6 bits 0-1,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Contactor Warning,6 bits 2-3,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Short Circuit Warning,6 bits 4-5,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,BMS Internal Warning,6 bits 6-7,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,Cell Imbalance Warning,7 bits 0-1,1,,enum,,,,,,,,,,,1 s,Non impl.,59904
+json,0x35A,System Status (online/offline),7 bits 2-3,1,,enum,,"Extract from bitfield (e.g., 0x91=Charging as online)",Direct,,50,Online Status,UINT16,-,1,,1 s,—,59904
+json,0x35A,Reserved,7 bits 4-7,1,,reserved,,,,,,,,,,,1 s,Reserved,59904
+json,0x35E,Manufacturer Name,0-7,1,,string,,string,Direct,,500,Manufacturer Name,String,-,1,,À l'initialisation,"Hardcoded ""Enepaq""",N/A
+json,0x35F,Battery Model ID,0-1,1,,ID,,,,,,,,,,,À l'initialisation,Non impl.,N/A
+json,0x35F,Firmware Version,2-3,1,,version,,big-endian,Direct,,501,Firmware Version,UINT32,-,1,,À l'initialisation,—,N/A
+json,0x35F,Online Capacity,4-5,1,,Ah,,capacity * 100,Direct,,306,Battery Capacity,UINT16,0.01 Ah,100,,À l'initialisation,—,N/A
+json,0x370,Battery/BMS Name Part 1,0-7,1,,string,,,,,,,,,,,À l'initialisation,Non impl.,N/A
+json,0x371,Battery/BMS Name Part 2,0-7,1,,string,,,,,,,,,,,À l'initialisation,Non impl.,N/A
+json,0x372,Number of Modules OK,0-1,1,,count,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x372,Number of Modules Blocking Charge,2-3,1,,count,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x372,Number of Modules Blocking Discharge,4-5,1,,count,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x372,Number of Modules Offline,6-7,1,,count,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x373,Min Cell Voltage,0-1,1,,mV,,min_cell_mv,Direct,,40,Min Cell Voltage,UINT16,1 mV,1,,1 s,—,N/A
+json,0x373,Max Cell Voltage,2-3,1,,mV,,max_cell_mv,Direct,,41,Max Cell Voltage,UINT16,1 mV,1,,1 s,—,N/A
+json,0x373,Lowest Cell Temperature,4-5,1,,K,,temp + 273.15 → K,Direct,,113,Min Pack Temperature,INT8,1 °C,1,,1 s,—,N/A
+json,0x373,Highest Cell Temperature,6-7,1,,K,,temp + 273.15 → K,Direct,,113,Max Pack Temperature,INT8,1 °C,1,,1 s,—,N/A
+json,0x374,Min Cell Voltage ID String,0-7,1,,string,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x375,Max Cell Voltage ID String,0-7,1,,string,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x376,Min Cell Temp ID String,0-7,1,,string,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x377,Max Cell Temp ID String,0-7,1,,string,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x378,Energy In (cumulé),0-3,100,,Wh,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x378,Energy Out (cumulé),4-7,100,,Wh,,,,,,,,,,,1 s,Non impl.,N/A
+json,0x379,Installed Capacity,0-1,1,,Ah,,capacity * 100,Direct,,306,Battery Capacity,UINT16,0.01 Ah,100,,À l'initialisation,—,N/A
+json,0x380,Serial Number Part 1,0-7,1,,string,,Convert to ASCII,Direct,,504,Serial Number (part 1),String,-,1,,À l'initialisation,—,N/A
+json,0x381,Serial Number Part 2,0-7,1,,string,,Convert to ASCII,Direct,,505,Serial Number (part 2),String,-,1,,À l'initialisation,—,N/A
+json,0x382,Battery Family Name,0-7,1,,string,,string,Direct,,502,Battery Family,String,-,1,,À l'initialisation,—,N/A
+json,0x305,Keepalive,0-7,1,,hex,,,,,,,,,,,1 s,"From GX, no Tiny mapping",N/A
+json,0x307,Inverter Fixed Identifier,0-3,1,,hex,,,,,,,,,,,1 s,"From GX, no Tiny mapping",N/A
+json,0x307,"Inverter ASCII String ""VIC""",4-6,1,,string,,,,,,,,,,,1 s,"From GX, no Tiny mapping",N/A
+json,0x307,Reserved Byte,7,1,,hex,,,,,,,,,,,1 s,"From GX, no Tiny mapping",N/A
