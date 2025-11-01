@@ -141,9 +141,121 @@
             </section>
             <section id="tab-config" class="tab-panel" aria-labelledby="Configuration">
                 <div class="config-header">
-                    <h2>Paramètres TinyBMS</h2>
-                    <p id="config-status" role="status">Chargement des registres…</p>
+                    <div class="config-header-text">
+                        <h2>Paramètres TinyBMS</h2>
+                        <p class="config-description">Configurez le réseau Wi-Fi, l’interface CAN Victron et la fréquence d’interrogation UART.</p>
+                    </div>
+                    <div class="config-header-actions">
+                        <button id="config-refresh" type="button" class="button secondary">Recharger</button>
+                        <span id="config-status" role="status">Chargement de la configuration…</span>
+                    </div>
                 </div>
+                <form id="general-config-form" class="config-form-grid" autocomplete="off">
+                    <article class="config-card">
+                        <h3>Appareil &amp; UART</h3>
+                        <label class="config-field" for="device-name">
+                            <span>Nom du dispositif</span>
+                            <input id="device-name" name="device_name" type="text" maxlength="64" required>
+                        </label>
+                        <label class="config-field" for="uart-poll-interval">
+                            <span>Intervalle de sondage UART (ms)</span>
+                            <input id="uart-poll-interval" name="uart_poll_interval_ms" type="number" min="100" max="600000" step="10" required>
+                        </label>
+                    </article>
+                    <article class="config-card">
+                        <h3>Wi-Fi station</h3>
+                        <label class="config-field" for="wifi-sta-ssid">
+                            <span>SSID</span>
+                            <input id="wifi-sta-ssid" name="wifi_sta_ssid" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="wifi-sta-password">
+                            <span>Mot de passe</span>
+                            <input id="wifi-sta-password" name="wifi_sta_password" type="password" maxlength="64" autocomplete="new-password">
+                        </label>
+                        <label class="config-field" for="wifi-sta-hostname">
+                            <span>Nom d’hôte</span>
+                            <input id="wifi-sta-hostname" name="wifi_sta_hostname" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="wifi-sta-max-retry">
+                            <span>Nombre de tentatives</span>
+                            <input id="wifi-sta-max-retry" name="wifi_sta_max_retry" type="number" min="0" max="255" required>
+                        </label>
+                    </article>
+                    <article class="config-card">
+                        <h3>Wi-Fi point d’accès</h3>
+                        <label class="config-field" for="wifi-ap-ssid">
+                            <span>SSID</span>
+                            <input id="wifi-ap-ssid" name="wifi_ap_ssid" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="wifi-ap-password">
+                            <span>Mot de passe</span>
+                            <input id="wifi-ap-password" name="wifi_ap_password" type="password" maxlength="64" autocomplete="new-password">
+                        </label>
+                        <label class="config-field" for="wifi-ap-channel">
+                            <span>Canal</span>
+                            <input id="wifi-ap-channel" name="wifi_ap_channel" type="number" min="1" max="13" required>
+                        </label>
+                        <label class="config-field" for="wifi-ap-max-clients">
+                            <span>Clients simultanés</span>
+                            <input id="wifi-ap-max-clients" name="wifi_ap_max_clients" type="number" min="1" max="10" required>
+                        </label>
+                    </article>
+                    <article class="config-card">
+                        <h3>CAN Victron</h3>
+                        <label class="config-field" for="can-tx-gpio">
+                            <span>GPIO TX</span>
+                            <input id="can-tx-gpio" name="can_tx_gpio" type="number" min="-1" max="39" required>
+                        </label>
+                        <label class="config-field" for="can-rx-gpio">
+                            <span>GPIO RX</span>
+                            <input id="can-rx-gpio" name="can_rx_gpio" type="number" min="-1" max="39" required>
+                        </label>
+                        <label class="config-field" for="can-keepalive-interval">
+                            <span>Intervalle keepalive (ms)</span>
+                            <input id="can-keepalive-interval" name="can_keepalive_interval_ms" type="number" min="10" max="600000" step="10" required>
+                        </label>
+                        <label class="config-field" for="can-keepalive-timeout">
+                            <span>Délai d’expiration (ms)</span>
+                            <input id="can-keepalive-timeout" name="can_keepalive_timeout_ms" type="number" min="100" max="600000" step="10" required>
+                        </label>
+                        <label class="config-field" for="can-keepalive-retry">
+                            <span>Relance keepalive (ms)</span>
+                            <input id="can-keepalive-retry" name="can_keepalive_retry_ms" type="number" min="10" max="600000" step="10" required>
+                        </label>
+                        <label class="config-field" for="can-publisher-period">
+                            <span>Période publication CAN (ms)</span>
+                            <input id="can-publisher-period" name="can_publisher_period_ms" type="number" min="0" max="600000" step="10" required>
+                        </label>
+                    </article>
+                    <article class="config-card">
+                        <h3>Identité Victron</h3>
+                        <label class="config-field" for="can-handshake">
+                            <span>Handshake ASCII</span>
+                            <input id="can-handshake" name="can_handshake_ascii" type="text" maxlength="8">
+                        </label>
+                        <label class="config-field" for="can-manufacturer">
+                            <span>Constructeur</span>
+                            <input id="can-manufacturer" name="can_manufacturer" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="can-battery-name">
+                            <span>Nom batterie</span>
+                            <input id="can-battery-name" name="can_battery_name" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="can-battery-family">
+                            <span>Famille batterie</span>
+                            <input id="can-battery-family" name="can_battery_family" type="text" maxlength="32">
+                        </label>
+                        <label class="config-field" for="can-serial-number">
+                            <span>Numéro de série</span>
+                            <input id="can-serial-number" name="can_serial_number" type="text" maxlength="32">
+                        </label>
+                    </article>
+                    <div class="config-form-actions">
+                        <button id="general-config-reset" type="button" class="button secondary">Réinitialiser</button>
+                        <button type="submit" class="button primary">Enregistrer</button>
+                    </div>
+                </form>
+                <h3 class="config-subheading">Registres TinyBMS</h3>
                 <div id="config-registers" class="config-grid" role="form"></div>
             </section>
             <section id="tab-mqtt" class="tab-panel" aria-labelledby="MQTT">

@@ -13,6 +13,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "config_manager.h"
 #include "cvl_controller.h"
 #include "storage/nvs_energy.h"
 
@@ -41,6 +42,30 @@
 #define VICTRON_SOURCE_ADDRESS       0xE5U
 #define VICTRON_EXTENDED_ID(pgn) \
     ((((uint32_t)VICTRON_PRIORITY) << 26) | ((uint32_t)(pgn) << 8) | (uint32_t)VICTRON_SOURCE_ADDRESS)
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO 5
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO
+#define CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO 4
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS 1000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS 10000
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS
+#define CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS 500
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS
+#define CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS 0
+#endif
 
 #ifndef CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII
 #define CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII "VIC"
@@ -72,6 +97,34 @@ static uint64_t s_energy_last_timestamp_ms = 0;
 static uint64_t s_energy_last_persist_ms = 0;
 static bool s_energy_dirty = false;
 static bool s_energy_storage_ready = false;
+
+static const config_manager_can_settings_t *conversion_get_can_settings(void)
+{
+    static const config_manager_can_settings_t defaults = {
+        .twai = {
+            .tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+            .rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+        },
+        .keepalive = {
+            .interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS,
+            .timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS,
+            .retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS,
+        },
+        .publisher = {
+            .period_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS,
+        },
+        .identity = {
+            .handshake_ascii = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII,
+            .manufacturer = CONFIG_TINYBMS_CAN_MANUFACTURER,
+            .battery_name = CONFIG_TINYBMS_CAN_BATTERY_NAME,
+            .battery_family = CONFIG_TINYBMS_CAN_BATTERY_FAMILY,
+            .serial_number = CONFIG_TINYBMS_CAN_SERIAL_NUMBER,
+        },
+    };
+
+    const config_manager_can_settings_t *settings = config_manager_get_can_settings();
+    return (settings != NULL) ? settings : &defaults;
+}
 
 #define ENERGY_PERSIST_MIN_DELTA_WH   10.0
 #define ENERGY_PERSIST_INTERVAL_MS    60000U
@@ -574,6 +627,11 @@ static const char *resolve_manufacturer_string(const uart_bms_live_data_t *data)
         return buffer;
     }
 
+    const config_manager_can_settings_t *settings = conversion_get_can_settings();
+    if (settings != NULL && settings->identity.manufacturer[0] != '\0') {
+        return settings->identity.manufacturer;
+    }
+
     return CONFIG_TINYBMS_CAN_MANUFACTURER;
 }
 
@@ -583,6 +641,11 @@ static const char *resolve_battery_name_string(const uart_bms_live_data_t *data)
 
     if (decode_ascii_from_registers(data, 0x01F6U, 16U, buffer, sizeof(buffer))) {
         return buffer;
+    }
+
+    const config_manager_can_settings_t *settings = conversion_get_can_settings();
+    if (settings != NULL && settings->identity.battery_name[0] != '\0') {
+        return settings->identity.battery_name;
     }
 
     return CONFIG_TINYBMS_CAN_BATTERY_NAME;
@@ -607,6 +670,11 @@ static const char *resolve_serial_number_string(const uart_bms_live_data_t *data
         }
     }
 
+    const config_manager_can_settings_t *settings = conversion_get_can_settings();
+    if (settings != NULL && settings->identity.serial_number[0] != '\0') {
+        return settings->identity.serial_number;
+    }
+
     return CONFIG_TINYBMS_CAN_SERIAL_NUMBER;
 }
 
@@ -616,6 +684,11 @@ static const char *resolve_battery_family_string(const uart_bms_live_data_t *dat
 
     if (decode_ascii_from_registers(data, TINY_REGISTER_BATTERY_FAMILY, 16U, buffer, sizeof(buffer))) {
         return buffer;
+    }
+
+    const config_manager_can_settings_t *settings = conversion_get_can_settings();
+    if (settings != NULL && settings->identity.battery_family[0] != '\0') {
+        return settings->identity.battery_family;
     }
 
     return CONFIG_TINYBMS_CAN_BATTERY_FAMILY;
@@ -646,8 +719,13 @@ static bool encode_inverter_identifier(const uart_bms_live_data_t *data, can_pub
     frame->data[2] = (uint8_t)(firmware_word & 0xFFU);
     frame->data[3] = (uint8_t)((firmware_word >> 8U) & 0xFFU);
 
-    const char handshake_ascii[] = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII;
-    size_t ascii_length = strlen(handshake_ascii);
+    const char *handshake_ascii = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII;
+    const config_manager_can_settings_t *settings = conversion_get_can_settings();
+    if (settings != NULL && settings->identity.handshake_ascii[0] != '\0') {
+        handshake_ascii = settings->identity.handshake_ascii;
+    }
+
+    size_t ascii_length = strnlen(handshake_ascii, CONFIG_MANAGER_CAN_HANDSHAKE_MAX_LENGTH);
     for (size_t i = 0; i < 3U; ++i) {
         uint8_t value = 0U;
         if (i < ascii_length) {

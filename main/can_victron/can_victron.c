@@ -19,6 +19,7 @@
 
 #include "freertos/FreeRTOS.h"
 
+#include "config_manager.h"
 #include "app_events.h"
 
 #define CAN_VICTRON_EVENT_BUFFERS 4
@@ -55,6 +56,30 @@
 #define CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO 4
 #endif
 
+#ifndef CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS
+#define CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS 0
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII
+#define CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII "VIC"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_MANUFACTURER
+#define CONFIG_TINYBMS_CAN_MANUFACTURER "TinyBMS"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_NAME
+#define CONFIG_TINYBMS_CAN_BATTERY_NAME "Lithium Battery"
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_BATTERY_FAMILY
+#define CONFIG_TINYBMS_CAN_BATTERY_FAMILY CONFIG_TINYBMS_CAN_BATTERY_NAME
+#endif
+
+#ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
+#define CONFIG_TINYBMS_CAN_SERIAL_NUMBER "TinyBMS-00000000"
+#endif
+
 typedef enum {
     CAN_VICTRON_DIRECTION_TX,
     CAN_VICTRON_DIRECTION_RX,
@@ -75,9 +100,8 @@ static bool s_driver_started = false;
 static bool s_keepalive_ok = false;
 static uint64_t s_last_keepalive_tx_ms = 0;
 static uint64_t s_last_keepalive_rx_ms = 0;
-static const uint32_t s_keepalive_interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS;
-static const uint32_t s_keepalive_timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS;
-static const uint32_t s_keepalive_retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS;
+static int s_twai_tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO;
+static int s_twai_rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO;
 
 static esp_err_t can_victron_start_driver(void);
 static void can_victron_stop_driver(void);
@@ -87,6 +111,34 @@ static void can_victron_service_keepalive(uint64_t now);
 static void can_victron_handle_rx_message(const twai_message_t *message);
 static void can_victron_task(void *context);
 #endif
+
+static const config_manager_can_settings_t *can_victron_get_settings(void)
+{
+    static const config_manager_can_settings_t defaults = {
+        .twai = {
+            .tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
+            .rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+        },
+        .keepalive = {
+            .interval_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS,
+            .timeout_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS,
+            .retry_ms = CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS,
+        },
+        .publisher = {
+            .period_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS,
+        },
+        .identity = {
+            .handshake_ascii = CONFIG_TINYBMS_CAN_HANDSHAKE_ASCII,
+            .manufacturer = CONFIG_TINYBMS_CAN_MANUFACTURER,
+            .battery_name = CONFIG_TINYBMS_CAN_BATTERY_NAME,
+            .battery_family = CONFIG_TINYBMS_CAN_BATTERY_FAMILY,
+            .serial_number = CONFIG_TINYBMS_CAN_SERIAL_NUMBER,
+        },
+    };
+
+    const config_manager_can_settings_t *settings = config_manager_get_can_settings();
+    return (settings != NULL) ? settings : &defaults;
+}
 
 static uint64_t can_victron_timestamp_ms(void)
 {
@@ -263,15 +315,58 @@ static void can_victron_publish_demo_frames(void)
 }
 
 #ifdef ESP_PLATFORM
+static uint32_t can_victron_effective_interval_ms(const config_manager_can_settings_t *settings)
+{
+    uint32_t interval = (settings != NULL) ? settings->keepalive.interval_ms : 0U;
+    if (interval == 0U) {
+        interval = CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS;
+        if (interval == 0U) {
+            interval = 1000U;
+        }
+    }
+    return interval;
+}
+
+static uint32_t can_victron_effective_retry_ms(const config_manager_can_settings_t *settings)
+{
+    if (settings == NULL) {
+        return CONFIG_TINYBMS_CAN_KEEPALIVE_RETRY_MS;
+    }
+    return settings->keepalive.retry_ms;
+}
+
+static uint32_t can_victron_effective_timeout_ms(const config_manager_can_settings_t *settings)
+{
+    if (settings == NULL) {
+        return CONFIG_TINYBMS_CAN_KEEPALIVE_TIMEOUT_MS;
+    }
+    return settings->keepalive.timeout_ms;
+}
+
 static esp_err_t can_victron_start_driver(void)
 {
     if (s_driver_started) {
         return ESP_OK;
     }
 
+    const config_manager_can_settings_t *settings = can_victron_get_settings();
+    int tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO;
+    int rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO;
+    if (settings != NULL) {
+        if (settings->twai.tx_gpio >= 0) {
+            tx_gpio = settings->twai.tx_gpio;
+        }
+        if (settings->twai.rx_gpio >= 0) {
+            rx_gpio = settings->twai.rx_gpio;
+        }
+    }
+
+    s_twai_tx_gpio = tx_gpio;
+    s_twai_rx_gpio = rx_gpio;
+
     twai_general_config_t g_config =
-        TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
-                                    (gpio_num_t)CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO,
+        TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)s_twai_tx_gpio,
+                                    (gpio_num_t)s_twai_rx_gpio,
                                     TWAI_MODE_NORMAL);
     g_config.tx_queue_len = CAN_VICTRON_TWAI_TX_QUEUE_LEN;
     g_config.rx_queue_len = CAN_VICTRON_TWAI_RX_QUEUE_LEN;
@@ -298,8 +393,9 @@ static esp_err_t can_victron_start_driver(void)
     s_keepalive_ok = false;
     uint64_t now = can_victron_timestamp_ms();
     s_last_keepalive_rx_ms = now;
-    if (now >= s_keepalive_interval_ms) {
-        s_last_keepalive_tx_ms = now - s_keepalive_interval_ms;
+    uint32_t interval = can_victron_effective_interval_ms(settings);
+    if (now >= interval) {
+        s_last_keepalive_tx_ms = now - interval;
     } else {
         s_last_keepalive_tx_ms = 0;
     }
@@ -355,19 +451,20 @@ static void can_victron_service_keepalive(uint64_t now)
         return;
     }
 
-    uint32_t interval = s_keepalive_interval_ms;
-    if (!s_keepalive_ok && s_keepalive_retry_ms > 0U && s_keepalive_retry_ms < interval) {
-        interval = s_keepalive_retry_ms;
-    }
-    if (interval == 0U) {
-        interval = 1000U;
+    const config_manager_can_settings_t *settings = can_victron_get_settings();
+    uint32_t interval = can_victron_effective_interval_ms(settings);
+    uint32_t retry = can_victron_effective_retry_ms(settings);
+    uint32_t timeout = can_victron_effective_timeout_ms(settings);
+
+    if (!s_keepalive_ok && retry > 0U && retry < interval) {
+        interval = retry;
     }
 
     if ((now - s_last_keepalive_tx_ms) >= interval) {
         can_victron_send_keepalive(now);
     }
 
-    if (s_keepalive_ok && (now - s_last_keepalive_rx_ms) > s_keepalive_timeout_ms) {
+    if (s_keepalive_ok && timeout > 0U && (now - s_last_keepalive_rx_ms) > timeout) {
         s_keepalive_ok = false;
         ESP_LOGW(TAG,
                  "Victron keepalive timeout after %" PRIu64 " ms",
@@ -537,8 +634,8 @@ void can_victron_init(void)
             can_victron_send_keepalive(now);
             ESP_LOGI(TAG,
                      "Victron CAN driver ready (TX=%d RX=%d)",
-                     CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO,
-                     CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO);
+                     s_twai_tx_gpio,
+                     s_twai_rx_gpio);
         }
     } else {
         ESP_LOGE(TAG, "Victron CAN driver start failed: %s", esp_err_to_name(err));
