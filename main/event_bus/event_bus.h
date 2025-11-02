@@ -44,7 +44,7 @@ typedef void (*event_bus_subscriber_cb_t)(const event_bus_event_t *event, void *
 typedef bool (*event_bus_publish_fn_t)(const event_bus_event_t *event, TickType_t timeout);
 
 #ifndef CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH
-#define CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH 8
+#define CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH 16
 #endif
 
 /**
