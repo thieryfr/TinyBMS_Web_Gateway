@@ -110,6 +110,14 @@
 #define CONFIG_TINYBMS_WIFI_AP_MAX_CLIENTS 4
 #endif
 
+#ifndef CONFIG_TINYBMS_UART_TX_GPIO
+#define CONFIG_TINYBMS_UART_TX_GPIO 37
+#endif
+
+#ifndef CONFIG_TINYBMS_UART_RX_GPIO
+#define CONFIG_TINYBMS_UART_RX_GPIO 36
+#endif
+
 #ifndef CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS
 #define CONFIG_TINYBMS_CAN_KEEPALIVE_INTERVAL_MS 1000
 #endif
@@ -220,6 +228,11 @@ static bool s_mqtt_topics_loaded = false;
 
 static config_manager_device_settings_t s_device_settings = {
     .name = APP_DEVICE_NAME,
+};
+
+static config_manager_uart_pins_t s_uart_pins = {
+    .tx_gpio = CONFIG_TINYBMS_UART_TX_GPIO,
+    .rx_gpio = CONFIG_TINYBMS_UART_RX_GPIO,
 };
 
 static config_manager_wifi_settings_t s_wifi_settings = {
@@ -622,12 +635,60 @@ static bool config_manager_extract_int32_field_scope(const char *json,
         return false;
     }
 
-    uint32_t unsigned_value = 0;
-    if (!config_manager_extract_uint32_field_scope(json, length, field, &unsigned_value)) {
+    size_t field_len = strlen(field);
+    const char *cursor = config_manager_memmem(json, length, field, field_len);
+    if (cursor == NULL) {
         return false;
     }
 
-    *out_value = (int32_t)unsigned_value;
+    cursor += field_len;
+    const char *end = json + length;
+    while (cursor < end && *cursor != ':') {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    ++cursor;
+    while (cursor < end && isspace((unsigned char)*cursor)) {
+        ++cursor;
+    }
+    if (cursor >= end) {
+        return false;
+    }
+
+    char buffer[32];
+    size_t idx = 0;
+    bool has_sign = false;
+    while (cursor < end && idx + 1 < sizeof(buffer)) {
+        char c = *cursor;
+        if ((c >= '0' && c <= '9') || c == '+' || c == '-') {
+            if ((c == '+' || c == '-') && has_sign) {
+                break;
+            }
+            if (c == '+' || c == '-') {
+                has_sign = true;
+            }
+            buffer[idx++] = c;
+            ++cursor;
+            continue;
+        }
+        break;
+    }
+
+    if (idx == 0) {
+        return false;
+    }
+
+    buffer[idx] = '\0';
+    char *endptr = NULL;
+    long value = strtol(buffer, &endptr, 10);
+    if (endptr == buffer) {
+        return false;
+    }
+
+    *out_value = (int32_t)value;
     return true;
 }
 
@@ -1351,6 +1412,7 @@ static esp_err_t config_manager_build_config_snapshot(void)
                    APP_VERSION_MINOR,
                    APP_VERSION_PATCH);
 
+    const config_manager_uart_pins_t *uart = &s_uart_pins;
     const config_manager_wifi_settings_t *wifi = &s_wifi_settings;
     const config_manager_can_settings_t *can = &s_can_settings;
 
@@ -1382,8 +1444,10 @@ static esp_err_t config_manager_build_config_snapshot(void)
     if (!config_manager_json_append(s_config_json,
                                     sizeof(s_config_json),
                                     &offset,
-                                    ",\"uart\":{\"poll_interval_ms\":%u,\"poll_interval_min_ms\":%u,"
-                                    "\"poll_interval_max_ms\":%u}",
+                                    ",\"uart\":{\"tx_gpio\":%d,\"rx_gpio\":%d,\"poll_interval_ms\":%u,"
+                                    "\"poll_interval_min_ms\":%u,\"poll_interval_max_ms\":%u}",
+                                    uart->tx_gpio,
+                                    uart->rx_gpio,
                                     (unsigned)s_uart_poll_interval_ms,
                                     (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
                                     (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS)) {
@@ -1491,6 +1555,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
     buffer[length] = '\0';
 
     config_manager_device_settings_t device = s_device_settings;
+    config_manager_uart_pins_t uart_pins = s_uart_pins;
     config_manager_wifi_settings_t wifi = s_wifi_settings;
     config_manager_can_settings_t can = s_can_settings;
     uint32_t poll_interval = s_uart_poll_interval_ms;
@@ -1511,6 +1576,25 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         if (config_manager_extract_uint32_field_scope(section, section_len, "\"poll_interval_ms\"", &poll)) {
             poll_interval = config_manager_clamp_poll_interval(poll);
             poll_interval_updated = true;
+        }
+        int32_t gpio = 0;
+        if (config_manager_extract_int32_field_scope(section, section_len, "\"tx_gpio\"", &gpio)) {
+            if (gpio < -1) {
+                gpio = -1;
+            }
+            if (gpio > 48) {
+                gpio = 48;
+            }
+            uart_pins.tx_gpio = (int)gpio;
+        }
+        if (config_manager_extract_int32_field_scope(section, section_len, "\"rx_gpio\"", &gpio)) {
+            if (gpio < -1) {
+                gpio = -1;
+            }
+            if (gpio > 48) {
+                gpio = 48;
+            }
+            uart_pins.rx_gpio = (int)gpio;
         }
     } else {
         uint32_t poll = 0U;
@@ -1674,6 +1758,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
                                config_manager_effective_device_name());
 
     s_device_settings = device;
+    s_uart_pins = uart_pins;
     s_wifi_settings = wifi;
     s_can_settings = can;
 
@@ -2016,6 +2101,12 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
         return persist_err;
     }
     return snapshot_err;
+}
+
+const config_manager_uart_pins_t *config_manager_get_uart_pins(void)
+{
+    config_manager_ensure_initialised();
+    return &s_uart_pins;
 }
 
 const mqtt_client_config_t *config_manager_get_mqtt_client_config(void)

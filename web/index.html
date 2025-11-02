@@ -161,6 +161,14 @@
                             <span>Intervalle de sondage UART (ms)</span>
                             <input id="uart-poll-interval" name="uart_poll_interval_ms" type="number" min="100" max="600000" step="10" required>
                         </label>
+                        <label class="config-field" for="uart-tx-gpio">
+                            <span>GPIO UART TX</span>
+                            <input id="uart-tx-gpio" name="uart_tx_gpio" type="number" min="-1" max="48" required>
+                        </label>
+                        <label class="config-field" for="uart-rx-gpio">
+                            <span>GPIO UART RX</span>
+                            <input id="uart-rx-gpio" name="uart_rx_gpio" type="number" min="-1" max="48" required>
+                        </label>
                     </article>
                     <article class="config-card">
                         <h3>Wi-Fi station</h3>

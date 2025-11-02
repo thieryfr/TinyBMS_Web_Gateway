@@ -469,6 +469,8 @@ function populateGeneralConfigForm(config) {
 
     setInputValue('device-name', device.name || '');
     setInputValue('uart-poll-interval', pollInterval);
+    setInputValue('uart-tx-gpio', uart.tx_gpio ?? '');
+    setInputValue('uart-rx-gpio', uart.rx_gpio ?? '');
 
     setInputValue('wifi-sta-ssid', wifiSta.ssid || '');
     setInputValue('wifi-sta-password', wifiSta.password || '');
@@ -552,6 +554,8 @@ function buildGeneralConfigPayload(form) {
                 'uart_poll_interval_ms',
                 Number.parseInt(String(uartCurrent.poll_interval_ms ?? current.uart_poll_interval_ms ?? 0), 10) || 0
             ),
+            tx_gpio: readInt('uart_tx_gpio', Number.parseInt(String(uartCurrent.tx_gpio ?? 0), 10) || 0),
+            rx_gpio: readInt('uart_rx_gpio', Number.parseInt(String(uartCurrent.rx_gpio ?? 0), 10) || 0),
         },
         wifi: {
             sta: {
