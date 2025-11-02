@@ -15,6 +15,7 @@
 #include "mqtt_topics.h"
 #include "history_fs.h"
 #include "history_logger.h"
+#include "status_led.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,6 +23,7 @@
 void app_main(void)
 {
     event_bus_init();
+    status_led_init();
     event_bus_publish_fn_t publish_hook = event_bus_get_publish_hook();
     uart_bms_set_event_publisher(publish_hook);
     can_publisher_set_event_publisher(publish_hook);
@@ -58,6 +60,8 @@ void app_main(void)
     mqtt_gateway_init();
     history_logger_init();
     monitoring_init();
+
+    status_led_notify_system_ready();
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
