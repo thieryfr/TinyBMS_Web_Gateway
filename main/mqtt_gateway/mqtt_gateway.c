@@ -645,7 +645,7 @@ void mqtt_gateway_init(void)
     mqtt_gateway_load_topics();
     mqtt_gateway_reload_config(false);
 
-    s_gateway.subscription = event_bus_subscribe(16, NULL, NULL);
+    s_gateway.subscription = event_bus_subscribe(32, NULL, NULL);
     if (s_gateway.subscription == NULL) {
         ESP_LOGW(TAG, "Unable to subscribe to event bus; MQTT gateway disabled");
         return;
