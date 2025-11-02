@@ -30,4 +30,4 @@ idf_component_register(SRCS
                  "wifi"
                  "monitoring"
                  "storage"
-)
+    REQUIRES cjson)
