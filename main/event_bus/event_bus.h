@@ -95,11 +95,12 @@ void event_bus_unsubscribe(event_bus_subscription_handle_t handle);
  * The call is thread-safe and can be invoked from any FreeRTOS task.
  *
  * @param event     Pointer to the event description to enqueue for subscribers.
- * @param timeout   Maximum time the call should block when a subscriber queue
- *                  is full. The same timeout is applied to each subscriber in
- *                  sequence.
+ * @param timeout   Reserved for future use. Publishing is currently
+ *                  non-blocking; events targeting full queues are dropped.
  *
- * @return true when all subscribers accepted the event, false otherwise.
+ * @return true when all subscribers accepted the event, false otherwise. When
+ *         false is returned, at least one subscriber queue was full and the
+ *         event was discarded for that subscriber.
  */
 bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout);
 

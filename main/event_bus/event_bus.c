@@ -1,5 +1,9 @@
 #include "event_bus.h"
 
+#include <inttypes.h>
+
+#include "esp_log.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -9,12 +13,14 @@ typedef struct event_bus_subscription {
     QueueHandle_t queue;
     event_bus_subscriber_cb_t callback;
     void *context;
+    uint32_t dropped_events;
     struct event_bus_subscription *next;
 } event_bus_subscription_t;
 
 static event_bus_subscription_t *s_subscribers = NULL;
 static SemaphoreHandle_t s_bus_lock = NULL;
 static portMUX_TYPE s_init_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static const char *TAG = "event_bus";
 
 static bool event_bus_take_lock(void)
 {
@@ -105,6 +111,7 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
     subscription->queue = queue;
     subscription->callback = callback;
     subscription->context = context;
+    subscription->dropped_events = 0;
     subscription->next = NULL;
 
     if (!event_bus_take_lock()) {
@@ -166,10 +173,19 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
     }
 
     bool success = true;
+    (void)timeout;
     event_bus_subscription_t *subscriber = s_subscribers;
     while (subscriber != NULL) {
-        if (xQueueSend(subscriber->queue, event, timeout) != pdTRUE) {
+        if (xQueueSend(subscriber->queue, event, 0) != pdTRUE) {
             success = false;
+            subscriber->dropped_events++;
+            if ((subscriber->dropped_events & (subscriber->dropped_events - 1U)) == 0U) {
+                ESP_LOGW(TAG,
+                         "Dropped event 0x%08" PRIx32 " for subscriber %p (%" PRIu32 " total)",
+                         (uint32_t)event->id,
+                         (void *)subscriber,
+                         subscriber->dropped_events);
+            }
         }
         subscriber = subscriber->next;
     }

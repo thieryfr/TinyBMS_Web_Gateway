@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include "cJSON.h"
+
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
@@ -319,6 +321,84 @@ static void config_manager_copy_topics(config_manager_mqtt_topics_t *dest,
     config_manager_copy_string(dest->can_ready, sizeof(dest->can_ready), src->can_ready);
 }
 
+static const cJSON *config_manager_get_object(const cJSON *parent, const char *field)
+{
+    if (parent == NULL || field == NULL) {
+        return NULL;
+    }
+
+    const cJSON *candidate = cJSON_GetObjectItemCaseSensitive(parent, field);
+    return cJSON_IsObject(candidate) ? candidate : NULL;
+}
+
+static bool config_manager_copy_json_string(const cJSON *object,
+                                            const char *field,
+                                            char *dest,
+                                            size_t dest_size)
+{
+    if (object == NULL || field == NULL || dest == NULL || dest_size == 0) {
+        return false;
+    }
+
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, field);
+    if (!cJSON_IsString(item) || item->valuestring == NULL) {
+        return false;
+    }
+
+    config_manager_copy_string(dest, dest_size, item->valuestring);
+    return true;
+}
+
+static bool config_manager_get_uint32_json(const cJSON *object,
+                                           const char *field,
+                                           uint32_t *out_value)
+{
+    if (object == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, field);
+    if (!cJSON_IsNumber(item)) {
+        return false;
+    }
+
+    double value = item->valuedouble;
+    if (value < 0.0) {
+        value = 0.0;
+    }
+    if (value > (double)UINT32_MAX) {
+        value = (double)UINT32_MAX;
+    }
+
+    *out_value = (uint32_t)value;
+    return true;
+}
+
+static bool config_manager_get_int32_json(const cJSON *object,
+                                          const char *field,
+                                          int32_t *out_value)
+{
+    if (object == NULL || field == NULL || out_value == NULL) {
+        return false;
+    }
+
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, field);
+    if (!cJSON_IsNumber(item)) {
+        return false;
+    }
+
+    double value = item->valuedouble;
+    if (value < (double)INT32_MIN) {
+        value = (double)INT32_MIN;
+    }
+    if (value > (double)INT32_MAX) {
+        value = (double)INT32_MAX;
+    }
+
+    *out_value = (int32_t)value;
+    return true;
+}
+
 static const char *config_manager_effective_device_name(void)
 {
     if (s_device_settings.name[0] != '\0') {
@@ -409,288 +489,6 @@ static void config_manager_sanitise_mqtt_topics(config_manager_mqtt_topics_t *to
     config_manager_copy_string(topics->can_ready, sizeof(topics->can_ready), topics->can_ready);
 }
 
-static const char *config_manager_memmem(const char *haystack,
-                                         size_t haystack_len,
-                                         const char *needle,
-                                         size_t needle_len)
-{
-    if (haystack == NULL || needle == NULL || needle_len == 0 || haystack_len < needle_len) {
-        return NULL;
-    }
-
-    for (size_t i = 0; i + needle_len <= haystack_len; ++i) {
-        if (memcmp(haystack + i, needle, needle_len) == 0) {
-            return haystack + i;
-        }
-    }
-    return NULL;
-}
-
-static bool config_manager_find_object_scope(const char *json,
-                                             size_t length,
-                                             const char *field,
-                                             const char **out_start,
-                                             size_t *out_length)
-{
-    if (json == NULL || field == NULL) {
-        return false;
-    }
-
-    size_t field_len = strlen(field);
-    const char *cursor = config_manager_memmem(json, length, field, field_len);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor += field_len;
-    const char *end = json + length;
-    while (cursor < end && *cursor != ':') {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    ++cursor;
-    while (cursor < end && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    if (cursor >= end || *cursor != '{') {
-        return false;
-    }
-
-    const char *start = cursor;
-    int depth = 0;
-    bool in_string = false;
-    bool escape = false;
-    for (const char *iter = cursor; iter < end; ++iter) {
-        char c = *iter;
-        if (escape) {
-            escape = false;
-            continue;
-        }
-        if (c == '\\') {
-            escape = true;
-            continue;
-        }
-        if (c == '"') {
-            in_string = !in_string;
-            continue;
-        }
-        if (in_string) {
-            continue;
-        }
-        if (c == '{') {
-            ++depth;
-            continue;
-        }
-        if (c == '}') {
-            --depth;
-            if (depth == 0) {
-                if (out_start != NULL) {
-                    *out_start = start;
-                }
-                if (out_length != NULL) {
-                    *out_length = (size_t)(iter - start + 1);
-                }
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-static bool config_manager_extract_string_field_scope(const char *json,
-                                                      size_t length,
-                                                      const char *field,
-                                                      char *out,
-                                                      size_t out_size)
-{
-    if (json == NULL || field == NULL || out == NULL || out_size == 0) {
-        return false;
-    }
-
-    size_t field_len = strlen(field);
-    const char *cursor = config_manager_memmem(json, length, field, field_len);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor += field_len;
-    const char *end = json + length;
-    while (cursor < end && *cursor != ':') {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    ++cursor;
-    while (cursor < end && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    if (cursor >= end || *cursor != '"') {
-        return false;
-    }
-
-    ++cursor;
-    size_t written = 0;
-    bool escape = false;
-    for (; cursor < end; ++cursor) {
-        char c = *cursor;
-        if (escape) {
-            if (written + 1 >= out_size) {
-                return false;
-            }
-            out[written++] = c;
-            escape = false;
-            continue;
-        }
-        if (c == '\\') {
-            escape = true;
-            continue;
-        }
-        if (c == '"') {
-            out[written] = '\0';
-            return true;
-        }
-        if (written + 1 >= out_size) {
-            return false;
-        }
-        out[written++] = c;
-    }
-
-    return false;
-}
-
-static bool config_manager_extract_uint32_field_scope(const char *json,
-                                                      size_t length,
-                                                      const char *field,
-                                                      uint32_t *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    size_t field_len = strlen(field);
-    const char *cursor = config_manager_memmem(json, length, field, field_len);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor += field_len;
-    const char *end = json + length;
-    while (cursor < end && *cursor != ':') {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    ++cursor;
-    while (cursor < end && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    char buffer[32];
-    size_t idx = 0;
-    while (cursor < end && idx + 1 < sizeof(buffer)) {
-        char c = *cursor;
-        if ((c >= '0' && c <= '9') || c == '+' || c == '-') {
-            buffer[idx++] = c;
-            ++cursor;
-            continue;
-        }
-        break;
-    }
-
-    if (idx == 0) {
-        return false;
-    }
-
-    buffer[idx] = '\0';
-    char *endptr = NULL;
-    long value = strtol(buffer, &endptr, 10);
-    if (endptr == buffer) {
-        return false;
-    }
-    if (value < 0) {
-        value = 0;
-    }
-
-    *out_value = (uint32_t)value;
-    return true;
-}
-
-static bool config_manager_extract_int32_field_scope(const char *json,
-                                                     size_t length,
-                                                     const char *field,
-                                                     int32_t *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    size_t field_len = strlen(field);
-    const char *cursor = config_manager_memmem(json, length, field, field_len);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor += field_len;
-    const char *end = json + length;
-    while (cursor < end && *cursor != ':') {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    ++cursor;
-    while (cursor < end && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    if (cursor >= end) {
-        return false;
-    }
-
-    char buffer[32];
-    size_t idx = 0;
-    bool has_sign = false;
-    while (cursor < end && idx + 1 < sizeof(buffer)) {
-        char c = *cursor;
-        if ((c >= '0' && c <= '9') || c == '+' || c == '-') {
-            if ((c == '+' || c == '-') && has_sign) {
-                break;
-            }
-            if (c == '+' || c == '-') {
-                has_sign = true;
-            }
-            buffer[idx++] = c;
-            ++cursor;
-            continue;
-        }
-        break;
-    }
-
-    if (idx == 0) {
-        return false;
-    }
-
-    buffer[idx] = '\0';
-    char *endptr = NULL;
-    long value = strtol(buffer, &endptr, 10);
-    if (endptr == buffer) {
-        return false;
-    }
-
-    *out_value = (int32_t)value;
-    return true;
-}
 
 static void config_manager_ensure_topics_loaded(void)
 {
@@ -1550,9 +1348,21 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         return ESP_ERR_INVALID_SIZE;
     }
 
-    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
-    memcpy(buffer, json, length);
-    buffer[length] = '\0';
+    cJSON *root = cJSON_ParseWithLength(json, length);
+    if (root == NULL) {
+        const char *error = cJSON_GetErrorPtr();
+        if (error != NULL) {
+            ESP_LOGW(TAG, "Failed to parse configuration JSON near: %.32s", error);
+        } else {
+            ESP_LOGW(TAG, "Failed to parse configuration JSON");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!cJSON_IsObject(root)) {
+        ESP_LOGW(TAG, "Configuration payload is not a JSON object");
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_ARG;
+    }
 
     config_manager_device_settings_t device = s_device_settings;
     config_manager_uart_pins_t uart_pins = s_uart_pins;
@@ -1561,24 +1371,21 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
     uint32_t poll_interval = s_uart_poll_interval_ms;
     bool poll_interval_updated = false;
 
-    const char *section = NULL;
-    size_t section_len = 0;
-
-    if (config_manager_find_object_scope(buffer, length, "\"device\"", &section, &section_len)) {
-        char name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
-        if (config_manager_extract_string_field_scope(section, section_len, "\"name\"", name, sizeof(name))) {
-            config_manager_copy_string(device.name, sizeof(device.name), name);
-        }
+    const cJSON *device_obj = config_manager_get_object(root, "device");
+    if (device_obj != NULL) {
+        config_manager_copy_json_string(device_obj, "name", device.name, sizeof(device.name));
     }
 
-    if (config_manager_find_object_scope(buffer, length, "\"uart\"", &section, &section_len)) {
+    const cJSON *uart_obj = config_manager_get_object(root, "uart");
+    if (uart_obj != NULL) {
         uint32_t poll = 0U;
-        if (config_manager_extract_uint32_field_scope(section, section_len, "\"poll_interval_ms\"", &poll)) {
+        if (config_manager_get_uint32_json(uart_obj, "poll_interval_ms", &poll)) {
             poll_interval = config_manager_clamp_poll_interval(poll);
             poll_interval_updated = true;
         }
+
         int32_t gpio = 0;
-        if (config_manager_extract_int32_field_scope(section, section_len, "\"tx_gpio\"", &gpio)) {
+        if (config_manager_get_int32_json(uart_obj, "tx_gpio", &gpio)) {
             if (gpio < -1) {
                 gpio = -1;
             }
@@ -1587,7 +1394,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
             uart_pins.tx_gpio = (int)gpio;
         }
-        if (config_manager_extract_int32_field_scope(section, section_len, "\"rx_gpio\"", &gpio)) {
+        if (config_manager_get_int32_json(uart_obj, "rx_gpio", &gpio)) {
             if (gpio < -1) {
                 gpio = -1;
             }
@@ -1598,28 +1405,22 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         }
     } else {
         uint32_t poll = 0U;
-        if (config_manager_extract_uint32_field(buffer, "\"uart_poll_interval_ms\"", &poll)) {
+        if (config_manager_get_uint32_json(root, "uart_poll_interval_ms", &poll)) {
             poll_interval = config_manager_clamp_poll_interval(poll);
             poll_interval_updated = true;
         }
     }
 
-    if (config_manager_find_object_scope(buffer, length, "\"wifi\"", &section, &section_len)) {
-        const char *sta_section = NULL;
-        size_t sta_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"sta\"", &sta_section, &sta_len)) {
-            char value[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
-            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"ssid\"", value, sizeof(value))) {
-                config_manager_copy_string(wifi.sta.ssid, sizeof(wifi.sta.ssid), value);
-            }
-            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"password\"", value, sizeof(value))) {
-                config_manager_copy_string(wifi.sta.password, sizeof(wifi.sta.password), value);
-            }
-            if (config_manager_extract_string_field_scope(sta_section, sta_len, "\"hostname\"", value, sizeof(value))) {
-                config_manager_copy_string(wifi.sta.hostname, sizeof(wifi.sta.hostname), value);
-            }
+    const cJSON *wifi_obj = config_manager_get_object(root, "wifi");
+    if (wifi_obj != NULL) {
+        const cJSON *sta_obj = config_manager_get_object(wifi_obj, "sta");
+        if (sta_obj != NULL) {
+            config_manager_copy_json_string(sta_obj, "ssid", wifi.sta.ssid, sizeof(wifi.sta.ssid));
+            config_manager_copy_json_string(sta_obj, "password", wifi.sta.password, sizeof(wifi.sta.password));
+            config_manager_copy_json_string(sta_obj, "hostname", wifi.sta.hostname, sizeof(wifi.sta.hostname));
+
             uint32_t max_retry = 0U;
-            if (config_manager_extract_uint32_field_scope(sta_section, sta_len, "\"max_retry\"", &max_retry)) {
+            if (config_manager_get_uint32_json(sta_obj, "max_retry", &max_retry)) {
                 if (max_retry > 255U) {
                     max_retry = 255U;
                 }
@@ -1627,18 +1428,13 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
         }
 
-        const char *ap_section = NULL;
-        size_t ap_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"ap\"", &ap_section, &ap_len)) {
-            char value[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
-            if (config_manager_extract_string_field_scope(ap_section, ap_len, "\"ssid\"", value, sizeof(value))) {
-                config_manager_copy_string(wifi.ap.ssid, sizeof(wifi.ap.ssid), value);
-            }
-            if (config_manager_extract_string_field_scope(ap_section, ap_len, "\"password\"", value, sizeof(value))) {
-                config_manager_copy_string(wifi.ap.password, sizeof(wifi.ap.password), value);
-            }
+        const cJSON *ap_obj = config_manager_get_object(wifi_obj, "ap");
+        if (ap_obj != NULL) {
+            config_manager_copy_json_string(ap_obj, "ssid", wifi.ap.ssid, sizeof(wifi.ap.ssid));
+            config_manager_copy_json_string(ap_obj, "password", wifi.ap.password, sizeof(wifi.ap.password));
+
             uint32_t channel = 0U;
-            if (config_manager_extract_uint32_field_scope(ap_section, ap_len, "\"channel\"", &channel)) {
+            if (config_manager_get_uint32_json(ap_obj, "channel", &channel)) {
                 if (channel < 1U) {
                     channel = 1U;
                 }
@@ -1647,8 +1443,9 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
                 }
                 wifi.ap.channel = (uint8_t)channel;
             }
+
             uint32_t max_clients = 0U;
-            if (config_manager_extract_uint32_field_scope(ap_section, ap_len, "\"max_clients\"", &max_clients)) {
+            if (config_manager_get_uint32_json(ap_obj, "max_clients", &max_clients)) {
                 if (max_clients < 1U) {
                     max_clients = 1U;
                 }
@@ -1660,12 +1457,12 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         }
     }
 
-    if (config_manager_find_object_scope(buffer, length, "\"can\"", &section, &section_len)) {
-        const char *twai_section = NULL;
-        size_t twai_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"twai\"", &twai_section, &twai_len)) {
+    const cJSON *can_obj = config_manager_get_object(root, "can");
+    if (can_obj != NULL) {
+        const cJSON *twai_obj = config_manager_get_object(can_obj, "twai");
+        if (twai_obj != NULL) {
             int32_t gpio = 0;
-            if (config_manager_extract_int32_field_scope(twai_section, twai_len, "\"tx_gpio\"", &gpio)) {
+            if (config_manager_get_int32_json(twai_obj, "tx_gpio", &gpio)) {
                 if (gpio < -1) {
                     gpio = -1;
                 }
@@ -1674,7 +1471,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
                 }
                 can.twai.tx_gpio = (int)gpio;
             }
-            if (config_manager_extract_int32_field_scope(twai_section, twai_len, "\"rx_gpio\"", &gpio)) {
+            if (config_manager_get_int32_json(twai_obj, "rx_gpio", &gpio)) {
                 if (gpio < -1) {
                     gpio = -1;
                 }
@@ -1685,11 +1482,10 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
         }
 
-        const char *keepalive_section = NULL;
-        size_t keepalive_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"keepalive\"", &keepalive_section, &keepalive_len)) {
+        const cJSON *keepalive_obj = config_manager_get_object(can_obj, "keepalive");
+        if (keepalive_obj != NULL) {
             uint32_t value = 0U;
-            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"interval_ms\"", &value)) {
+            if (config_manager_get_uint32_json(keepalive_obj, "interval_ms", &value)) {
                 if (value < 10U) {
                     value = 10U;
                 }
@@ -1698,7 +1494,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
                 }
                 can.keepalive.interval_ms = value;
             }
-            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"timeout_ms\"", &value)) {
+            if (config_manager_get_uint32_json(keepalive_obj, "timeout_ms", &value)) {
                 if (value < 100U) {
                     value = 100U;
                 }
@@ -1707,7 +1503,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
                 }
                 can.keepalive.timeout_ms = value;
             }
-            if (config_manager_extract_uint32_field_scope(keepalive_section, keepalive_len, "\"retry_ms\"", &value)) {
+            if (config_manager_get_uint32_json(keepalive_obj, "retry_ms", &value)) {
                 if (value < 10U) {
                     value = 10U;
                 }
@@ -1718,11 +1514,10 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
         }
 
-        const char *publisher_section = NULL;
-        size_t publisher_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"publisher\"", &publisher_section, &publisher_len)) {
+        const cJSON *publisher_obj = config_manager_get_object(can_obj, "publisher");
+        if (publisher_obj != NULL) {
             uint32_t value = 0U;
-            if (config_manager_extract_uint32_field_scope(publisher_section, publisher_len, "\"period_ms\"", &value)) {
+            if (config_manager_get_uint32_json(publisher_obj, "period_ms", &value)) {
                 if (value > 600000U) {
                     value = 600000U;
                 }
@@ -1730,27 +1525,32 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
         }
 
-        const char *identity_section = NULL;
-        size_t identity_len = 0;
-        if (config_manager_find_object_scope(section, section_len, "\"identity\"", &identity_section, &identity_len)) {
-            char value[CONFIG_MANAGER_CAN_SERIAL_MAX_LENGTH];
-            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"handshake_ascii\"", value, sizeof(value))) {
-                config_manager_copy_string(can.identity.handshake_ascii, sizeof(can.identity.handshake_ascii), value);
-            }
-            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"manufacturer\"", value, sizeof(value))) {
-                config_manager_copy_string(can.identity.manufacturer, sizeof(can.identity.manufacturer), value);
-            }
-            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"battery_name\"", value, sizeof(value))) {
-                config_manager_copy_string(can.identity.battery_name, sizeof(can.identity.battery_name), value);
-            }
-            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"battery_family\"", value, sizeof(value))) {
-                config_manager_copy_string(can.identity.battery_family, sizeof(can.identity.battery_family), value);
-            }
-            if (config_manager_extract_string_field_scope(identity_section, identity_len, "\"serial_number\"", value, sizeof(value))) {
-                config_manager_copy_string(can.identity.serial_number, sizeof(can.identity.serial_number), value);
-            }
+        const cJSON *identity_obj = config_manager_get_object(can_obj, "identity");
+        if (identity_obj != NULL) {
+            config_manager_copy_json_string(identity_obj,
+                                            "handshake_ascii",
+                                            can.identity.handshake_ascii,
+                                            sizeof(can.identity.handshake_ascii));
+            config_manager_copy_json_string(identity_obj,
+                                            "manufacturer",
+                                            can.identity.manufacturer,
+                                            sizeof(can.identity.manufacturer));
+            config_manager_copy_json_string(identity_obj,
+                                            "battery_name",
+                                            can.identity.battery_name,
+                                            sizeof(can.identity.battery_name));
+            config_manager_copy_json_string(identity_obj,
+                                            "battery_family",
+                                            can.identity.battery_family,
+                                            sizeof(can.identity.battery_family));
+            config_manager_copy_json_string(identity_obj,
+                                            "serial_number",
+                                            can.identity.serial_number,
+                                            sizeof(can.identity.serial_number));
         }
     }
+
+    cJSON_Delete(root);
 
     char previous_device_name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
     config_manager_copy_string(previous_device_name,
@@ -1813,121 +1613,6 @@ static bool config_manager_find_register(const char *key, size_t *index_out)
     }
 
     return false;
-}
-
-static bool config_manager_extract_string_field(const char *json, const char *field, char *out, size_t out_size)
-{
-    if (json == NULL || field == NULL || out == NULL || out_size == 0) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (*cursor != '"') {
-        return false;
-    }
-    ++cursor;
-
-    size_t len = 0;
-    while (cursor[len] != '\0' && cursor[len] != '"') {
-        if (len + 1 >= out_size) {
-            return false;
-        }
-        out[len] = cursor[len];
-        ++len;
-    }
-
-    if (cursor[len] != '"') {
-        return false;
-    }
-
-    out[len] = '\0';
-    return true;
-}
-
-static bool config_manager_extract_float_field(const char *json, const char *field, float *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (*cursor == '\0') {
-        return false;
-    }
-
-    char *endptr = NULL;
-    float value = strtof(cursor, &endptr);
-    if (endptr == cursor) {
-        return false;
-    }
-
-    *out_value = value;
-    return true;
-}
-
-static bool config_manager_extract_uint32_field(const char *json,
-                                                const char *field,
-                                                uint32_t *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (*cursor == '\0') {
-        return false;
-    }
-
-    char *endptr = NULL;
-    unsigned long parsed = strtoul(cursor, &endptr, 10);
-    if (endptr == cursor) {
-        return false;
-    }
-
-    *out_value = (uint32_t)parsed;
-    return true;
 }
 
 static float config_manager_raw_to_user(const config_manager_register_descriptor_t *desc, uint16_t raw_value)
@@ -2394,19 +2079,34 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
         return ESP_ERR_INVALID_SIZE;
     }
 
-    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
-    memcpy(buffer, json, length);
-    buffer[length] = '\0';
+    cJSON *root = cJSON_ParseWithLength(json, length);
+    if (root == NULL) {
+        const char *error = cJSON_GetErrorPtr();
+        if (error != NULL) {
+            ESP_LOGW(TAG, "Failed to parse register update near: %.32s", error);
+        } else {
+            ESP_LOGW(TAG, "Failed to parse register update JSON");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!cJSON_IsObject(root)) {
+        ESP_LOGW(TAG, "Register update payload is not a JSON object");
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const cJSON *key_node = cJSON_GetObjectItemCaseSensitive(root, "key");
+    const cJSON *value_node = cJSON_GetObjectItemCaseSensitive(root, "value");
+    if (!cJSON_IsString(key_node) || key_node->valuestring == NULL || !cJSON_IsNumber(value_node)) {
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_ARG;
+    }
 
     char key[CONFIG_MANAGER_MAX_REGISTER_KEY];
-    if (!config_manager_extract_string_field(buffer, "\"key\"", key, sizeof(key))) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    config_manager_copy_string(key, sizeof(key), key_node->valuestring);
+    float requested_value = (float)value_node->valuedouble;
 
-    float requested_value = 0.0f;
-    if (!config_manager_extract_float_field(buffer, "\"value\"", &requested_value)) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    cJSON_Delete(root);
 
     size_t index = 0;
     if (!config_manager_find_register(key, &index)) {
