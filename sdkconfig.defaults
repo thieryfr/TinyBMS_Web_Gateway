@@ -2,7 +2,7 @@
 # Customize via `idf.py menuconfig` and re-run configure step
 
 # Event bus
-CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH=8
+CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH=16
 
 # Storage
 CONFIG_TINYBMS_HISTORY_FS_ENABLE=y
