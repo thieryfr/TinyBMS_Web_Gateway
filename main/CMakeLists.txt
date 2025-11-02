@@ -1,6 +1,7 @@
 idf_component_register(SRCS
     "app_main.c"
     "event_bus/event_bus.c"
+    "status_led/status_led.c"
     "uart_bms/uart_bms.c"
     "can_publisher/can_publisher.c"
     "can_publisher/conversion_table.c"
@@ -18,6 +19,7 @@ idf_component_register(SRCS
     "storage/history_fs.c"
     INCLUDE_DIRS "include"
                  "event_bus"
+                 "status_led"
                  "uart_bms"
                  "can_publisher"
                  "can_victron"
