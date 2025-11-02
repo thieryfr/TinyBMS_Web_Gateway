@@ -71,6 +71,8 @@ typedef struct {
     uint16_t internal_firmware_version;
     char serial_number[UART_BMS_SERIAL_NUMBER_MAX_LENGTH + 1];
     uint8_t serial_length;
+    uint16_t cell_voltage_mv[16];
+    uint8_t cell_balancing[16];
     size_t register_count;
     uart_bms_register_entry_t registers[UART_BMS_MAX_REGISTERS];
 } uart_bms_live_data_t;

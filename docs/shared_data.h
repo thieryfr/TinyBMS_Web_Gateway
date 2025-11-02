@@ -11,7 +11,7 @@
 
 #include "tiny_read_mapping.h"
 
-constexpr size_t TINY_LIVEDATA_MAX_REGISTERS = 32;
+constexpr size_t TINY_LIVEDATA_MAX_REGISTERS = 64;
 
 constexpr size_t TINY_REGISTER_MAX_WORDS = 8;
 
@@ -68,6 +68,8 @@ struct TinyBMS_LiveData {
     uint16_t overheat_cutoff_c;       // °C
     uint16_t register_count; // Dynamic register snapshots count
     TinyRegisterSnapshot register_snapshots[TINY_LIVEDATA_MAX_REGISTERS];
+    uint16_t cell_voltage_mv[16];     // mV per cell
+    uint8_t cell_balancing[16];       // 0/1 flag per cell
 
     /**
      * @brief Retourne une représentation textuelle formatée (pour logs)

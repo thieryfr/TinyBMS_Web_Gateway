@@ -15,6 +15,9 @@ constexpr size_t kCrcSize = 2;
 constexpr uint16_t kSerialNumberBaseAddress = 0x01FA;
 constexpr size_t kSerialNumberWordCount = 8;
 constexpr size_t kSerialNumberCharCount = UART_BMS_SERIAL_NUMBER_MAX_LENGTH;
+constexpr uint16_t kCellVoltageFirstAddress = 0x0000;
+constexpr uint16_t kCellVoltageLastAddress = 0x000F;
+constexpr size_t kCellVoltageCount = 16;
 
 TinyRegisterValueType toTinyValueType(uart_bms_value_type_t value_type)
 {
@@ -211,10 +214,14 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
 
     if (legacy_out != nullptr) {
         legacy_out->register_count = register_count;
+        std::fill_n(legacy_out->cell_voltage_mv, kCellVoltageCount, 0);
+        std::fill_n(legacy_out->cell_balancing, kCellVoltageCount, 0);
     }
 
     if (shared_out != nullptr) {
         shared_out->resetSnapshots();
+        std::fill_n(shared_out->cell_voltage_mv, kCellVoltageCount, 0);
+        std::fill_n(shared_out->cell_balancing, kCellVoltageCount, 0);
     }
 
     size_t word_index = 0;
@@ -235,6 +242,18 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
             case UART_BMS_VALUE_UINT16: {
                 const uint16_t raw = words[0];
                 const float scaled = static_cast<float>(raw) * meta.scale;
+
+                if (meta.address >= kCellVoltageFirstAddress &&
+                    meta.address <= kCellVoltageLastAddress) {
+                    size_t cell_index = static_cast<size_t>(meta.address - kCellVoltageFirstAddress);
+                    uint16_t cell_mv = static_cast<uint16_t>((static_cast<uint32_t>(raw) + 5U) / 10U);
+                    if (legacy_out != nullptr && cell_index < kCellVoltageCount) {
+                        legacy_out->cell_voltage_mv[cell_index] = cell_mv;
+                    }
+                    if (shared_out != nullptr && cell_index < kCellVoltageCount) {
+                        shared_out->cell_voltage_mv[cell_index] = cell_mv;
+                    }
+                }
 
                 if (legacy_out != nullptr) {
                     switch (meta.primary_field) {
@@ -575,6 +594,20 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                 std::memcpy(shared_out->serial_number, serial_buffer, serial_length + 1U);
                 shared_out->serial_length = static_cast<uint8_t>(serial_length);
             }
+        }
+    }
+
+    if (legacy_out != nullptr) {
+        uint16_t bits = legacy_out->balancing_bits;
+        for (size_t i = 0; i < kCellVoltageCount; ++i) {
+            legacy_out->cell_balancing[i] = static_cast<uint8_t>((bits >> i) & 0x1U);
+        }
+    }
+
+    if (shared_out != nullptr) {
+        uint16_t bits = shared_out->balancing_bits;
+        for (size_t i = 0; i < kCellVoltageCount; ++i) {
+            shared_out->cell_balancing[i] = static_cast<uint8_t>((bits >> i) & 0x1U);
         }
     }
 }
