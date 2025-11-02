@@ -7,6 +7,8 @@
 
 #include "event_bus.h"
 
+#define MONITORING_SNAPSHOT_MAX_SIZE 2048U
+
 void monitoring_init(void);
 void monitoring_set_event_publisher(event_bus_publish_fn_t publisher);
 

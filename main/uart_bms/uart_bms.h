@@ -17,8 +17,9 @@ extern "C" {
 #define UART_BMS_DEFAULT_POLL_INTERVAL_MS 250U
 #define UART_BMS_RESPONSE_TIMEOUT_MS     200U
 
-#define UART_BMS_MAX_REGISTERS UART_BMS_REGISTER_WORD_COUNT
+#define UART_BMS_MAX_REGISTERS          UART_BMS_REGISTER_WORD_COUNT
 #define UART_BMS_SERIAL_NUMBER_MAX_LENGTH 16U
+#define UART_BMS_CELL_COUNT             16U
 
 typedef struct {
     uint16_t address;
@@ -71,8 +72,8 @@ typedef struct {
     uint16_t internal_firmware_version;
     char serial_number[UART_BMS_SERIAL_NUMBER_MAX_LENGTH + 1];
     uint8_t serial_length;
-    uint16_t cell_voltage_mv[16];
-    uint8_t cell_balancing[16];
+    uint16_t cell_voltage_mv[UART_BMS_CELL_COUNT];
+    uint8_t cell_balancing[UART_BMS_CELL_COUNT];
     size_t register_count;
     uart_bms_register_entry_t registers[UART_BMS_MAX_REGISTERS];
 } uart_bms_live_data_t;

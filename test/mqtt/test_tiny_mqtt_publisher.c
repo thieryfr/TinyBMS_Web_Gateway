@@ -8,7 +8,7 @@
 static bool s_publish_called = false;
 static unsigned s_publish_count = 0U;
 static tiny_mqtt_publisher_message_t s_captured_message = {0};
-static char s_captured_payload[512];
+static char s_captured_payload[TINY_MQTT_MAX_PAYLOAD_SIZE];
 
 static void reset_capture(void)
 {
@@ -69,6 +69,10 @@ static uart_bms_live_data_t build_sample(uint64_t timestamp_ms)
     data.max_discharge_current_limit_a = 60.0f;
     data.charge_overcurrent_limit_a = 38.0f;
     data.discharge_overcurrent_limit_a = 10.0f;
+    for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
+        data.cell_voltage_mv[i] = (uint16_t)(3300U + (uint16_t)(i * 10U));
+        data.cell_balancing[i] = (uint8_t)((i % 2U) == 0U ? 1U : 0U);
+    }
     return data;
 }
 
@@ -100,6 +104,8 @@ TEST_CASE("tiny_mqtt_publisher_generates_metrics_snapshot", "[mqtt][tiny_mqtt_pu
     TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"average_temperature_c\":32.200"));
     TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"min_cell_voltage_v\":3.300"));
     TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"balancing_bits\":3"));
+    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"cell_voltages_mv\":[3300,3310,3320"));
+    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"cell_balancing\":[1,0,1"));
     TEST_ASSERT_NOT_NULL(
         strstr(s_captured_payload,
                "\"alarms\":{\"high_charge\":0,\"high_discharge\":2,\"cell_imbalance\":2,\"raw_alarm_bits\":4660,\"raw_warning_bits\":255}"));

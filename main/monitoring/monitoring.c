@@ -34,7 +34,7 @@ static bool s_has_latest_bms = false;
 static monitoring_history_entry_t s_history[MONITORING_HISTORY_CAPACITY];
 static size_t s_history_head = 0;
 static size_t s_history_count = 0;
-static char s_last_snapshot[1024] = {0};
+static char s_last_snapshot[MONITORING_SNAPSHOT_MAX_SIZE] = {0};
 static size_t s_last_snapshot_len = 0;
 
 static bool monitoring_history_empty(void)
@@ -106,8 +106,7 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
                                 "\"pack_voltage\":%.3f,\"pack_current\":%.3f,\"min_cell_mv\":%u,"
                                 "\"max_cell_mv\":%u,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
                                 "\"average_temperature\":%.2f,\"mos_temperature\":%.2f,"
-                                "\"balancing_bits\":%u,\"alarm_bits\":%u,\"warning_bits\":%u,"
-                                "\"uptime_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ",\"registers\":[",
+                                "\"balancing_bits\":%u,",
                                 snapshot->timestamp_ms,
                                 snapshot->pack_voltage_v,
                                 snapshot->pack_current_a,
@@ -117,7 +116,47 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
                                 snapshot->state_of_health_pct,
                                 snapshot->average_temperature_c,
                                 snapshot->mosfet_temperature_c,
-                                (unsigned)snapshot->balancing_bits,
+                                (unsigned)snapshot->balancing_bits)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!monitoring_json_append(buffer, buffer_size, &offset, "\"cell_voltages_mv\":[")) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
+        unsigned value = (unsigned)snapshot->cell_voltage_mv[i];
+        if (!monitoring_json_append(buffer,
+                                    buffer_size,
+                                    &offset,
+                                    "%s%u",
+                                    (i == 0) ? "" : ",",
+                                    value)) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+    }
+
+    if (!monitoring_json_append(buffer, buffer_size, &offset, "],\"cell_balancing\":[")) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
+        unsigned value = (snapshot->cell_balancing[i] != 0U) ? 1U : 0U;
+        if (!monitoring_json_append(buffer,
+                                    buffer_size,
+                                    &offset,
+                                    "%s%u",
+                                    (i == 0) ? "" : ",",
+                                    value)) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+    }
+
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "],\"alarm_bits\":%u,\"warning_bits\":%u,"
+                                "\"uptime_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ",\"registers\":[",
                                 (unsigned)snapshot->alarm_bits,
                                 (unsigned)snapshot->warning_bits,
                                 snapshot->uptime_seconds,

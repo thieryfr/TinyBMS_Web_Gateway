@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -31,7 +32,7 @@
 #endif
 
 #define TINY_MQTT_DEFAULT_INTERVAL_MS 1000U
-#define TINY_MQTT_PAYLOAD_CAPACITY    512U
+#define TINY_MQTT_PAYLOAD_CAPACITY    TINY_MQTT_MAX_PAYLOAD_SIZE
 
 static const char *TAG = "tiny_mqtt_pub";
 
@@ -45,6 +46,30 @@ static uint64_t s_last_publish_ms = 0;
 static bool s_listener_registered = false;
 static tiny_mqtt_publisher_message_t s_message = {0};
 static char s_payload_buffer[TINY_MQTT_PAYLOAD_CAPACITY];
+
+static bool tiny_mqtt_payload_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
+{
+    if (buffer == NULL || buffer_size == 0 || offset == NULL || fmt == NULL) {
+        return false;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    int written = vsnprintf(buffer + *offset, buffer_size - *offset, fmt, args);
+    va_end(args);
+
+    if (written < 0) {
+        return false;
+    }
+
+    size_t remaining = buffer_size - *offset;
+    if ((size_t)written >= remaining) {
+        return false;
+    }
+
+    *offset += (size_t)written;
+    return true;
+}
 
 static float sanitize_float(float value)
 {
@@ -134,47 +159,81 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
 
     uint64_t timestamp_ms = extract_timestamp_ms(data);
 
-    int written = snprintf(s_payload_buffer,
-                           sizeof(s_payload_buffer),
-                           "{\"type\":\"tinybms_metrics\",\"timestamp_ms\":%" PRIu64 ",\"uptime_s\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ","
-                           "\"pack_voltage_v\":%.3f,\"pack_current_a\":%.3f,\"power_w\":%.3f,\"state_of_charge_pct\":%.2f,"
-                           "\"state_of_health_pct\":%.2f,\"average_temperature_c\":%.2f,\"mosfet_temperature_c\":%.2f,"
-                           "\"min_cell_voltage_v\":%.3f,\"max_cell_voltage_v\":%.3f,\"balancing_bits\":%u,"
-                           "\"alarms\":{\"high_charge\":%u,\"high_discharge\":%u,\"cell_imbalance\":%u,\"raw_alarm_bits\":%u,\"raw_warning_bits\":%u},"
-                           "\"limits\":{\"max_charge_current_a\":%.2f,\"max_discharge_current_a\":%.2f,\"charge_overcurrent_limit_a\":%.2f,\"discharge_overcurrent_limit_a\":%.2f}}",
-                           timestamp_ms,
-                           data->uptime_seconds,
-                           data->cycle_count,
-                           pack_voltage,
-                           pack_current,
-                           power_w,
-                           sanitize_float(data->state_of_charge_pct),
-                           sanitize_float(data->state_of_health_pct),
-                           average_temp,
-                           mosfet_temp,
-                           min_cell_v,
-                           max_cell_v,
-                           (unsigned)data->balancing_bits,
-                           encode_alarm_level(high_charge),
-                           encode_alarm_level(high_discharge),
-                           encode_alarm_level(imbalance),
-                           (unsigned)data->alarm_bits,
-                           (unsigned)data->warning_bits,
-                           max_charge_limit,
-                           max_discharge_limit,
-                           charge_overcurrent,
-                           discharge_overcurrent);
-
-    if (written < 0) {
+    size_t offset = 0;
+    if (!tiny_mqtt_payload_append(s_payload_buffer,
+                                  sizeof(s_payload_buffer),
+                                  &offset,
+                                  "{\"type\":\"tinybms_metrics\",\"timestamp_ms\":%" PRIu64 ",\"uptime_s\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ","
+                                  "\"pack_voltage_v\":%.3f,\"pack_current_a\":%.3f,\"power_w\":%.3f,\"state_of_charge_pct\":%.2f,"
+                                  "\"state_of_health_pct\":%.2f,\"average_temperature_c\":%.2f,\"mosfet_temperature_c\":%.2f,"
+                                  "\"min_cell_voltage_v\":%.3f,\"max_cell_voltage_v\":%.3f,\"balancing_bits\":%u,",
+                                  timestamp_ms,
+                                  data->uptime_seconds,
+                                  data->cycle_count,
+                                  pack_voltage,
+                                  pack_current,
+                                  power_w,
+                                  sanitize_float(data->state_of_charge_pct),
+                                  sanitize_float(data->state_of_health_pct),
+                                  average_temp,
+                                  mosfet_temp,
+                                  min_cell_v,
+                                  max_cell_v,
+                                  (unsigned)data->balancing_bits)) {
         return false;
     }
-    if ((size_t)written >= sizeof(s_payload_buffer)) {
-        ESP_LOGW(TAG, "Tiny MQTT payload truncated (%d bytes)", written);
+
+    if (!tiny_mqtt_payload_append(s_payload_buffer, sizeof(s_payload_buffer), &offset, "\"cell_voltages_mv\":[")) {
+        return false;
+    }
+
+    for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
+        unsigned value = (unsigned)data->cell_voltage_mv[i];
+        if (!tiny_mqtt_payload_append(s_payload_buffer,
+                                      sizeof(s_payload_buffer),
+                                      &offset,
+                                      "%s%u",
+                                      (i == 0) ? "" : ",",
+                                      value)) {
+            return false;
+        }
+    }
+
+    if (!tiny_mqtt_payload_append(s_payload_buffer, sizeof(s_payload_buffer), &offset, "],\"cell_balancing\":[")) {
+        return false;
+    }
+
+    for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
+        unsigned value = (data->cell_balancing[i] != 0U) ? 1U : 0U;
+        if (!tiny_mqtt_payload_append(s_payload_buffer,
+                                      sizeof(s_payload_buffer),
+                                      &offset,
+                                      "%s%u",
+                                      (i == 0) ? "" : ",",
+                                      value)) {
+            return false;
+        }
+    }
+
+    if (!tiny_mqtt_payload_append(s_payload_buffer,
+                                  sizeof(s_payload_buffer),
+                                  &offset,
+                                  "],\"alarms\":{\"high_charge\":%u,\"high_discharge\":%u,\"cell_imbalance\":%u,\"raw_alarm_bits\":%u,\"raw_warning_bits\":%u},"
+                                  "\"limits\":{\"max_charge_current_a\":%.2f,\"max_discharge_current_a\":%.2f,\"charge_overcurrent_limit_a\":%.2f,\"discharge_overcurrent_limit_a\":%.2f}}",
+                                  encode_alarm_level(high_charge),
+                                  encode_alarm_level(high_discharge),
+                                  encode_alarm_level(imbalance),
+                                  (unsigned)data->alarm_bits,
+                                  (unsigned)data->warning_bits,
+                                  max_charge_limit,
+                                  max_discharge_limit,
+                                  charge_overcurrent,
+                                  discharge_overcurrent)) {
         return false;
     }
 
     if (out_length != NULL) {
-        *out_length = (size_t)written;
+        *out_length = offset;
     }
     return true;
 }
