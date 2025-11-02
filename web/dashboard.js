@@ -175,6 +175,69 @@ function updateBatteryView(data) {
     document.getElementById('battery-minmax').textContent = `min ${data.min_cell_mv || '--'} mV • max ${data.max_cell_mv || '--'} mV`;
     document.getElementById('battery-balancing').textContent = `Équilibrage: 0x${(data.balancing_bits || 0).toString(16).toUpperCase()}`;
 
+    const cellTableBody = document.getElementById('battery-cells-body');
+    if (cellTableBody) {
+        cellTableBody.innerHTML = '';
+
+        const voltagesMv = Array.isArray(data.cell_voltages_mv)
+            ? data.cell_voltages_mv.map((value) => Number(value))
+            : Array.isArray(data.cell_voltages)
+                ? data.cell_voltages.map((value) => Number(value) * 1000)
+                : null;
+        const balancingStates = Array.isArray(data.cell_balancing) ? data.cell_balancing : null;
+        const totalCells = 16;
+        const fragment = document.createDocumentFragment();
+
+        for (let index = 0; index < totalCells; index += 1) {
+            const row = document.createElement('tr');
+            row.dataset.cellIndex = String(index + 1);
+
+            const header = document.createElement('th');
+            header.scope = 'row';
+            header.textContent = `Cellule ${index + 1}`;
+            row.appendChild(header);
+
+            const voltageCell = document.createElement('td');
+            const rawVoltage = voltagesMv && Number.isFinite(voltagesMv[index]) ? voltagesMv[index] : null;
+            if (rawVoltage !== null) {
+                const voltageV = rawVoltage / 1000;
+                voltageCell.textContent = `${voltageV.toFixed(3)} V`;
+                voltageCell.dataset.voltageMv = String(rawVoltage);
+            } else {
+                voltageCell.textContent = '--';
+                voltageCell.classList.add('cell-voltage-missing');
+                voltageCell.setAttribute('aria-label', `Tension cellule ${index + 1} indisponible`);
+            }
+            row.appendChild(voltageCell);
+
+            const balanceCell = document.createElement('td');
+            const indicator = document.createElement('span');
+            let indicatorState = 'unknown';
+            let indicatorText = 'Indisponible';
+
+            if (balancingStates) {
+                const rawState = balancingStates[index];
+                const isActive = Boolean(Number(rawState));
+                indicatorState = isActive ? 'active' : 'inactive';
+                indicatorText = isActive ? 'Actif' : 'Inactif';
+                indicator.dataset.balancingRaw = rawState != null ? String(rawState) : '';
+            }
+
+            indicator.className = `cell-balance-indicator ${indicatorState}`;
+            indicator.textContent = indicatorText;
+            indicator.setAttribute('aria-label', `Équilibrage cellule ${index + 1} : ${indicatorText}`);
+            indicator.setAttribute('role', 'status');
+            indicator.title = indicatorText;
+
+            balanceCell.appendChild(indicator);
+            row.appendChild(balanceCell);
+
+            fragment.appendChild(row);
+        }
+
+        cellTableBody.appendChild(fragment);
+    }
+
     const alarmList = document.getElementById('battery-alarms');
     const warningList = document.getElementById('battery-warnings');
     alarmList.innerHTML = '';

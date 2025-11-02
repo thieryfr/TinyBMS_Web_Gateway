@@ -152,6 +152,147 @@ main {
     font-weight: 600;
 }
 
+.cell-section {
+    margin-top: 2rem;
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 1.5rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+
+.cell-section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.cell-section-header h3 {
+    margin: 0;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.cell-section-header p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.cell-table-container {
+    overflow-x: auto;
+}
+
+.cell-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--text-primary);
+}
+
+.cell-table th,
+.cell-table td {
+    padding: 0.65rem 0.9rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cell-table th {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.cell-table tbody tr:nth-child(odd) {
+    background: rgba(0, 168, 150, 0.06);
+}
+
+.cell-table tbody tr:hover {
+    background: rgba(0, 168, 150, 0.12);
+}
+
+.cell-row-empty td {
+    text-align: center;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+.cell-voltage-missing {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.cell-balance-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.cell-balance-indicator::before {
+    content: '';
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.cell-balance-indicator.active {
+    background: rgba(0, 168, 150, 0.18);
+    color: #0dd6bf;
+    border-color: rgba(0, 168, 150, 0.45);
+}
+
+.cell-balance-indicator.inactive {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.cell-balance-indicator.unknown {
+    background: rgba(255, 209, 102, 0.18);
+    color: var(--warning);
+    border-color: rgba(255, 209, 102, 0.45);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 720px) {
+    .cell-section {
+        padding: 1.25rem;
+    }
+
+    .cell-table th,
+    .cell-table td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .cell-table-container {
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
+    }
+}
+
 .status-list {
     list-style: none;
     margin: 0;
