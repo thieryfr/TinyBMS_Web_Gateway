@@ -562,7 +562,7 @@ static esp_err_t web_server_static_get_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_status_handler(httpd_req_t *req)
 {
-    char buffer[256];
+    char buffer[MONITORING_SNAPSHOT_MAX_SIZE];
     size_t length = 0;
     esp_err_t err = monitoring_get_status_json(buffer, sizeof(buffer), &length);
     if (err != ESP_OK) {
@@ -1303,7 +1303,7 @@ static esp_err_t web_server_telemetry_ws_handler(httpd_req_t *req)
         ws_client_list_add(&s_telemetry_clients, fd);
         ESP_LOGI(TAG, "Telemetry WebSocket client connected: %d", fd);
 
-        char buffer[256];
+        char buffer[MONITORING_SNAPSHOT_MAX_SIZE];
         size_t length = 0;
         if (monitoring_get_status_json(buffer, sizeof(buffer), &length) == ESP_OK) {
             httpd_ws_frame_t frame = {

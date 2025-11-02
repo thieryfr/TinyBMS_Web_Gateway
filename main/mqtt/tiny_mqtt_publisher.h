@@ -18,6 +18,7 @@ typedef struct {
 } tiny_mqtt_publisher_config_t;
 
 #define TINY_MQTT_PUBLISH_INTERVAL_KEEP UINT32_MAX
+#define TINY_MQTT_MAX_PAYLOAD_SIZE      1024U
 
 typedef struct {
     const char *payload;
