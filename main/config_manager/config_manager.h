@@ -24,6 +24,11 @@ typedef struct {
 } config_manager_device_settings_t;
 
 typedef struct {
+    int tx_gpio;
+    int rx_gpio;
+} config_manager_uart_pins_t;
+
+typedef struct {
     struct {
         char ssid[CONFIG_MANAGER_WIFI_SSID_MAX_LENGTH];
         char password[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
@@ -73,6 +78,8 @@ const char *config_manager_get_device_name(void);
 
 uint32_t config_manager_get_uart_poll_interval_ms(void);
 esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms);
+
+const config_manager_uart_pins_t *config_manager_get_uart_pins(void);
 
 const mqtt_client_config_t *config_manager_get_mqtt_client_config(void);
 esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config);

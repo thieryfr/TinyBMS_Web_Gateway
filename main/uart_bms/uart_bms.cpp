@@ -24,10 +24,16 @@
 #include "uart_frame_builder.h"
 #include "uart_response_parser.h"
 
+#ifndef CONFIG_TINYBMS_UART_TX_GPIO
+#define CONFIG_TINYBMS_UART_TX_GPIO 37
+#endif
+
+#ifndef CONFIG_TINYBMS_UART_RX_GPIO
+#define CONFIG_TINYBMS_UART_RX_GPIO 36
+#endif
+
 #define UART_BMS_UART_PORT       UART_NUM_1
 #define UART_BMS_BAUD_RATE       115200
-#define UART_BMS_TX_PIN          GPIO_NUM_37
-#define UART_BMS_RX_PIN          GPIO_NUM_36
 #define UART_BMS_RX_BUFFER_SIZE  256
 #define UART_BMS_TASK_STACK      4096
 #define UART_BMS_TASK_PRIORITY   12
@@ -37,6 +43,8 @@
 namespace {
 
 constexpr char kTag[] = "uart_bms";
+constexpr gpio_num_t kUartTxPin = static_cast<gpio_num_t>(CONFIG_TINYBMS_UART_TX_GPIO);
+constexpr gpio_num_t kUartRxPin = static_cast<gpio_num_t>(CONFIG_TINYBMS_UART_RX_GPIO);
 
 struct ListenerEntry {
     uart_bms_data_callback_t callback = nullptr;
@@ -577,8 +585,8 @@ void uart_bms_init(void)
     }
 
     err = uart_set_pin(UART_BMS_UART_PORT,
-                       UART_BMS_TX_PIN,
-                       UART_BMS_RX_PIN,
+                       kUartTxPin,
+                       kUartRxPin,
                        UART_PIN_NO_CHANGE,
                        UART_PIN_NO_CHANGE);
     if (err != ESP_OK) {

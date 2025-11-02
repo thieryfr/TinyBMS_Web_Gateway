@@ -210,6 +210,26 @@ menu "MQTT"
         default y
 endmenu
 
+menu "UART"
+    config TINYBMS_UART_TX_GPIO
+        int "TinyBMS UART TX GPIO"
+        range -1 48
+        default 37
+        help
+            GPIO routed to the TinyBMS UART TX pad. Defaults to GPIO37 to match
+            the ESP32-CAN-X2 harness but can be remapped if a different
+            connector is used.
+
+    config TINYBMS_UART_RX_GPIO
+        int "TinyBMS UART RX GPIO"
+        range -1 48
+        default 36
+        help
+            GPIO routed to the TinyBMS UART RX pad. Defaults to GPIO36 to match
+            the ESP32-CAN-X2 harness but can be remapped if a different
+            connector is used.
+endmenu
+
 menu "CAN Publisher"
     config TINYBMS_CAN_PUBLISHER_PERIOD_MS
         int "CAN publisher period (ms)"
