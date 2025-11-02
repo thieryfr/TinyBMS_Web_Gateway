@@ -58,8 +58,13 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
 
     const uart_bms_live_data_t *payload = (const uart_bms_live_data_t *)event.payload;
     TEST_ASSERT_EQUAL_UINT32(kUartTestRegisterCount, payload->register_count);
-    TEST_ASSERT_EQUAL_UINT16(0x0020, payload->registers[0].address);
-    TEST_ASSERT_EQUAL_UINT16(0x3456, payload->registers[0].raw_value);
+    TEST_ASSERT_EQUAL_UINT16(0x0000, payload->registers[0].address);
+    TEST_ASSERT_EQUAL_UINT16(0x7D00, payload->registers[0].raw_value);
+    TEST_ASSERT_EQUAL_UINT16(0x0020, payload->registers[16].address);
+    TEST_ASSERT_EQUAL_UINT16(0x3456, payload->registers[16].raw_value);
+    TEST_ASSERT_EQUAL_UINT16(3200, payload->cell_voltage_mv[0]);
+    TEST_ASSERT_EQUAL_UINT16(3210, payload->cell_voltage_mv[1]);
+    TEST_ASSERT_EQUAL_UINT16(3350, payload->cell_voltage_mv[15]);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 51.35f, payload->pack_voltage_v);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, -12.3f, payload->pack_current_a);
     TEST_ASSERT_EQUAL_UINT16(3200, payload->min_cell_mv);
@@ -72,6 +77,9 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 18.0f, payload->pack_temperature_min_c);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 28.0f, payload->pack_temperature_max_c);
     TEST_ASSERT_EQUAL_UINT16(0x0003, payload->balancing_bits);
+    TEST_ASSERT_EQUAL_UINT8(1, payload->cell_balancing[0]);
+    TEST_ASSERT_EQUAL_UINT8(1, payload->cell_balancing[1]);
+    TEST_ASSERT_EQUAL_UINT8(0, payload->cell_balancing[2]);
     TEST_ASSERT_EQUAL_UINT16(0x0091, payload->alarm_bits);
     TEST_ASSERT_EQUAL_UINT16(0x0002, payload->warning_bits);
     TEST_ASSERT_EQUAL_UINT32((uint32_t)0x0012 << 16 | 0x3456, payload->uptime_seconds);
@@ -94,6 +102,8 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
     TEST_ASSERT_TRUE(s_listener_called);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 51.35f, s_listener_data.pack_voltage_v);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, -12.3f, s_listener_data.pack_current_a);
+    TEST_ASSERT_EQUAL_UINT16(3200, s_listener_data.cell_voltage_mv[0]);
+    TEST_ASSERT_EQUAL_UINT8(1, s_listener_data.cell_balancing[0]);
 
     uart_bms_unregister_listener(test_listener, NULL);
     event_bus_unsubscribe(subscriber);
