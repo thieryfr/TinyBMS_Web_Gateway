@@ -60,6 +60,29 @@
                         <dl class="status-kv" id="battery-system-info"></dl>
                     </div>
                 </div>
+                <section id="battery-cell-section" class="cell-section" aria-labelledby="cell-section-title">
+                    <header class="cell-section-header">
+                        <h3 id="cell-section-title">Équilibrage des cellules</h3>
+                        <p id="cell-section-description">Visualisez les tensions individuelles des cellules 1 à 16 et leur état d’équilibrage.</p>
+                    </header>
+                    <div class="cell-table-container" role="region" aria-live="polite" aria-labelledby="cell-section-title" aria-describedby="cell-section-description">
+                        <table class="cell-table">
+                            <caption class="visually-hidden">Tension et équilibrage des cellules 1 à 16</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Cellule</th>
+                                    <th scope="col">Tension (V)</th>
+                                    <th scope="col">Équilibrage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="battery-cells-body">
+                                <tr class="cell-row-empty">
+                                    <td colspan="3">Données cellules indisponibles</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
                 <div class="register-table">
                     <h3>Registres TinyBMS surveillés</h3>
                     <table>
