@@ -5,6 +5,8 @@
 
 #include "uart_bms.h"
 
+// NOTE: Future use - this service currently only caches TinyBMS telemetry but keeps
+// the publishing hook ready for upcoming PGN enrichment workflows.
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static const char *TAG = "pgn_mapper";
 static uart_bms_live_data_t s_latest_bms = {0};
