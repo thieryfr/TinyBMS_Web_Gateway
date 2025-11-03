@@ -1,4 +1,4 @@
-import * as echarts from './echarts.esm.min.js';
+import * as echarts from './echarts.common.min.js';
 
 const DEFAULT_THEME_NAME = 'tinybms-dark';
 let themeRegistered = false;
