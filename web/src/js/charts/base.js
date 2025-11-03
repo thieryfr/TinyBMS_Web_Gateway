@@ -1,4 +1,7 @@
-import * as echarts from './echarts.common.min.js';
+const echarts = window.echarts;
+if (!echarts) {
+  console.error('ECharts non chargé ! Vérifie le <script> dans index.html');
+}
 
 const DEFAULT_THEME_NAME = 'tinybms-dark';
 let themeRegistered = false;
