@@ -4,7 +4,7 @@ Ce document consolide les résultats de l’audit automatique (`tools/audit_mapp
 
 ## 1. Synthèse de l’audit
 
-- 67 champs CAN décrits par les documents sources (19 registres TinyBMS, 21 CAN ID).【F:docs/mapping_audit.md†L5-L38】
+- 67 champs CAN décrits par les documents sources (19 registres TinyBMS, 21 CAN ID).【F:archive/docs/mapping_audit.md†L5-L38】
 - L’ensemble des registres requis (dont 102/103 pour les limites dynamiques) est désormais interrogé et décodé côté UART.【F:main/uart_bms/uart_bms_protocol.c†L5-L358】
 - Deux CAN ID Victron restent en attente (0x305 keepalive, 0x307 identifiant onduleur) ; les autres trames de la matrice sont publiées par `can_publisher`.【F:main/can_publisher/conversion_table.c†L738-L816】
 - Les conversions CVL/CCL/DCL et SOC/SOH sont alignées avec les documents JSON (0,1 V et 1 %).【F:main/can_publisher/conversion_table.c†L444-L528】【F:docs/TinyBMS_CAN_BMS_mapping.json†L5-L86】

@@ -27,7 +27,7 @@
 
 ### Status LED
 **Statut**: ✅ Fonctionnel
-**Cohérence**: Patterns documentés (docs/status_led.md)
+**Cohérence**: Patterns documentés (archive/docs/status_led.md)
 **Interopérabilité**:
 - ✅ Souscrit aux événements système (WiFi, Storage, OTA)
 - ✅ Feedback visuel cohérent avec états

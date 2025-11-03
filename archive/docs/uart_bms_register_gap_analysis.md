@@ -2,7 +2,7 @@
 
 ## 1. Registres attendus dans la matrice consolidée
 
-Les documents fournis identifient 19 registres TinyBMS nécessaires à la cartographie CAN.【F:docs/mapping_audit.md†L14-L36】 Les principales entrées sont rappelées ci-dessous.
+Les documents fournis identifient 19 registres TinyBMS nécessaires à la cartographie CAN.【F:archive/docs/mapping_audit.md†L14-L36】 Les principales entrées sont rappelées ci-dessous.
 
 | Registre | Nom (matrice JSON) | Type |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ Les documents fournis identifient 19 registres TinyBMS nécessaires à la cartog
 | 500–502 | Manufacturer / firmware words | UINT16 |
 | 504–505 | Serial Number (ASCII) | String |
 
-> Source : `docs/TinyBMS_CAN_BMS_mapping.json` et audit automatisé.【F:docs/TinyBMS_CAN_BMS_mapping.json†L5-L613】【F:docs/mapping_audit.md†L14-L36】
+> Source : `docs/TinyBMS_CAN_BMS_mapping.json` et audit automatisé.【F:docs/TinyBMS_CAN_BMS_mapping.json†L5-L613】【F:archive/docs/mapping_audit.md†L14-L36】
 
 ### 1.2 Registres requis par les champs calculés
 
@@ -35,7 +35,7 @@ Les champs d'alarmes et d'avertissements (par ex. Battery High Voltage Alarm, Ba
 - 42 (externalTemp) et 319 (highTempChargeCutoff) pour les alarmes de charge en température.
 - 38 (packCurrent) avec 317 (overCurrentCutoff) et 318 (overChargeCurrentCutoff) pour les alarmes/avertissements de courant.
 
-Ces dépendances sont explicitement mentionnées dans la colonne `compute_inputs` de la matrice consolidée.【F:docs/mapping_normalized.csv†L14-L34】
+Ces dépendances sont explicitement mentionnées dans la colonne `compute_inputs` de la matrice consolidée.【F:archive/docs/mapping_normalized.csv†L14-L34】
 
 ## 2. Cartographie côté pile UART
 
@@ -52,17 +52,17 @@ Certains registres sont interrogés mais ne sont exposés que dans la structure 
 
 - 306 (Battery Capacity) : disponible mais non recopié dans `TinyBMS_LiveData`, ce qui impose un accès aux snapshots bruts côté CAN/API.【F:main/uart_bms/uart_response_parser.cpp†L150-L238】
 - 500/501/502 : les mots 16 bits sont exposés mais les chaînes ASCII associées restent à extraire via `decode_ascii_from_registers()` pour alimenter les trames 0x380/0x381/0x35E lorsque l’on souhaite s’affranchir des constantes de configuration.【F:main/can_publisher/conversion_table.c†L706-L738】
-- 504/505 : la fenêtre 0x01F8–0x01FF est interrogée mais les mots ne sont pas décodés en ASCII ; aucune structure ne conserve le numéro de série complet.【F:docs/mapping_audit.md†L32-L36】
+- 504/505 : la fenêtre 0x01F8–0x01FF est interrogée mais les mots ne sont pas décodés en ASCII ; aucune structure ne conserve le numéro de série complet.【F:archive/docs/mapping_audit.md†L32-L36】
 
 ### 2.3 Registres absents de la pile UART
 
-- **102 / 103** — limites dynamiques de courant de charge/décharge : absents de `g_uart_bms_registers` et de `TinyBMS_LiveData`. Leur ajout est indispensable pour publier CCL/DCL selon la matrice Victron.【F:docs/mapping_audit.md†L14-L36】
+- **102 / 103** — limites dynamiques de courant de charge/décharge : absents de `g_uart_bms_registers` et de `TinyBMS_LiveData`. Leur ajout est indispensable pour publier CCL/DCL selon la matrice Victron.【F:archive/docs/mapping_audit.md†L14-L36】
 - Les autres registres répertoriés par la matrice sont soit couverts, soit déjà polled en brut.
 
 ## 3. Écarts fonctionnels à combler
 
 - **Limites CCL/DCL (Reg 103/102)** : nécessaires pour alimenter les algorithmes Victron (CCL/DCL). Ajouter des métadonnées UART, lire les registres 0x0066/0x0067, convertir en ampères (échelle 0,1 A) et exposer les valeurs dans `uart_bms_live_data_t` ainsi que `TinyBMS_LiveData.max_charge_current` / `.max_discharge_current`.【F:docs/TinyBMS_CAN_BMS_mapping.json†L24-L57】【F:docs/shared_data.h†L44-L69】
-- **Numéro de série (Reg 504/505)** : décoder et stocker les blocs ASCII pour préparer les trames CAN 0x380/0x381 et l’API Web. Réutiliser `decode_ascii_from_registers()` côté UART afin d’éviter un double parsing côté CAN.【F:docs/mapping_audit.md†L32-L36】【F:main/can_publisher/conversion_table.c†L706-L738】
+- **Numéro de série (Reg 504/505)** : décoder et stocker les blocs ASCII pour préparer les trames CAN 0x380/0x381 et l’API Web. Réutiliser `decode_ascii_from_registers()` côté UART afin d’éviter un double parsing côté CAN.【F:archive/docs/mapping_audit.md†L32-L36】【F:main/can_publisher/conversion_table.c†L706-L738】
 - **Capacité (Reg 306)** : propager la valeur dans `TinyBMS_LiveData` pour permettre un encodage direct des trames 0x35F/0x379 sans relecture brute des registres.【F:main/uart_bms/uart_response_parser.cpp†L150-L238】
 
 ## 4. Préparation des évolutions dans la pile UART
@@ -70,4 +70,4 @@ Certains registres sont interrogés mais ne sont exposés que dans la structure 
 1. Étendre `uart_bms_register_id_t` et `g_uart_bms_registers` avec les registres manquants (102, 103) et documenter le décodage ASCII 504/505.
 2. Compléter `uart_response_parser.cpp` pour mettre à jour les structures `uart_bms_live_data_t` et `TinyBMS_LiveData`, puis alimenter `TinyRegisterSnapshot` pour les usages diagnostics.
 3. Ajouter les champs manquants dans `TinyBMS_LiveData` (courants max, capacité, numéro de série) pour les rendre accessibles aux modules CAN/MQTT.
-4. Mettre à jour la documentation (présent fichier, `docs/can_mapping_state.md`, `docs/pgn_conversions.md`) et étendre la matrice de tests UART/CAN.
+4. Mettre à jour la documentation (présent fichier, `archive/docs/can_mapping_state.md`, `archive/docs/pgn_conversions.md`) et étendre la matrice de tests UART/CAN.

@@ -5,8 +5,9 @@ This script extracts a unified tabular view from the Excel spreadsheet
 ``docs/TinyBMS_CAN_BMS_mapping.json``.  It also performs a few consistency
 checks to highlight potential issues before code reviews.
 
-The resulting consolidated data is emitted as ``docs/mapping_normalized.csv``
-while a human readable report is stored in ``docs/mapping_audit.md``.
+The resulting consolidated data is emitted as
+``archive/docs/mapping_normalized.csv`` while a human readable report is
+stored in ``archive/docs/mapping_audit.md``.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from zipfile import ZipFile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = REPO_ROOT / "docs"
+ARCHIVE_DOCS_DIR = REPO_ROOT / "archive" / "docs"
 
 
 # ---------------------------------------------------------------------------
@@ -530,14 +532,14 @@ def main() -> None:
 
     combined = excel_rows + json_rows
 
-    write_csv(combined, DOCS_DIR / "mapping_normalized.csv")
+    write_csv(combined, ARCHIVE_DOCS_DIR / "mapping_normalized.csv")
 
     duplicates = detect_duplicates(combined)
     missing_formulas = detect_missing_formulas(combined)
     cross_findings = compare_sources(excel_rows, json_rows)
 
     write_report(
-        DOCS_DIR / "mapping_audit.md",
+        ARCHIVE_DOCS_DIR / "mapping_audit.md",
         combined,
         duplicates,
         missing_formulas,
