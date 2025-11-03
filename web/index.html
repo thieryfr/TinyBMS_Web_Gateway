@@ -168,27 +168,99 @@
                 </div>
             </section>
             <section id="tab-uart" class="tab-panel" aria-labelledby="Temps réel – UART">
-                <div class="split-panel">
-                    <section>
-                        <header><h2>Trames brutes</h2></header>
-                        <ul id="uart-raw-list" class="data-list"></ul>
-                    </section>
-                    <section>
-                        <header><h2>Décodage TinyBMS</h2></header>
-                        <ul id="uart-decoded-list" class="data-list"></ul>
-                    </section>
+                <div class="row g-3">
+                    <div class="col-xl-5">
+                        <div class="card h-100">
+                            <div class="card-header d-flex align-items-center gap-3">
+                                <h3 class="card-title mb-0">Flux UART en direct</h3>
+                                <div class="ms-auto segmented-control segmented-control-sm" role="tablist" aria-label="Vue des trames UART">
+                                    <input type="radio" name="uart-view" value="raw" id="uart-view-raw" checked>
+                                    <label class="segmented-control-label" for="uart-view-raw">
+                                        <i class="ti ti-terminal-2 me-1"></i>
+                                        Brutes
+                                    </label>
+                                    <input type="radio" name="uart-view" value="decoded" id="uart-view-decoded">
+                                    <label class="segmented-control-label" for="uart-view-decoded">
+                                        <i class="ti ti-settings-code me-1"></i>
+                                        Décodées
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <ol class="timeline timeline-compact" id="uart-timeline-raw" data-uart-view="raw" aria-live="polite"></ol>
+                                <ol class="timeline timeline-compact d-none" id="uart-timeline-decoded" data-uart-view="decoded" aria-live="polite"></ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-7">
+                        <div class="card h-100">
+                            <div class="card-header d-flex align-items-center gap-2">
+                                <h3 class="card-title mb-0">Distribution des longueurs de trames</h3>
+                                <span class="badge bg-cyan-lt text-cyan ms-auto">UART</span>
+                            </div>
+                            <div class="card-body">
+                                <div id="uart-frames-chart" class="echart-container" role="img" aria-label="Distribution des longueurs de trames UART"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
             <section id="tab-can" class="tab-panel" aria-labelledby="Temps réel – CAN Bus">
-                <div class="split-panel">
-                    <section>
-                        <header><h2>Trames CAN brutes</h2></header>
-                        <ul id="can-raw-list" class="data-list"></ul>
-                    </section>
-                    <section>
-                        <header><h2>Décodage Victron</h2></header>
-                        <ul id="can-decoded-list" class="data-list"></ul>
-                    </section>
+                <div class="row g-3">
+                    <div class="col-xl-5">
+                        <div class="card h-100">
+                            <div class="card-header d-flex align-items-center gap-3">
+                                <h3 class="card-title mb-0">Flux CAN en direct</h3>
+                                <div class="ms-auto segmented-control segmented-control-sm" role="tablist" aria-label="Vue des trames CAN">
+                                    <input type="radio" name="can-view" value="raw" id="can-view-raw" checked>
+                                    <label class="segmented-control-label" for="can-view-raw">
+                                        <i class="ti ti-antenna-bars-5 me-1"></i>
+                                        Brutes
+                                    </label>
+                                    <input type="radio" name="can-view" value="decoded" id="can-view-decoded">
+                                    <label class="segmented-control-label" for="can-view-decoded">
+                                        <i class="ti ti-device-analytics me-1"></i>
+                                        Décodées
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <ol class="timeline timeline-compact" id="can-timeline-raw" data-can-view="raw" aria-live="polite"></ol>
+                                <ol class="timeline timeline-compact d-none" id="can-timeline-decoded" data-can-view="decoded" aria-live="polite"></ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-7">
+                        <div class="card h-100">
+                            <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                                <h3 class="card-title mb-0">Analyse du trafic CAN</h3>
+                                <div class="d-flex flex-wrap gap-2 ms-auto">
+                                    <label for="can-filter-source" class="visually-hidden">Type de trames</label>
+                                    <select id="can-filter-source" class="form-select form-select-sm" aria-label="Filtrer le type de trames CAN">
+                                        <option value="all" selected>Toutes les trames</option>
+                                        <option value="raw">Brutes uniquement</option>
+                                        <option value="decoded">Décodées uniquement</option>
+                                    </select>
+                                    <label for="can-filter-window" class="visually-hidden">Fenêtre temporelle</label>
+                                    <select id="can-filter-window" class="form-select form-select-sm" aria-label="Fenêtre temporelle d'analyse">
+                                        <option value="60">60 s</option>
+                                        <option value="300" selected>5 min</option>
+                                        <option value="900">15 min</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-4">
+                                    <h4 class="card-subtitle text-secondary text-uppercase fs-6 mb-2">Heatmap des identifiants</h4>
+                                    <div id="can-heatmap-chart" class="echart-container" role="img" aria-label="Heatmap des identifiants CAN"></div>
+                                </div>
+                                <div>
+                                    <h4 class="card-subtitle text-secondary text-uppercase fs-6 mb-2">Débit par fenêtre</h4>
+                                    <div id="can-throughput-chart" class="echart-container" role="img" aria-label="Histogramme des débits CAN"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
             <section id="tab-history" class="tab-panel" aria-labelledby="Historique">

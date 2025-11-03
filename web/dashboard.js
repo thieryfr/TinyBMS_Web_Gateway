@@ -1,6 +1,10 @@
 import { BatteryRealtimeCharts } from './src/js/charts/batteryCharts.js';
+import { UartCharts } from './src/js/charts/uartCharts.js';
+import { CanCharts } from './src/js/charts/canCharts.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
+const MAX_TIMELINE_ITEMS = 60;
+const MAX_STORED_FRAMES = 300;
 
 const state = {
     telemetry: null,
@@ -23,6 +27,32 @@ const state = {
         lastConfig: null,
     },
     batteryCharts: null,
+    uartRealtime: {
+        frames: {
+            raw: [],
+            decoded: [],
+        },
+        timeline: {
+            raw: null,
+            decoded: null,
+        },
+        charts: null,
+    },
+    canRealtime: {
+        frames: {
+            raw: [],
+            decoded: [],
+        },
+        timeline: {
+            raw: null,
+            decoded: null,
+        },
+        charts: null,
+        filters: {
+            source: 'all',
+            windowSeconds: 300,
+        },
+    },
 };
 
 class HistoryChart {
@@ -166,6 +196,60 @@ function setActiveTab(tabId) {
     if (tabId === 'mqtt') {
         refreshMqttData(true);
     }
+}
+
+function toggleRealtimeView(prefix, value) {
+    const attributeName = `data-${prefix}-view`;
+    document.querySelectorAll(`[${attributeName}]`).forEach((element) => {
+        const elementValue = element.getAttribute(attributeName);
+        element.classList.toggle('d-none', elementValue !== value);
+    });
+}
+
+function setupRealtimeViewControls() {
+    const setupGroup = (name, prefix) => {
+        document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+            input.addEventListener('change', (event) => {
+                if (event.target instanceof HTMLInputElement && event.target.checked) {
+                    toggleRealtimeView(prefix, event.target.value);
+                }
+            });
+            if (input instanceof HTMLInputElement && input.checked) {
+                toggleRealtimeView(prefix, input.value);
+            }
+        });
+    };
+
+    setupGroup('uart-view', 'uart');
+    setupGroup('can-view', 'can');
+}
+
+function setupCanFilters() {
+    const sourceSelect = document.getElementById('can-filter-source');
+    if (sourceSelect instanceof HTMLSelectElement) {
+        state.canRealtime.filters.source = sourceSelect.value;
+        sourceSelect.addEventListener('change', () => {
+            state.canRealtime.filters.source = sourceSelect.value;
+            refreshCanCharts();
+        });
+    }
+
+    const windowSelect = document.getElementById('can-filter-window');
+    if (windowSelect instanceof HTMLSelectElement) {
+        const initial = Number.parseInt(windowSelect.value, 10);
+        if (Number.isFinite(initial) && initial > 0) {
+            state.canRealtime.filters.windowSeconds = initial;
+        }
+        windowSelect.addEventListener('change', () => {
+            const parsed = Number.parseInt(windowSelect.value, 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                state.canRealtime.filters.windowSeconds = parsed;
+            }
+            refreshCanCharts();
+        });
+    }
+
+    refreshCanCharts();
 }
 
 function updateBatteryView(data) {
@@ -338,13 +422,155 @@ function addDefinition(container, key, value) {
     container.append(dt, dd);
 }
 
-function appendToList(list, html, limit = 100) {
-    const li = document.createElement('li');
-    li.innerHTML = html;
-    list.prepend(li);
+function appendToList(list, html, options = {}) {
+    if (!(list instanceof Element)) {
+        return;
+    }
+
+    const settings = typeof options === 'number' ? { limit: options } : options;
+    const limit = Number.isFinite(settings?.limit) ? Number(settings.limit) : 100;
+    const item = document.createElement('li');
+    if (typeof settings?.className === 'string') {
+        item.className = settings.className;
+    }
+    item.innerHTML = html;
+    list.prepend(item);
+
     while (list.children.length > limit) {
         list.removeChild(list.lastElementChild);
     }
+}
+
+function parseFrameTimestamp(raw) {
+    if (Number.isFinite(raw)) {
+        return Number(raw);
+    }
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+        return numeric;
+    }
+    if (typeof raw === 'string') {
+        const parsed = Date.parse(raw);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return Date.now();
+}
+
+function formatTimeLabel(timestamp) {
+    return new Date(timestamp).toLocaleTimeString([], {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+}
+
+function addTimelineEntry(list, { icon, accentClass, timeLabel, title, descriptionHtml }) {
+    if (!(list instanceof Element)) {
+        return;
+    }
+
+    const html = `
+        <div class="timeline-item-marker ${accentClass}">
+            <i class="ti ${icon}"></i>
+        </div>
+        <div class="timeline-item-content">
+            <div class="timeline-item-time">${escapeHtml(timeLabel)}</div>
+            <div class="timeline-item-title">${escapeHtml(title)}</div>
+            <div class="timeline-item-description">${descriptionHtml}</div>
+        </div>
+    `;
+
+    appendToList(list, html, { className: 'timeline-item', limit: MAX_TIMELINE_ITEMS });
+}
+
+function recordRealtimeFrame(collection, frame) {
+    collection.push(frame);
+    if (collection.length > MAX_STORED_FRAMES) {
+        collection.splice(0, collection.length - MAX_STORED_FRAMES);
+    }
+}
+
+function parseCanIdentifier(value) {
+    if (Number.isFinite(value)) {
+        return Number(value);
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+            return null;
+        }
+        if (/^0x/i.test(trimmed)) {
+            const parsed = Number.parseInt(trimmed, 16);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+        const parsed = Number.parseInt(trimmed, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+
+function formatCanIdentifierDisplay(value) {
+    const parsed = parseCanIdentifier(value);
+    if (parsed === null) {
+        return 'ID inconnu';
+    }
+    return `0x${parsed.toString(16).toUpperCase()}`;
+}
+
+function computePayloadLength(payload) {
+    if (Array.isArray(payload)) {
+        return payload.length;
+    }
+    if (typeof payload === 'string') {
+        const hex = payload.replace(/[^0-9a-f]/gi, '');
+        if (hex.length === 0) {
+            return 0;
+        }
+        return Math.ceil(hex.length / 2);
+    }
+    return 0;
+}
+
+function formatPayloadString(value) {
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+    if (Array.isArray(value)) {
+        return value
+            .map((byte) => {
+                const number = Number(byte);
+                if (!Number.isFinite(number)) {
+                    return '??';
+                }
+                return number.toString(16).toUpperCase().padStart(2, '0');
+            })
+            .join(' ');
+    }
+    return '';
+}
+
+function refreshUartCharts() {
+    if (!state.uartRealtime.charts) {
+        return;
+    }
+    state.uartRealtime.charts.update({
+        rawFrames: state.uartRealtime.frames.raw,
+        decodedFrames: state.uartRealtime.frames.decoded,
+    });
+}
+
+function refreshCanCharts() {
+    if (!state.canRealtime.charts) {
+        return;
+    }
+    state.canRealtime.charts.update({
+        rawFrames: state.canRealtime.frames.raw,
+        decodedFrames: state.canRealtime.frames.decoded,
+        filters: state.canRealtime.filters,
+    });
 }
 
 async function fetchStatus() {
@@ -966,16 +1192,52 @@ function handleEventMessage(event) {
 function handleUartMessage(event) {
     try {
         const data = JSON.parse(event.data);
+        const timestamp = parseFrameTimestamp(data.timestamp ?? data.timestamp_ms);
         if (data.type === 'uart_raw') {
-            appendToList(
-                document.getElementById('uart-raw-list'),
-                `<strong>${new Date(data.timestamp).toLocaleTimeString()}</strong> – ID ${data.length} octets<br><code>${data.data}</code>`
-            );
+            const payload = formatPayloadString(data.data ?? data.payload ?? data.bytes);
+            const length = Number.isFinite(Number(data.length))
+                ? Number(data.length)
+                : computePayloadLength(payload);
+            const frame = {
+                timestamp,
+                length,
+                payload,
+            };
+            recordRealtimeFrame(state.uartRealtime.frames.raw, frame);
+            addTimelineEntry(state.uartRealtime.timeline.raw, {
+                icon: 'ti-wave-square',
+                accentClass: 'bg-primary',
+                timeLabel: formatTimeLabel(frame.timestamp),
+                title: `Trame brute (${length} octet${length > 1 ? 's' : ''})`,
+                descriptionHtml:
+                    frame.payload.length > 0
+                        ? `<code>${escapeHtml(frame.payload)}</code>`
+                        : '<span class="text-secondary">Aucune donnée</span>',
+            });
+            refreshUartCharts();
         } else if (data.type === 'uart_decoded') {
-            appendToList(
-                document.getElementById('uart-decoded-list'),
-                `<strong>${new Date(data.timestamp).toLocaleTimeString()}</strong><br>${escapeHtml(JSON.stringify(data, null, 2))}`
-            );
+            const { type: _type, timestamp: _timestamp, timestamp_ms: _timestampMs, ...rest } = data;
+            const summary = rest.message ?? rest.label ?? rest.description ?? 'Décodage TinyBMS';
+            const frame = {
+                timestamp,
+                summary,
+                details: rest,
+            };
+            recordRealtimeFrame(state.uartRealtime.frames.decoded, frame);
+            const cleaned = { ...rest };
+            delete cleaned.raw;
+            delete cleaned.message;
+            delete cleaned.label;
+            delete cleaned.description;
+            const description = `<pre>${escapeHtml(JSON.stringify(cleaned, null, 2))}</pre>`;
+            addTimelineEntry(state.uartRealtime.timeline.decoded, {
+                icon: 'ti-settings-cog',
+                accentClass: 'bg-purple',
+                timeLabel: formatTimeLabel(frame.timestamp),
+                title: summary,
+                descriptionHtml: description,
+            });
+            refreshUartCharts();
         }
     } catch (error) {
         console.warn('Invalid UART payload', error);
@@ -985,16 +1247,67 @@ function handleUartMessage(event) {
 function handleCanMessage(event) {
     try {
         const data = JSON.parse(event.data);
+        const timestamp = parseFrameTimestamp(data.timestamp ?? data.timestamp_ms);
         if (data.type === 'can_raw') {
-            appendToList(
-                document.getElementById('can-raw-list'),
-                `<strong>${new Date(data.timestamp).toLocaleTimeString()}</strong> – ID ${data.id}<br><code>${data.data}</code>`
-            );
+            const identifier = data.id ?? data.can_id ?? data.identifier;
+            const payload = formatPayloadString(data.data ?? data.payload ?? data.bytes);
+            const lengthCandidate = data.length ?? data.dlc;
+            const length = Number.isFinite(Number(lengthCandidate))
+                ? Number(lengthCandidate)
+                : computePayloadLength(payload);
+            const frame = {
+                timestamp,
+                id: parseCanIdentifier(identifier),
+                identifier,
+                length,
+                payload,
+                bus: data.bus ?? data.channel ?? data.port ?? null,
+            };
+            recordRealtimeFrame(state.canRealtime.frames.raw, frame);
+            const parts = [formatCanIdentifierDisplay(identifier)];
+            if (Number.isFinite(length)) {
+                parts.push(`${length} octet${length > 1 ? 's' : ''}`);
+            }
+            if (frame.bus) {
+                parts.push(`Bus ${String(frame.bus)}`);
+            }
+            const description =
+                frame.payload.length > 0
+                    ? `<code>${escapeHtml(frame.payload)}</code>`
+                    : '<span class="text-secondary">Aucune donnée</span>';
+            addTimelineEntry(state.canRealtime.timeline.raw, {
+                icon: 'ti-antenna-bars-4',
+                accentClass: 'bg-indigo',
+                timeLabel: formatTimeLabel(frame.timestamp),
+                title: parts.join(' • '),
+                descriptionHtml: description,
+            });
+            refreshCanCharts();
         } else if (data.type === 'can_decoded') {
-            appendToList(
-                document.getElementById('can-decoded-list'),
-                `<strong>${new Date(data.timestamp).toLocaleTimeString()}</strong> – ${escapeHtml(data.description || '')}<br>${escapeHtml(JSON.stringify(data.bytes))}`
-            );
+            const { type: _type, timestamp: _timestamp, timestamp_ms: _timestampMs, ...rest } = data;
+            const identifier = rest.id ?? rest.can_id ?? rest.identifier ?? rest.frame_id;
+            const summary = rest.description ?? rest.label ?? rest.name ?? 'Décodage CAN';
+            const frame = {
+                timestamp,
+                id: parseCanIdentifier(identifier),
+                identifier,
+                summary,
+                details: rest,
+            };
+            recordRealtimeFrame(state.canRealtime.frames.decoded, frame);
+            const cleaned = { ...rest };
+            delete cleaned.description;
+            delete cleaned.label;
+            delete cleaned.name;
+            const description = `<pre>${escapeHtml(JSON.stringify(cleaned, null, 2))}</pre>`;
+            addTimelineEntry(state.canRealtime.timeline.decoded, {
+                icon: 'ti-device-analytics',
+                accentClass: 'bg-green',
+                timeLabel: formatTimeLabel(frame.timestamp),
+                title: `${summary} (${formatCanIdentifierDisplay(identifier)})`,
+                descriptionHtml: description,
+            });
+            refreshCanCharts();
         }
     } catch (error) {
         console.warn('Invalid CAN payload', error);
@@ -1396,6 +1709,26 @@ async function initialise() {
         sparklineElement: document.getElementById('battery-pack-sparkline'),
         cellChartElement: document.getElementById('battery-cell-chart'),
     });
+    state.uartRealtime.timeline.raw = document.getElementById('uart-timeline-raw');
+    state.uartRealtime.timeline.decoded = document.getElementById('uart-timeline-decoded');
+    const uartChartElement = document.getElementById('uart-frames-chart');
+    if (uartChartElement) {
+        state.uartRealtime.charts = new UartCharts({
+            distributionElement: uartChartElement,
+        });
+    }
+    state.canRealtime.timeline.raw = document.getElementById('can-timeline-raw');
+    state.canRealtime.timeline.decoded = document.getElementById('can-timeline-decoded');
+    const canHeatmapElement = document.getElementById('can-heatmap-chart');
+    const canThroughputElement = document.getElementById('can-throughput-chart');
+    if (canHeatmapElement || canThroughputElement) {
+        state.canRealtime.charts = new CanCharts({
+            heatmapElement: canHeatmapElement,
+            throughputElement: canThroughputElement,
+        });
+    }
+    setupRealtimeViewControls();
+    setupCanFilters();
 
     try {
         await Promise.all([
