@@ -1,9 +1,4 @@
-//import * as echarts from './echarts.common.min.js';
-// Utilise ECharts chargé via CDN
-const echarts = window.echarts;
-if (!echarts) {
-  console.error('ECharts non chargé ! Vérifie le <script> CDN dans index.html');
-}
+import * as echarts from './echarts.common.min.js';
 
 const DEFAULT_THEME_NAME = 'tinybms-dark';
 let themeRegistered = false;
