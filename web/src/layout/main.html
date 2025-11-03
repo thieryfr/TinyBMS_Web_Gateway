@@ -1,40 +1,83 @@
 <main class="page-body">
   <div class="container-xl">
     <section id="tab-battery" class="tab-panel active" aria-labelledby="tab-battery-label">
-      <div class="row row-cards">
+      <div class="row row-cards g-3">
         <div class="col-sm-6 col-xl-3">
-          <article class="card metric-card h-100">
+          <article class="card card-stats h-100">
             <div class="card-body">
-              <h2 class="card-title">Tension pack</h2>
-              <p class="metric" id="battery-voltage">-- V</p>
-              <span class="metric-detail" id="battery-minmax">min -- mV • max -- mV</span>
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Tension pack</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-voltage">-- V</p>
+                  <span class="text-secondary" id="battery-minmax">min -- mV • max -- mV</span>
+                </div>
+                <span class="avatar avatar-lg bg-primary-lt text-primary shadow-sm">
+                  <i class="ti ti-bolt fs-2"></i>
+                </span>
+              </div>
             </div>
           </article>
         </div>
         <div class="col-sm-6 col-xl-3">
-          <article class="card metric-card h-100">
+          <article class="card card-stats h-100">
             <div class="card-body">
-              <h2 class="card-title">Courant pack</h2>
-              <p class="metric" id="battery-current">-- A</p>
-              <span class="metric-detail" id="battery-balancing">Équilibrage: --</span>
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Courant pack</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-current">-- A</p>
+                  <span class="text-secondary" id="battery-balancing">Équilibrage: --</span>
+                </div>
+                <span class="avatar avatar-lg bg-warning-lt text-warning shadow-sm">
+                  <i class="ti ti-current-ac fs-2"></i>
+                </span>
+              </div>
+              <div
+                class="chart-sparkline mt-3"
+                id="battery-pack-sparkline"
+                role="img"
+                aria-label="Évolution récente de la tension et du courant pack"
+              ></div>
             </div>
           </article>
         </div>
         <div class="col-sm-6 col-xl-3">
-          <article class="card metric-card h-100">
+          <article class="card card-stats h-100">
             <div class="card-body">
-              <h2 class="card-title">État de charge</h2>
-              <p class="metric" id="battery-soc">-- %</p>
-              <span class="metric-detail" id="battery-soh">SOH -- %</span>
+              <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
+                <div class="w-100">
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-2">État de charge</h2>
+                  <div class="d-flex flex-wrap gap-2">
+                    <span class="badge bg-green-lt text-green fw-semibold px-3 py-2">
+                      SOC <span id="battery-soc">-- %</span>
+                    </span>
+                    <span class="badge bg-blue-lt text-blue fw-semibold px-3 py-2">
+                      SOH <span id="battery-soh">-- %</span>
+                    </span>
+                  </div>
+                </div>
+                <div
+                  class="chart-gauge"
+                  id="battery-soc-gauge"
+                  role="img"
+                  aria-label="État de charge et de santé de la batterie"
+                ></div>
+              </div>
             </div>
           </article>
         </div>
         <div class="col-sm-6 col-xl-3">
-          <article class="card metric-card h-100">
+          <article class="card card-stats h-100">
             <div class="card-body">
-              <h2 class="card-title">Températures</h2>
-              <p class="metric" id="battery-temperature">-- °C</p>
-              <span class="metric-detail" id="battery-temp-extra">MOSFET: -- °C</span>
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Températures</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-temperature">-- °C</p>
+                  <span class="text-secondary" id="battery-temp-extra">MOSFET: -- °C</span>
+                </div>
+                <span class="avatar avatar-lg bg-orange-lt text-orange shadow-sm">
+                  <i class="ti ti-temperature fs-2"></i>
+                </span>
+              </div>
             </div>
           </article>
         </div>
@@ -42,29 +85,28 @@
 
       <div class="row g-3 status-grid mt-3">
         <div class="col-md-4">
-          <div class="card status-card h-100">
-            <div class="card-header">
-              <h3 class="card-title">Alarmes</h3>
+          <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+              <span class="status-icon text-danger"><i class="ti ti-alert-triangle"></i></span>
+              <h3 class="card-title mb-0">Alarmes</h3>
             </div>
-            <div class="card-body">
-              <ul id="battery-alarms" class="status-list mb-0"></ul>
-            </div>
+            <div id="battery-alarms" class="list-group list-group-flush" role="list"></div>
           </div>
         </div>
         <div class="col-md-4">
-          <div class="card status-card h-100">
-            <div class="card-header">
-              <h3 class="card-title">Avertissements</h3>
+          <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+              <span class="status-icon text-warning"><i class="ti ti-alert-circle"></i></span>
+              <h3 class="card-title mb-0">Avertissements</h3>
             </div>
-            <div class="card-body">
-              <ul id="battery-warnings" class="status-list mb-0"></ul>
-            </div>
+            <div id="battery-warnings" class="list-group list-group-flush" role="list"></div>
           </div>
         </div>
         <div class="col-md-4">
-          <div class="card status-card h-100">
-            <div class="card-header">
-              <h3 class="card-title">Informations système</h3>
+          <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+              <span class="status-icon text-info"><i class="ti ti-info-circle"></i></span>
+              <h3 class="card-title mb-0">Informations système</h3>
             </div>
             <div class="card-body">
               <dl class="status-kv" id="battery-system-info"></dl>
@@ -74,31 +116,29 @@
       </div>
 
       <section id="battery-cell-section" class="card cell-section mt-4" aria-labelledby="cell-section-title">
-        <div class="card-header cell-section-header">
+        <div class="card-header cell-section-header d-flex flex-column flex-lg-row gap-3 align-items-lg-center justify-content-between">
           <div>
             <h3 class="card-title" id="cell-section-title">Équilibrage des cellules</h3>
             <p class="card-subtitle" id="cell-section-description">
               Visualisez les tensions individuelles des cellules 1 à 16 et leur état d’équilibrage.
             </p>
           </div>
+          <div class="text-secondary small" id="battery-cell-summary"></div>
         </div>
         <div class="card-body">
-          <div class="table-responsive" role="region" aria-live="polite" aria-labelledby="cell-section-title" aria-describedby="cell-section-description">
-            <table class="table table-vcenter cell-table">
-              <caption class="visually-hidden">Tension et équilibrage des cellules 1 à 16</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Cellule</th>
-                  <th scope="col">Tension (V)</th>
-                  <th scope="col">Équilibrage</th>
-                </tr>
-              </thead>
-              <tbody id="battery-cells-body">
-                <tr class="cell-row-empty">
-                  <td colspan="3">Données cellules indisponibles</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="row g-4 align-items-start">
+            <div class="col-lg-8">
+              <div
+                id="battery-cell-chart"
+                class="echart-container"
+                role="img"
+                aria-label="Répartition normalisée des tensions des cellules"
+              ></div>
+            </div>
+            <div class="col-lg-4">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">Équilibrage actif</h4>
+              <div id="battery-balancing-badges" class="cell-balancing-badges d-flex flex-wrap gap-2" aria-live="polite"></div>
+            </div>
           </div>
         </div>
       </section>

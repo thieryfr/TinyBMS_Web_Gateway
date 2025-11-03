@@ -1,3 +1,5 @@
+import { BatteryRealtimeCharts } from './src/js/charts/batteryCharts.js';
+
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 
 const state = {
@@ -20,6 +22,7 @@ const state = {
         lastStatus: null,
         lastConfig: null,
     },
+    batteryCharts: null,
 };
 
 class HistoryChart {
@@ -169,90 +172,62 @@ function updateBatteryView(data) {
     document.getElementById('battery-voltage').textContent = formatNumber(data.pack_voltage, 'V');
     document.getElementById('battery-current').textContent = formatNumber(data.pack_current, 'A');
     document.getElementById('battery-soc').textContent = formatNumber(data.state_of_charge, '%', 1);
-    document.getElementById('battery-soh').textContent = `SOH ${formatNumber(data.state_of_health, '%', 1)}`;
+    document.getElementById('battery-soh').textContent = formatNumber(data.state_of_health, '%', 1);
     document.getElementById('battery-temperature').textContent = formatNumber(data.average_temperature, '°C', 1);
     document.getElementById('battery-temp-extra').textContent = `MOSFET: ${formatNumber(data.mos_temperature, '°C', 1)}`;
-    document.getElementById('battery-minmax').textContent = `min ${data.min_cell_mv || '--'} mV • max ${data.max_cell_mv || '--'} mV`;
-    document.getElementById('battery-balancing').textContent = `Équilibrage: 0x${(data.balancing_bits || 0).toString(16).toUpperCase()}`;
+    document.getElementById('battery-minmax').textContent = `min ${data.min_cell_mv ?? '--'} mV • max ${data.max_cell_mv ?? '--'} mV`;
 
-    const cellTableBody = document.getElementById('battery-cells-body');
-    if (cellTableBody) {
-        cellTableBody.innerHTML = '';
+    const balancingBits = Number.isFinite(Number(data.balancing_bits))
+        ? `0x${Number(data.balancing_bits).toString(16).toUpperCase()}`
+        : '--';
+    document.getElementById('battery-balancing').textContent = `Équilibrage: ${balancingBits}`;
 
-        const voltagesMv = Array.isArray(data.cell_voltages_mv)
-            ? data.cell_voltages_mv.map((value) => Number(value))
-            : Array.isArray(data.cell_voltages)
-                ? data.cell_voltages.map((value) => Number(value) * 1000)
-                : null;
-        const balancingStates = Array.isArray(data.cell_balancing) ? data.cell_balancing : null;
-        const totalCells = 16;
-        const fragment = document.createDocumentFragment();
+    const voltagesMv = Array.isArray(data.cell_voltages_mv)
+        ? data.cell_voltages_mv.map((value) => Number(value))
+        : Array.isArray(data.cell_voltages)
+            ? data.cell_voltages.map((value) => Number(value) * 1000)
+            : null;
+    const balancingStates = Array.isArray(data.cell_balancing) ? data.cell_balancing : null;
 
-        for (let index = 0; index < totalCells; index += 1) {
-            const row = document.createElement('tr');
-            row.dataset.cellIndex = String(index + 1);
-
-            const header = document.createElement('th');
-            header.scope = 'row';
-            header.textContent = `Cellule ${index + 1}`;
-            row.appendChild(header);
-
-            const voltageCell = document.createElement('td');
-            const rawVoltage = voltagesMv && Number.isFinite(voltagesMv[index]) ? voltagesMv[index] : null;
-            if (rawVoltage !== null) {
-                const voltageV = rawVoltage / 1000;
-                voltageCell.textContent = `${voltageV.toFixed(3)} V`;
-                voltageCell.dataset.voltageMv = String(rawVoltage);
-            } else {
-                voltageCell.textContent = '--';
-                voltageCell.classList.add('cell-voltage-missing');
-                voltageCell.setAttribute('aria-label', `Tension cellule ${index + 1} indisponible`);
-            }
-            row.appendChild(voltageCell);
-
-            const balanceCell = document.createElement('td');
-            const indicator = document.createElement('span');
-            let indicatorState = 'unknown';
-            let indicatorText = 'Indisponible';
-
-            if (balancingStates) {
-                const rawState = balancingStates[index];
-                const isActive = Boolean(Number(rawState));
-                indicatorState = isActive ? 'active' : 'inactive';
-                indicatorText = isActive ? 'Actif' : 'Inactif';
-                indicator.dataset.balancingRaw = rawState != null ? String(rawState) : '';
-            }
-
-            indicator.className = `cell-balance-indicator ${indicatorState}`;
-            indicator.textContent = indicatorText;
-            indicator.setAttribute('aria-label', `Équilibrage cellule ${index + 1} : ${indicatorText}`);
-            indicator.setAttribute('role', 'status');
-            indicator.title = indicatorText;
-
-            balanceCell.appendChild(indicator);
-            row.appendChild(balanceCell);
-
-            fragment.appendChild(row);
+    const summaryElement = document.getElementById('battery-cell-summary');
+    if (summaryElement) {
+        const voltagesV = Array.isArray(voltagesMv)
+            ? voltagesMv
+                  .map((value) => Number(value) / 1000)
+                  .filter((value) => Number.isFinite(value))
+            : [];
+        if (voltagesV.length > 0) {
+            const minVoltage = Math.min(...voltagesV);
+            const maxVoltage = Math.max(...voltagesV);
+            summaryElement.textContent = `min ${minVoltage.toFixed(3)} V • max ${maxVoltage.toFixed(3)} V`;
+        } else {
+            summaryElement.textContent = 'Données cellules indisponibles';
         }
+    }
 
-        cellTableBody.appendChild(fragment);
+    const badgeContainer = document.getElementById('battery-balancing-badges');
+    if (badgeContainer) {
+        renderBalancingBadges(badgeContainer, balancingStates);
     }
 
     const alarmList = document.getElementById('battery-alarms');
-    const warningList = document.getElementById('battery-warnings');
-    alarmList.innerHTML = '';
-    warningList.innerHTML = '';
-
-    if (data.alarm_bits) {
-        alarmList.appendChild(createListItem(`0x${data.alarm_bits.toString(16).toUpperCase()}`));
-    } else {
-        alarmList.appendChild(createListItem('Aucune alarme active'));
+    if (alarmList) {
+        alarmList.innerHTML = '';
+        if (data.alarm_bits) {
+            alarmList.appendChild(createStatusItem(`0x${data.alarm_bits.toString(16).toUpperCase()}`, 'alarm'));
+        } else {
+            alarmList.appendChild(createStatusItem('Aucune alarme active', 'muted'));
+        }
     }
 
-    if (data.warning_bits) {
-        warningList.appendChild(createListItem(`0x${data.warning_bits.toString(16).toUpperCase()}`));
-    } else {
-        warningList.appendChild(createListItem('Aucun avertissement'));
+    const warningList = document.getElementById('battery-warnings');
+    if (warningList) {
+        warningList.innerHTML = '';
+        if (data.warning_bits) {
+            warningList.appendChild(createStatusItem(`0x${data.warning_bits.toString(16).toUpperCase()}`, 'warning'));
+        } else {
+            warningList.appendChild(createStatusItem('Aucun avertissement', 'muted'));
+        }
     }
 
     const systemInfo = document.getElementById('battery-system-info');
@@ -274,12 +249,85 @@ function updateBatteryView(data) {
             registersBody.appendChild(row);
         });
     }
+
+    if (state.batteryCharts) {
+        state.batteryCharts.update({
+            voltage: data.pack_voltage,
+            current: data.pack_current,
+            soc: data.state_of_charge,
+            soh: data.state_of_health,
+            voltagesMv,
+            balancingStates,
+        });
+    }
 }
 
-function createListItem(text) {
-    const li = document.createElement('li');
-    li.textContent = text;
-    return li;
+function renderBalancingBadges(container, balancingStates) {
+    container.innerHTML = '';
+    const totalCells = 16;
+
+    if (!Array.isArray(balancingStates) || balancingStates.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'text-secondary';
+        empty.textContent = 'Équilibrage indisponible';
+        container.appendChild(empty);
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < totalCells; index += 1) {
+        const rawState = balancingStates[index];
+        const isActive = Boolean(Number(rawState));
+        const badge = document.createElement('span');
+        badge.className = `badge ${isActive ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary'}`;
+        badge.title = `Cellule ${index + 1} ${isActive ? 'en équilibrage' : 'au repos'}`;
+        badge.setAttribute('role', 'status');
+        badge.dataset.state = isActive ? 'active' : 'inactive';
+
+        const icon = document.createElement('i');
+        icon.className = `ti ${isActive ? 'ti-adjustments-check' : 'ti-minus'}`;
+        icon.setAttribute('aria-hidden', 'true');
+
+        const label = document.createElement('span');
+        label.textContent = `Cellule ${index + 1} · ${isActive ? 'Actif' : 'Inactif'}`;
+
+        badge.append(icon, label);
+        fragment.appendChild(badge);
+    }
+
+    container.appendChild(fragment);
+}
+
+function createStatusItem(text, variant = 'info') {
+    const item = document.createElement('div');
+    item.className = 'list-group-item bg-transparent';
+    item.setAttribute('role', 'listitem');
+
+    const icon = document.createElement('span');
+    let iconName = 'ti-info-circle';
+    let colorClass = 'text-info';
+
+    if (variant === 'alarm') {
+        iconName = 'ti-alert-triangle';
+        colorClass = 'text-danger';
+    } else if (variant === 'warning') {
+        iconName = 'ti-alert-circle';
+        colorClass = 'text-warning';
+    } else if (variant === 'muted') {
+        iconName = 'ti-circle-dashed';
+        colorClass = 'text-secondary';
+    }
+
+    icon.className = `status-item-icon ${colorClass}`;
+    icon.innerHTML = `<i class="ti ${iconName}"></i>`;
+    icon.setAttribute('aria-hidden', 'true');
+
+    const content = document.createElement('span');
+    content.className = 'status-text';
+    content.textContent = text;
+
+    item.append(icon, content);
+    return item;
 }
 
 function addDefinition(container, key, value) {
@@ -1343,6 +1391,11 @@ async function initialise() {
     setupMqttTab();
     setupConfigTab();
     state.chart = new HistoryChart(document.getElementById('history-chart'));
+    state.batteryCharts = new BatteryRealtimeCharts({
+        gaugeElement: document.getElementById('battery-soc-gauge'),
+        sparklineElement: document.getElementById('battery-pack-sparkline'),
+        cellChartElement: document.getElementById('battery-cell-chart'),
+    });
 
     try {
         await Promise.all([

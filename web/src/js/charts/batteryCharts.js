@@ -1,0 +1,374 @@
+import { initChart } from './base.js';
+
+const DEFAULT_SPARKLINE_LIMIT = 60;
+
+function sanitizeNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export class BatteryRealtimeCharts {
+  constructor({ gaugeElement, sparklineElement, cellChartElement } = {}) {
+    this.sparklineLimit = DEFAULT_SPARKLINE_LIMIT;
+    this.sparklineSamples = [];
+    this.cellVoltages = [];
+
+    this.gauge = gaugeElement
+      ? initChart(
+          gaugeElement,
+          {
+            tooltip: {
+              formatter: ({ value }) =>
+                value != null ? `${value.toFixed(1)} %` : 'SOC indisponible',
+            },
+            series: [
+              {
+                name: 'SOC',
+                type: 'gauge',
+                startAngle: 220,
+                endAngle: -40,
+                min: 0,
+                max: 100,
+                splitNumber: 5,
+                radius: '100%',
+                pointer: {
+                  icon: 'path://M12 4L8 12H16L12 4Z',
+                  length: '65%',
+                  width: 6,
+                },
+                axisLine: {
+                  lineStyle: {
+                    width: 14,
+                    color: [
+                      [0.5, '#f25f5c'],
+                      [0.8, '#ffd166'],
+                      [1, '#00a896'],
+                    ],
+                  },
+                },
+                axisTick: {
+                  distance: 2,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
+                },
+                splitLine: {
+                  length: 10,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
+                },
+                axisLabel: {
+                  color: 'rgba(255,255,255,0.7)',
+                  distance: 12,
+                },
+                detail: {
+                  valueAnimation: true,
+                  fontSize: 22,
+                  fontWeight: 600,
+                  offsetCenter: [0, '60%'],
+                  color: '#f2f5f7',
+                  formatter: (value) =>
+                    value != null ? `${value.toFixed(1)}%` : '-- %',
+                },
+                anchor: {
+                  show: true,
+                  showAbove: true,
+                  size: 10,
+                  itemStyle: {
+                    color: '#f2f5f7',
+                  },
+                },
+                title: {
+                  show: false,
+                },
+                data: [
+                  {
+                    value: 0,
+                    name: 'SOC',
+                  },
+                ],
+              },
+            ],
+          },
+          { renderer: 'svg' }
+        )
+      : null;
+
+    this.sparkline = sparklineElement
+      ? initChart(
+          sparklineElement,
+          {
+            grid: {
+              left: 4,
+              right: 4,
+              top: 12,
+              bottom: 8,
+              containLabel: false,
+            },
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              valueFormatter: (value) =>
+                value != null ? value.toFixed(2) : '--',
+              formatter: (params) => {
+                if (!params || params.length === 0) {
+                  return 'Pas de données';
+                }
+                const lines = params.map((item) => {
+                  const label = item.seriesName;
+                  const unit = item.seriesName === 'Courant' ? 'A' : 'V';
+                  const val = Number.isFinite(item.data) ? item.data.toFixed(2) : '--';
+                  return `${label}: ${val} ${unit}`;
+                });
+                const timeLabel = params[0]?.axisValueLabel || '';
+                return [timeLabel, ...lines].join('<br/>');
+              },
+            },
+            legend: {
+              top: 0,
+              textStyle: { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
+              itemWidth: 12,
+              itemHeight: 12,
+            },
+            xAxis: {
+              type: 'category',
+              boundaryGap: false,
+              axisLine: { show: false },
+              axisTick: { show: false },
+              axisLabel: { show: false },
+              data: [],
+            },
+            yAxis: [
+              {
+                type: 'value',
+                show: false,
+                min: (value) => value.min,
+                max: (value) => value.max,
+              },
+              {
+                type: 'value',
+                show: false,
+                min: (value) => value.min,
+                max: (value) => value.max,
+              },
+            ],
+            series: [
+              {
+                name: 'Tension',
+                type: 'line',
+                smooth: true,
+                symbol: 'none',
+                lineStyle: { width: 2 },
+                data: [],
+                yAxisIndex: 0,
+              },
+              {
+                name: 'Courant',
+                type: 'line',
+                smooth: true,
+                symbol: 'none',
+                lineStyle: { width: 2 },
+                data: [],
+                yAxisIndex: 1,
+              },
+            ],
+          },
+          { renderer: 'canvas' }
+        )
+      : null;
+
+    this.cellChart = cellChartElement
+      ? initChart(
+          cellChartElement,
+          {
+            title: {
+              show: false,
+              text: 'Données cellules indisponibles',
+              left: 'center',
+              top: 'middle',
+              textStyle: {
+                color: 'rgba(240, 248, 255, 0.7)',
+                fontSize: 16,
+                fontWeight: 500,
+              },
+            },
+            legend: {
+              bottom: 0,
+              textStyle: { color: 'rgba(255,255,255,0.65)' },
+            },
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'shadow' },
+            },
+            grid: {
+              left: 60,
+              right: 24,
+              top: 40,
+              bottom: 60,
+            },
+            xAxis: {
+              type: 'category',
+              axisLabel: { color: 'rgba(255,255,255,0.75)' },
+              axisLine: { lineStyle: { color: 'rgba(255,255,255,0.25)' } },
+              axisTick: { show: false },
+              data: [],
+            },
+            yAxis: {
+              type: 'value',
+              axisLabel: {
+                formatter: '{value}%',
+                color: 'rgba(255,255,255,0.75)',
+              },
+              axisLine: { lineStyle: { color: 'rgba(255,255,255,0.25)' } },
+              splitLine: {
+                lineStyle: { color: 'rgba(255,255,255,0.1)' },
+              },
+              max: 100,
+            },
+            series: [
+              {
+                name: 'Tension',
+                type: 'bar',
+                stack: 'cells',
+                percentage: true,
+                emphasis: { focus: 'series' },
+                itemStyle: { color: '#00a896' },
+                barWidth: '60%',
+                data: [],
+              },
+              {
+                name: 'Écart',
+                type: 'bar',
+                stack: 'cells',
+                percentage: true,
+                emphasis: { focus: 'series' },
+                itemStyle: { color: 'rgba(255,255,255,0.12)' },
+                barWidth: '60%',
+                data: [],
+              },
+            ],
+          },
+          { renderer: 'canvas' }
+        )
+      : null;
+  }
+
+  update({ voltage, current, soc, soh, voltagesMv, balancingStates } = {}) {
+    this.updateGauge(soc);
+    this.updateSparkline({ voltage, current });
+    this.updateCellChart(voltagesMv);
+  }
+
+  updateGauge(rawSoc) {
+    if (!this.gauge) {
+      return;
+    }
+    const value = sanitizeNumber(rawSoc);
+    this.gauge.chart.setOption({
+      series: [
+        {
+          data: [
+            {
+              value: value == null ? null : Math.max(0, Math.min(100, value)),
+              name: 'SOC',
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  updateSparkline({ voltage, current }) {
+    if (!this.sparkline) {
+      return;
+    }
+
+    const voltageValue = sanitizeNumber(voltage);
+    const currentValue = sanitizeNumber(current);
+    const timestamp = new Date();
+    const label = timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    this.sparklineSamples.push({
+      label,
+      voltage: voltageValue,
+      current: currentValue,
+    });
+
+    if (this.sparklineSamples.length > this.sparklineLimit) {
+      this.sparklineSamples.splice(0, this.sparklineSamples.length - this.sparklineLimit);
+    }
+
+    const labels = this.sparklineSamples.map((sample) => sample.label);
+    const voltages = this.sparklineSamples.map((sample) => sample.voltage);
+    const currents = this.sparklineSamples.map((sample) => sample.current);
+
+    this.sparkline.chart.setOption({
+      xAxis: { data: labels },
+      series: [
+        { data: voltages },
+        { data: currents },
+      ],
+    });
+  }
+
+  updateCellChart(voltagesMv) {
+    if (!this.cellChart) {
+      return;
+    }
+
+    if (!Array.isArray(voltagesMv) || voltagesMv.length === 0) {
+      this.cellVoltages = [];
+      this.cellChart.chart.setOption({
+        title: { show: true },
+        xAxis: { data: [] },
+        series: [{ data: [] }, { data: [] }],
+      });
+      return;
+    }
+
+    const voltages = voltagesMv.map((value) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? number / 1000 : null;
+    });
+
+    if (voltages.every((value) => value == null)) {
+      this.cellVoltages = [];
+      this.cellChart.chart.setOption({
+        title: { show: true },
+        xAxis: { data: [] },
+        series: [{ data: [] }, { data: [] }],
+      });
+      return;
+    }
+
+    const resolvedVoltages = voltages.map((value) => (value == null ? 0 : value));
+    this.cellVoltages = resolvedVoltages;
+    const categories = resolvedVoltages.map((_, index) => `Cellule ${index + 1}`);
+    const maxVoltage = Math.max(...resolvedVoltages, 0);
+    const differenceSeries = resolvedVoltages.map((value) => Math.max(maxVoltage - value, 0));
+
+    const tooltipFormatter = (params = []) => {
+      if (!params.length) {
+        return '';
+      }
+      const index = params[0]?.dataIndex ?? 0;
+      const voltageValue = resolvedVoltages[index];
+      const diff = differenceSeries[index];
+      const percent = params[0]?.value != null ? Number(params[0].value).toFixed(1) : '--';
+      return [
+        `Cellule ${index + 1}`,
+        `Tension: ${voltageValue.toFixed(3)} V`,
+        `Écart: ${diff.toFixed(3)} V`,
+        `Part: ${percent}%`,
+      ].join('<br/>');
+    };
+
+    this.cellChart.chart.setOption({
+      title: { show: false },
+      tooltip: { formatter: tooltipFormatter },
+      xAxis: { data: categories },
+      series: [
+        { data: resolvedVoltages },
+        { data: differenceSeries },
+      ],
+    });
+  }
+
+}
