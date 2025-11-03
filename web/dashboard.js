@@ -1,6 +1,7 @@
 import { BatteryRealtimeCharts } from './src/js/charts/batteryCharts.js';
 import { UartCharts } from './src/js/charts/uartCharts.js';
 import { CanCharts } from './src/js/charts/canCharts.js';
+import { initChart } from './src/js/charts/base.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
@@ -16,8 +17,10 @@ const state = {
     selectedArchive: null,
     historyDirectory: '',
     historyStorageReady: false,
+    historyPage: 1,
+    historyPageSize: 10,
+    historyChart: null,
     registers: new Map(),
-    chart: null,
     config: {
         last: null,
     },
@@ -25,6 +28,7 @@ const state = {
         statusInterval: null,
         lastStatus: null,
         lastConfig: null,
+        messageChart: null,
     },
     batteryCharts: null,
     uartRealtime: {
@@ -56,82 +60,249 @@ const state = {
 };
 
 class HistoryChart {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+    constructor(container) {
+        this.element = container;
+        this.chart = null;
         this.samples = [];
+
+        if (this.element) {
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    valueFormatter: (value) => (Number.isFinite(value) ? value.toFixed(2) : '--'),
+                },
+                legend: {
+                    data: ['Tension', 'Courant'],
+                    top: 0,
+                },
+                grid: {
+                    left: 60,
+                    right: 60,
+                    top: 48,
+                    bottom: 80,
+                },
+                dataZoom: [
+                    { type: 'inside', throttle: 50 },
+                    { type: 'slider', height: 26, bottom: 24, handleSize: 16 },
+                ],
+                xAxis: {
+                    type: 'time',
+                    boundaryGap: false,
+                    axisLabel: {
+                        formatter: (value) => new Date(value).toLocaleTimeString(),
+                    },
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        name: 'Tension (V)',
+                        axisLabel: {
+                            formatter: (value) => `${value}`,
+                        },
+                    },
+                    {
+                        type: 'value',
+                        name: 'Courant (A)',
+                        axisLabel: {
+                            formatter: (value) => `${value}`,
+                        },
+                    },
+                ],
+                series: [
+                    {
+                        name: 'Tension',
+                        type: 'line',
+                        smooth: true,
+                        showSymbol: false,
+                        yAxisIndex: 0,
+                        areaStyle: { opacity: 0.12 },
+                        lineStyle: { width: 2 },
+                        data: [],
+                    },
+                    {
+                        name: 'Courant',
+                        type: 'line',
+                        smooth: true,
+                        showSymbol: false,
+                        yAxisIndex: 1,
+                        lineStyle: { width: 2 },
+                        data: [],
+                    },
+                ],
+            };
+            const { chart } = initChart(this.element, option, { renderer: 'canvas' });
+            this.chart = chart;
+        }
     }
 
     setData(samples) {
-        this.samples = samples.slice();
+        this.samples = Array.isArray(samples) ? samples.slice() : [];
         this.render();
     }
 
     render() {
-        const ctx = this.ctx;
-        const { width, height } = this.canvas;
-        ctx.clearRect(0, 0, width, height);
-
-        if (this.samples.length === 0) {
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
-            ctx.font = '16px "Segoe UI"';
-            ctx.fillText('Aucune donnée disponible', 20, height / 2);
+        if (!this.chart) {
             return;
         }
 
-        const voltages = this.samples.map((s) => s.pack_voltage);
-        const currents = this.samples.map((s) => s.pack_current);
-        const timestamps = this.samples.map((s) => s.timestamp);
+        const sortedSamples = this.samples.slice().sort((a, b) => resolveSampleTimestamp(a) - resolveSampleTimestamp(b));
 
-        const minV = Math.min(...voltages);
-        const maxV = Math.max(...voltages);
-        const minC = Math.min(...currents);
-        const maxC = Math.max(...currents);
-        const minT = Math.min(...timestamps);
-        const maxT = Math.max(...timestamps);
+        const buildSeries = (selector) =>
+            sortedSamples.map((sample) => {
+                const timestamp = resolveSampleTimestamp(sample) || Date.now();
+                const rawValue = Number(selector(sample));
+                return [timestamp, Number.isFinite(rawValue) ? rawValue : null];
+            });
 
-        const pad = 40;
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(pad, pad / 2, width - pad * 1.5, height - pad * 1.5);
+        const voltageData = buildSeries((sample) => sample.pack_voltage);
+        const currentData = buildSeries((sample) => sample.pack_current);
+        const hasVoltage = voltageData.some(([, value]) => value != null);
+        const hasCurrent = currentData.some(([, value]) => value != null);
+        const hasData = hasVoltage || hasCurrent;
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(pad, height - pad);
-        ctx.lineTo(width - pad / 2, height - pad);
-        ctx.moveTo(pad, pad / 2);
-        ctx.lineTo(pad, height - pad);
-        ctx.stroke();
+        this.chart.setOption(
+            {
+                series: [
+                    { name: 'Tension', data: voltageData },
+                    { name: 'Courant', data: currentData },
+                ],
+                xAxis: {
+                    min: hasData ? 'dataMin' : null,
+                    max: hasData ? 'dataMax' : null,
+                },
+                graphic: hasData
+                    ? []
+                    : [
+                          {
+                              type: 'text',
+                              left: 'center',
+                              top: 'middle',
+                              style: {
+                                  text: 'Aucune donnée disponible',
+                                  fill: 'rgba(240, 248, 255, 0.75)',
+                                  fontSize: 16,
+                                  fontWeight: 500,
+                              },
+                          },
+                      ],
+            },
+            { lazyUpdate: true }
+        );
+    }
+}
 
-        const project = (timestamp, value, minValue, maxValue) => {
-            const x = pad + ((timestamp - minT) / Math.max(maxT - minT, 1)) * (width - pad * 1.5);
-            const y = height - pad - ((value - minValue) / Math.max(maxValue - minValue, 1)) * (height - pad * 1.5);
-            return [x, y];
+class MqttMessageChart {
+    constructor(container) {
+        this.element = container;
+        this.chart = null;
+        this.data = [];
+
+        if (this.element) {
+            const option = {
+                tooltip: { trigger: 'item' },
+                legend: { show: false },
+                grid: { left: '56%', right: '4%', top: 48, bottom: 48 },
+                xAxis: {
+                    type: 'value',
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { type: 'dashed', color: 'rgba(255,255,255,0.12)' } },
+                    axisLabel: { color: 'rgba(255,255,255,0.7)' },
+                },
+                yAxis: {
+                    type: 'category',
+                    inverse: true,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    axisLabel: { color: 'rgba(255,255,255,0.7)' },
+                    data: [],
+                },
+                series: [
+                    {
+                        name: 'Flux MQTT',
+                        type: 'funnel',
+                        left: '3%',
+                        width: '45%',
+                        minSize: '20%',
+                        maxSize: '100%',
+                        sort: 'descending',
+                        gap: 4,
+                        label: { position: 'inside', formatter: '{b}\n{c}' },
+                        itemStyle: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+                        data: [],
+                    },
+                    {
+                        name: 'Messages',
+                        type: 'bar',
+                        barWidth: 14,
+                        label: { show: true, position: 'right', formatter: '{c}' },
+                        data: [],
+                    },
+                ],
+            };
+            const { chart } = initChart(this.element, option, { renderer: 'canvas' });
+            this.chart = chart;
+        }
+    }
+
+    setData(entries) {
+        this.data = Array.isArray(entries)
+            ? entries.filter((entry) => Number.isFinite(entry.value) && entry.value >= 0)
+            : [];
+        this.render();
+    }
+
+    render() {
+        if (!this.chart) {
+            return;
+        }
+
+        const total = this.data.reduce((sum, entry) => sum + entry.value, 0);
+        const categories = this.data.map((entry) => entry.label);
+        const funnelData = this.data.map((entry) => ({ name: entry.label, value: entry.value }));
+        const barData = this.data.map((entry) => ({ name: entry.label, value: entry.value }));
+        const hasData = funnelData.length > 0;
+
+        const tooltipFormatter = (params) => {
+            if (!params) {
+                return '';
+            }
+            const name = params.name || params.data?.name || '';
+            const value = Number(params.value);
+            if (!Number.isFinite(value)) {
+                return `${name}: --`;
+            }
+            const ratio = total > 0 ? (value / total) * 100 : 0;
+            const precision = value >= 100 ? 0 : 1;
+            return `${name}: ${value} msg (${ratio.toFixed(precision)}%)`;
         };
 
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = 'rgba(0, 168, 150, 0.9)';
-        ctx.beginPath();
-        this.samples.forEach((sample, index) => {
-            const [x, y] = project(sample.timestamp, sample.pack_voltage, minV, maxV);
-            if (index === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(255, 209, 102, 0.9)';
-        ctx.beginPath();
-        this.samples.forEach((sample, index) => {
-            const [x, y] = project(sample.timestamp, sample.pack_current, minC, maxC);
-            if (index === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = '13px "Segoe UI"';
-        ctx.fillText(`Tension min ${minV.toFixed(2)} V / max ${maxV.toFixed(2)} V`, pad + 8, pad + 12);
-        ctx.fillText(`Courant min ${minC.toFixed(2)} A / max ${maxC.toFixed(2)} A`, pad + 8, pad + 28);
+        this.chart.setOption(
+            {
+                tooltip: { formatter: tooltipFormatter },
+                yAxis: { data: categories },
+                series: [
+                    { data: funnelData },
+                    { data: barData },
+                ],
+                graphic: hasData
+                    ? []
+                    : [
+                          {
+                              type: 'text',
+                              left: 'center',
+                              top: 'middle',
+                              style: {
+                                  text: 'Aucune donnée disponible',
+                                  fill: 'rgba(240, 248, 255, 0.65)',
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                              },
+                          },
+                      ],
+            },
+            { lazyUpdate: true }
+        );
     }
 }
 
@@ -156,6 +327,31 @@ function formatFileSize(bytes) {
         return `${kilobytes.toFixed(kilobytes >= 10 ? 0 : 1)} ko`;
     }
     return `${value.toFixed(0)} octets`;
+}
+
+function resolveSampleTimestamp(sample) {
+    if (!sample || typeof sample !== 'object') {
+        return 0;
+    }
+
+    const timestampMs = Number(sample.timestamp_ms ?? sample.timestampMs);
+    if (Number.isFinite(timestampMs) && timestampMs > 0) {
+        return timestampMs;
+    }
+
+    const timestamp = Number(sample.timestamp);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+        return timestamp;
+    }
+
+    if (typeof sample.timestamp_iso === 'string' && sample.timestamp_iso) {
+        const parsed = Date.parse(sample.timestamp_iso);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+    }
+
+    return 0;
 }
 
 function normalizeSample(raw) {
@@ -598,7 +794,7 @@ async function fetchLiveHistory(limit) {
 async function fetchArchiveSamples(file, limit) {
     if (!file) {
         state.history = [];
-        updateHistory([]);
+        updateHistory([], { preservePage: false });
         return;
     }
     const params = new URLSearchParams({ file });
@@ -608,7 +804,7 @@ async function fetchArchiveSamples(file, limit) {
     const payload = await response.json();
     const samples = (payload.samples || []).map(normalizeSample);
     state.history = samples;
-    updateHistory(samples);
+    updateHistory(samples, { preservePage: false });
 }
 
 async function fetchHistory(limit) {
@@ -658,19 +854,29 @@ function updateArchiveControls() {
     const info = document.getElementById('history-archive-info');
     const status = document.getElementById('history-storage-status');
     const rangeGroup = document.getElementById('history-range-group');
+    const rangeSelect = document.getElementById('history-range');
     const directory = state.historyDirectory || '/history';
 
     if (status) {
         status.textContent = state.historyStorageReady ? 'Flash: disponible' : 'Flash: indisponible';
-        status.classList.toggle('warning', !state.historyStorageReady);
+        status.classList.remove('bg-green-lt', 'text-green', 'bg-red-lt', 'text-red', 'bg-secondary-lt', 'text-secondary');
+        if (state.historyStorageReady) {
+            status.classList.add('bg-green-lt', 'text-green');
+        } else {
+            status.classList.add('bg-red-lt', 'text-red');
+        }
     }
 
     if (controls) {
-        controls.classList.toggle('active', state.historySource === 'archive');
+        controls.classList.toggle('d-none', state.historySource !== 'archive');
     }
 
     if (rangeGroup) {
         rangeGroup.classList.toggle('disabled', state.historySource === 'archive');
+    }
+
+    if (rangeSelect instanceof HTMLSelectElement) {
+        rangeSelect.disabled = state.historySource === 'archive';
     }
 
     if (!select) {
@@ -747,28 +953,120 @@ function updateArchiveControls() {
     }
 }
 
-function updateHistory(samples) {
-    if (!state.chart) {
-        state.chart = new HistoryChart(document.getElementById('history-chart'));
+function updateHistory(samples, options = {}) {
+    const { preservePage = false } = options;
+    if (!state.historyChart) {
+        state.historyChart = new HistoryChart(document.getElementById('history-chart'));
     }
-    state.chart.setData(samples);
+    state.historyChart.setData(samples);
+    renderHistoryTable(samples, { preservePage });
+}
 
+function renderHistoryTable(samples, { preservePage = false } = {}) {
     const tbody = document.getElementById('history-table-body');
-    tbody.innerHTML = '';
-    samples.slice(-200).reverse().forEach((sample) => {
-        const row = document.createElement('tr');
-        const timestampText = sample.timestamp_iso
-            ? new Date(sample.timestamp_iso).toLocaleString()
-            : formatTimestamp(sample.timestamp);
-        row.innerHTML = `
-            <td>${timestampText}</td>
-            <td>${formatNumber(sample.pack_voltage, 'V')}</td>
-            <td>${formatNumber(sample.pack_current, 'A')}</td>
-            <td>${formatNumber(sample.state_of_charge, '%', 1)}</td>
-            <td>${formatNumber(sample.average_temperature, '°C', 1)}</td>
-        `;
-        tbody.appendChild(row);
-    });
+    if (!tbody) {
+        return;
+    }
+
+    const ordered = (Array.isArray(samples) ? samples.slice() : [])
+        .sort((a, b) => resolveSampleTimestamp(a) - resolveSampleTimestamp(b))
+        .reverse();
+    const total = ordered.length;
+    const pageSize = Math.max(Number(state.historyPageSize) || 10, 1);
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+    if (!preservePage) {
+        state.historyPage = 1;
+    }
+    state.historyPage = Math.min(Math.max(state.historyPage || 1, 1), pageCount);
+
+    const start = (state.historyPage - 1) * pageSize;
+    const pageItems = ordered.slice(start, start + pageSize);
+
+    tbody.innerHTML = pageItems
+        .map((sample) => {
+            const timestampText = sample.timestamp_iso
+                ? new Date(sample.timestamp_iso).toLocaleString()
+                : formatTimestamp(sample.timestamp);
+            return `
+                <tr>
+                  <td>${timestampText}</td>
+                  <td>${formatNumber(sample.pack_voltage, 'V')}</td>
+                  <td>${formatNumber(sample.pack_current, 'A')}</td>
+                  <td>${formatNumber(sample.state_of_charge, '%', 1)}</td>
+                  <td>${formatNumber(sample.average_temperature, '°C', 1)}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    updateHistorySummary(start, pageItems.length, total);
+    renderHistoryPagination(pageCount);
+}
+
+function updateHistorySummary(startIndex, count, total) {
+    const summary = document.getElementById('history-table-summary');
+    if (!summary) {
+        return;
+    }
+    if (total === 0) {
+        summary.textContent = 'Aucun échantillon disponible';
+        return;
+    }
+    const from = startIndex + 1;
+    const to = startIndex + count;
+    summary.textContent = `Échantillons ${from}–${to} sur ${total}`;
+}
+
+function renderHistoryPagination(pageCount) {
+    const container = document.getElementById('history-pagination');
+    if (!container) {
+        return;
+    }
+
+    if (pageCount <= 1) {
+        container.innerHTML = '';
+        container.setAttribute('aria-hidden', 'true');
+        return;
+    }
+
+    container.removeAttribute('aria-hidden');
+    const items = [];
+    const current = state.historyPage;
+    const createItem = (label, value, disabled = false, active = false, ariaLabel = null) => {
+        const classes = ['page-item'];
+        if (disabled) classes.push('disabled');
+        if (active) classes.push('active');
+        const attributes = [`class="${classes.join(' ')}"`];
+        const buttonAttrs = [`class="page-link"`, 'type="button"', `data-page="${value}"`];
+        if (disabled) {
+            buttonAttrs.push('disabled');
+        }
+        if (active) {
+            buttonAttrs.push('aria-current="page"');
+        }
+        if (ariaLabel) {
+            buttonAttrs.push(`aria-label="${ariaLabel}"`);
+        }
+        return `<li ${attributes.join(' ')}><button ${buttonAttrs.join(' ')}>${label}</button></li>`;
+    };
+
+    items.push(createItem('&laquo;', 'prev', current <= 1, false, 'Page précédente'));
+
+    const maxPages = 5;
+    let start = Math.max(1, current - Math.floor(maxPages / 2));
+    let end = Math.min(pageCount, start + maxPages - 1);
+    if (end - start + 1 < maxPages) {
+        start = Math.max(1, end - maxPages + 1);
+    }
+
+    for (let page = start; page <= end; page += 1) {
+        items.push(createItem(String(page), String(page), false, page === current, `Aller à la page ${page}`));
+    }
+
+    items.push(createItem('&raquo;', 'next', current >= pageCount, false, 'Page suivante'));
+
+    container.innerHTML = `<ul class="pagination m-0">${items.join('')}</ul>`;
 }
 
 function setInputValue(id, value) {
@@ -984,19 +1282,26 @@ async function fetchRegisters() {
 }
 
 function createRegisterCard(register) {
-    const card = document.createElement('article');
-    card.className = 'config-card';
+    const column = document.createElement('div');
+    column.className = 'col-md-6 col-xl-4';
+
+    const card = document.createElement('div');
+    card.className = 'card config-card h-100';
     card.dataset.key = register.key;
 
+    const body = document.createElement('div');
+    body.className = 'card-body d-flex flex-column gap-3';
+
     const title = document.createElement('h3');
+    title.className = 'card-title fs-5 mb-1';
     title.textContent = `${register.label}${register.unit ? ` (${register.unit})` : ''}`;
 
     const valueLabel = document.createElement('div');
+    valueLabel.className = 'text-secondary small';
     valueLabel.textContent = `Adresse 0x${register.address.toString(16).toUpperCase()} • Min ${register.min} • Max ${register.max}`;
-    valueLabel.className = 'config-meta';
 
     const inputs = document.createElement('div');
-    inputs.className = 'inputs';
+    inputs.className = 'd-grid gap-2';
 
     const range = document.createElement('input');
     range.type = 'range';
@@ -1021,6 +1326,7 @@ function createRegisterCard(register) {
 
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'btn btn-primary';
     button.textContent = 'Appliquer';
     button.addEventListener('click', async () => {
         button.disabled = true;
@@ -1037,8 +1343,10 @@ function createRegisterCard(register) {
     });
 
     inputs.append(range, number, button);
-    card.append(title, valueLabel, inputs);
-    return card;
+    body.append(title, valueLabel, inputs);
+    card.append(body);
+    column.append(card);
+    return column;
 }
 
 function updateRegisterCard(key, value) {
@@ -1108,6 +1416,10 @@ async function handleGeneralConfigSubmit(event) {
 }
 
 function handleGeneralConfigReset() {
+    const form = document.getElementById('general-config-form');
+    if (form instanceof HTMLFormElement) {
+        form.classList.remove('was-validated');
+    }
     if (state.config.last) {
         populateGeneralConfigForm(state.config.last);
         updateConfigStatus('Formulaire réinitialisé.');
@@ -1126,14 +1438,29 @@ function updateConfigStatus(message, isError = false, force = false) {
     }
 
     status.textContent = message;
-    status.style.color = isError ? '#ff6b6b' : 'var(--text-secondary)';
-    status.dataset.state = isError ? 'error' : 'info';
+    status.dataset.state = isError ? 'error' : 'success';
+    status.className = 'badge px-3 py-2 fw-semibold';
+    if (isError) {
+        status.classList.add('bg-red-lt', 'text-red');
+    } else {
+        status.classList.add('bg-green-lt', 'text-green');
+    }
 }
 
 function setupConfigTab() {
     const form = document.getElementById('general-config-form');
     if (form instanceof HTMLFormElement) {
-        form.addEventListener('submit', handleGeneralConfigSubmit);
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                updateConfigStatus('Veuillez corriger les erreurs du formulaire.', true, true);
+                return;
+            }
+            form.classList.remove('was-validated');
+            handleGeneralConfigSubmit(event);
+        });
     }
 
     const refreshButton = document.getElementById('config-refresh');
@@ -1149,6 +1476,32 @@ function setupConfigTab() {
     if (resetButton instanceof HTMLButtonElement) {
         resetButton.addEventListener('click', handleGeneralConfigReset);
     }
+
+    setupConfigAccordion();
+}
+
+function setupConfigAccordion() {
+    const accordion = document.getElementById('config-accordion');
+    if (!accordion) {
+        return;
+    }
+
+    accordion.querySelectorAll('[data-accordion-target]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const targetSelector = button.getAttribute('data-accordion-target');
+            if (!targetSelector) {
+                return;
+            }
+            const collapse = accordion.querySelector(targetSelector);
+            if (!(collapse instanceof HTMLElement)) {
+                return;
+            }
+            const expanded = button.getAttribute('aria-expanded') === 'true';
+            button.classList.toggle('collapsed', expanded);
+            button.setAttribute('aria-expanded', String(!expanded));
+            collapse.classList.toggle('show', !expanded);
+        });
+    });
 }
 
 function pushHistorySample(sample) {
@@ -1160,7 +1513,8 @@ function pushHistorySample(sample) {
     }
     if (state.historySource === 'live') {
         state.history = state.liveHistory;
-        updateHistory(state.history);
+        const preservePage = state.historyPage > 1;
+        updateHistory(state.history, { preservePage });
     }
 }
 
@@ -1350,10 +1704,13 @@ function setupHistoryControls() {
     const exportBtn = document.getElementById('history-export');
     const archiveSelect = document.getElementById('history-archive-file');
     const archiveDownload = document.getElementById('history-archive-download');
+    const pageSizeSelect = document.getElementById('history-page-size');
+    const pagination = document.getElementById('history-pagination');
 
     if (sourceSelect) {
         sourceSelect.addEventListener('change', () => {
             state.historySource = sourceSelect.value;
+            state.historyPage = 1;
             updateArchiveControls();
             if (state.historySource === 'archive') {
                 fetchHistoryArchives()
@@ -1368,6 +1725,7 @@ function setupHistoryControls() {
     if (select) {
         select.addEventListener('change', () => {
             state.historyLimit = Number(select.value);
+            state.historyPage = 1;
             fetchHistory(state.historyLimit).catch((error) => console.error(error));
         });
     }
@@ -1425,6 +1783,49 @@ function setupHistoryControls() {
             window.open(url, '_blank');
         });
     }
+
+    if (pageSizeSelect instanceof HTMLSelectElement) {
+        pageSizeSelect.addEventListener('change', () => {
+            const parsed = Number.parseInt(pageSizeSelect.value, 10);
+            state.historyPageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+            state.historyPage = 1;
+            renderHistoryTable(state.history, { preservePage: false });
+        });
+    }
+
+    if (pagination) {
+        pagination.addEventListener('click', (event) => {
+            const target = event.target instanceof Element ? event.target.closest('button[data-page]') : null;
+            if (!target) {
+                return;
+            }
+            event.preventDefault();
+            const { page } = target.dataset;
+            const pageCount = Math.max(1, Math.ceil(state.history.length / Math.max(state.historyPageSize || 10, 1)));
+
+            if (page === 'prev') {
+                if (state.historyPage > 1) {
+                    state.historyPage -= 1;
+                    renderHistoryTable(state.history, { preservePage: true });
+                }
+                return;
+            }
+
+            if (page === 'next') {
+                if (state.historyPage < pageCount) {
+                    state.historyPage += 1;
+                    renderHistoryTable(state.history, { preservePage: true });
+                }
+                return;
+            }
+
+            const parsed = Number.parseInt(page || '', 10);
+            if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= pageCount) {
+                state.historyPage = parsed;
+                renderHistoryTable(state.history, { preservePage: true });
+            }
+        });
+    }
 }
 
 function setElementText(id, value) {
@@ -1478,8 +1879,88 @@ function displayMqttMessage(message, isError = false) {
         return;
     }
     element.textContent = message;
-    element.classList.toggle('error', Boolean(isError && message));
-    element.classList.toggle('success', Boolean(!isError && message));
+    element.classList.remove('text-danger', 'text-success');
+    if (!message) {
+        return;
+    }
+    element.classList.add(isError ? 'text-danger' : 'text-success');
+}
+
+function extractMqttMessageBreakdown(status) {
+    if (!status || typeof status !== 'object') {
+        return [];
+    }
+
+    const entries = [];
+    const addEntry = (rawLabel, value) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+            return;
+        }
+        const label = String(rawLabel || 'Autre').trim();
+        if (!label) {
+            return;
+        }
+        entries.push({ label, value: numeric });
+    };
+
+    const topicCounts = status.topic_counts || status.topics?.counts;
+    if (Array.isArray(topicCounts)) {
+        topicCounts.forEach((entry) => {
+            if (entry && typeof entry === 'object') {
+                const label = entry.topic || entry.name || entry.label;
+                const value = entry.count ?? entry.value ?? entry.messages;
+                addEntry(label, value);
+            }
+        });
+    } else if (topicCounts && typeof topicCounts === 'object') {
+        Object.entries(topicCounts).forEach(([key, value]) => addEntry(key, value));
+    }
+
+    const messageCounts = status.message_counts || status.message_totals || status.messages;
+    if (messageCounts && typeof messageCounts === 'object') {
+        Object.entries(messageCounts).forEach(([key, value]) => {
+            const normalized = key.replace(/_/g, ' ').trim();
+            const label = normalized ? `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}` : key;
+            addEntry(label, value);
+        });
+    }
+
+    const fallbackFields = [
+        { key: 'published_messages', label: 'Publiés' },
+        { key: 'received_messages', label: 'Reçus' },
+        { key: 'retained_messages', label: 'Retenus' },
+        { key: 'dropped_messages', label: 'Perdus' },
+        { key: 'queued_messages', label: 'En file' },
+        { key: 'processed_messages', label: 'Traités' },
+        { key: 'sent_messages', label: 'Envoyés' },
+        { key: 'incoming_messages', label: 'Entrants' },
+    ];
+    fallbackFields.forEach(({ key, label }) => {
+        if (Object.prototype.hasOwnProperty.call(status, key)) {
+            addEntry(label, status[key]);
+        }
+    });
+
+    const merged = new Map();
+    entries.forEach((entry) => {
+        const existing = merged.get(entry.label);
+        if (existing) {
+            existing.value += entry.value;
+        } else {
+            merged.set(entry.label, { ...entry });
+        }
+    });
+
+    return Array.from(merged.values()).sort((a, b) => b.value - a.value);
+}
+
+function updateMqttMessageChart(status) {
+    if (!state.mqtt.messageChart) {
+        return;
+    }
+    const breakdown = status ? extractMqttMessageBreakdown(status) : [];
+    state.mqtt.messageChart.setData(breakdown);
 }
 
 function buildMqttPayload(form) {
@@ -1530,6 +2011,8 @@ async function fetchMqttStatus() {
 }
 
 function updateMqttStatus(status, error) {
+    updateMqttMessageChart(status);
+
     const badge = document.getElementById('mqtt-connection-state');
     const helper = document.getElementById('mqtt-last-error');
     if (!badge || !helper) {
@@ -1537,7 +2020,7 @@ function updateMqttStatus(status, error) {
     }
 
     badge.className = 'status-badge';
-    helper.classList.remove('error');
+    helper.classList.remove('text-danger');
 
     const resetFields = () => {
         setElementText('mqtt-client-started', '--');
@@ -1551,10 +2034,11 @@ function updateMqttStatus(status, error) {
 
     if (error) {
         resetFields();
-        badge.textContent = 'Inconnu';
+        badge.textContent = 'Erreur';
         badge.classList.add('status-badge--error');
-        helper.textContent = 'Statut indisponible';
-        helper.classList.add('error');
+        const message = error instanceof Error ? error.message : 'Statut indisponible';
+        helper.textContent = message;
+        helper.classList.add('text-danger');
         return;
     }
 
@@ -1582,7 +2066,7 @@ function updateMqttStatus(status, error) {
     const lastError = status.last_error || '';
     if (lastError) {
         helper.textContent = lastError;
-        helper.classList.add('error');
+        helper.classList.add('text-danger');
     } else {
         helper.textContent = 'Aucune erreur récente';
     }
@@ -1687,6 +2171,13 @@ function setupMqttTab() {
         form.addEventListener('submit', handleMqttSubmit);
     }
 
+    const refreshButton = document.getElementById('mqtt-refresh');
+    if (refreshButton instanceof HTMLButtonElement) {
+        refreshButton.addEventListener('click', () => {
+            refreshMqttData(true);
+        });
+    }
+
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             stopMqttStatusPolling();
@@ -1703,7 +2194,19 @@ async function initialise() {
     updateArchiveControls();
     setupMqttTab();
     setupConfigTab();
-    state.chart = new HistoryChart(document.getElementById('history-chart'));
+    const pageSizeSelect = document.getElementById('history-page-size');
+    if (pageSizeSelect instanceof HTMLSelectElement) {
+        const parsed = Number.parseInt(pageSizeSelect.value, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+            state.historyPageSize = parsed;
+        }
+    }
+    state.historyChart = new HistoryChart(document.getElementById('history-chart'));
+    renderHistoryTable(state.history, { preservePage: false });
+    const mqttChartElement = document.getElementById('mqtt-messages-chart');
+    if (mqttChartElement) {
+        state.mqtt.messageChart = new MqttMessageChart(mqttChartElement);
+    }
     state.batteryCharts = new BatteryRealtimeCharts({
         gaugeElement: document.getElementById('battery-soc-gauge'),
         sparklineElement: document.getElementById('battery-pack-sparkline'),
