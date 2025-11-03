@@ -7,7 +7,7 @@ This helper consumes ``docs/TinyBMS_CAN_BMS_mapping.json`` and extracts:
 
 It then cross-checks them against the firmware sources to highlight coverage gaps.
 The script prints a markdown report to STDOUT so it can be redirected into
-``docs/mapping_audit.md``.
+``archive/docs/mapping_audit.md``.
 """
 
 from __future__ import annotations

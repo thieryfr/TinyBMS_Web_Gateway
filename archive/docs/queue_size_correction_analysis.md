@@ -428,7 +428,7 @@ typedef struct {
 ```
 sdkconfig.defaults                  (1 ligne)
 main/mqtt_gateway/mqtt_gateway.c    (1 ligne)
-docs/queue_size_correction_analysis.md  (ce document)
+archive/docs/queue_size_correction_analysis.md  (ce document)
 COHERENCE_REVIEW.md                 (retirer de la liste "problèmes")
 ```
 
