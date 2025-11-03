@@ -16,6 +16,8 @@
     </div>
     <script defer src="../node_modules/@tabler/core/dist/js/tabler.min.js"></script>
     <script type="module">
+      const DEFAULT_PARTIAL_BASE = document.baseURI;
+
       async function loadPartials() {
         let placeholders = Array.from(document.querySelectorAll('[data-partial]'));
 
@@ -26,13 +28,28 @@
               if (!url) {
                 return;
               }
+
+              const base = placeholder.getAttribute('data-partial-base') ?? DEFAULT_PARTIAL_BASE;
+              const resolvedUrl = new URL(url, base).toString();
+
               try {
-                const response = await fetch(url);
+                const response = await fetch(resolvedUrl);
                 if (!response.ok) {
-                  throw new Error(`Impossible de charger le fragment ${url}`);
+                  throw new Error(`Impossible de charger le fragment ${resolvedUrl}`);
                 }
+
                 const markup = await response.text();
-                placeholder.outerHTML = markup.trim();
+                const template = document.createElement('template');
+                template.innerHTML = markup.trim();
+
+                const partialBase = resolvedUrl.slice(0, resolvedUrl.lastIndexOf('/') + 1);
+                template.content.querySelectorAll('[data-partial]').forEach((node) => {
+                  if (!node.hasAttribute('data-partial-base')) {
+                    node.setAttribute('data-partial-base', partialBase);
+                  }
+                });
+
+                placeholder.replaceWith(template.content);
               } catch (error) {
                 console.error(error);
                 placeholder.removeAttribute('data-partial');
