@@ -1,0 +1,304 @@
+<main class="page-body">
+  <div class="container-xl">
+    <section id="tab-battery" class="tab-panel active" aria-labelledby="tab-battery-label">
+      <div class="row row-cards">
+        <div class="col-sm-6 col-xl-3">
+          <article class="card metric-card h-100">
+            <div class="card-body">
+              <h2 class="card-title">Tension pack</h2>
+              <p class="metric" id="battery-voltage">-- V</p>
+              <span class="metric-detail" id="battery-minmax">min -- mV • max -- mV</span>
+            </div>
+          </article>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+          <article class="card metric-card h-100">
+            <div class="card-body">
+              <h2 class="card-title">Courant pack</h2>
+              <p class="metric" id="battery-current">-- A</p>
+              <span class="metric-detail" id="battery-balancing">Équilibrage: --</span>
+            </div>
+          </article>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+          <article class="card metric-card h-100">
+            <div class="card-body">
+              <h2 class="card-title">État de charge</h2>
+              <p class="metric" id="battery-soc">-- %</p>
+              <span class="metric-detail" id="battery-soh">SOH -- %</span>
+            </div>
+          </article>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+          <article class="card metric-card h-100">
+            <div class="card-body">
+              <h2 class="card-title">Températures</h2>
+              <p class="metric" id="battery-temperature">-- °C</p>
+              <span class="metric-detail" id="battery-temp-extra">MOSFET: -- °C</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="row g-3 status-grid mt-3">
+        <div class="col-md-4">
+          <div class="card status-card h-100">
+            <div class="card-header">
+              <h3 class="card-title">Alarmes</h3>
+            </div>
+            <div class="card-body">
+              <ul id="battery-alarms" class="status-list mb-0"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card status-card h-100">
+            <div class="card-header">
+              <h3 class="card-title">Avertissements</h3>
+            </div>
+            <div class="card-body">
+              <ul id="battery-warnings" class="status-list mb-0"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card status-card h-100">
+            <div class="card-header">
+              <h3 class="card-title">Informations système</h3>
+            </div>
+            <div class="card-body">
+              <dl class="status-kv" id="battery-system-info"></dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section id="battery-cell-section" class="card cell-section mt-4" aria-labelledby="cell-section-title">
+        <div class="card-header cell-section-header">
+          <div>
+            <h3 class="card-title" id="cell-section-title">Équilibrage des cellules</h3>
+            <p class="card-subtitle" id="cell-section-description">
+              Visualisez les tensions individuelles des cellules 1 à 16 et leur état d’équilibrage.
+            </p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive" role="region" aria-live="polite" aria-labelledby="cell-section-title" aria-describedby="cell-section-description">
+            <table class="table table-vcenter cell-table">
+              <caption class="visually-hidden">Tension et équilibrage des cellules 1 à 16</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Cellule</th>
+                  <th scope="col">Tension (V)</th>
+                  <th scope="col">Équilibrage</th>
+                </tr>
+              </thead>
+              <tbody id="battery-cells-body">
+                <tr class="cell-row-empty">
+                  <td colspan="3">Données cellules indisponibles</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div class="card register-table mt-4">
+        <div class="card-header">
+          <h3 class="card-title">Registres TinyBMS surveillés</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead>
+                <tr>
+                  <th>Adresse</th>
+                  <th>Valeur brute</th>
+                </tr>
+              </thead>
+              <tbody id="battery-registers"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-uart" class="tab-panel" aria-labelledby="tab-uart-label">
+      <div class="row g-3 split-panel">
+        <div class="col-md-6">
+          <section class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Trames brutes</h2>
+            </div>
+            <div class="card-body">
+              <ul id="uart-raw-list" class="data-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="col-md-6">
+          <section class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Décodage TinyBMS</h2>
+            </div>
+            <div class="card-body">
+              <ul id="uart-decoded-list" class="data-list"></ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-can" class="tab-panel" aria-labelledby="tab-can-label">
+      <div class="row g-3 split-panel">
+        <div class="col-md-6">
+          <section class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Trames CAN brutes</h2>
+            </div>
+            <div class="card-body">
+              <ul id="can-raw-list" class="data-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="col-md-6">
+          <section class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Décodage Victron</h2>
+            </div>
+            <div class="card-body">
+              <ul id="can-decoded-list" class="data-list"></ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-history" class="tab-panel" aria-labelledby="tab-history-label">
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 history-toolbar align-items-end">
+            <div class="col-sm-6 col-md-3 history-group">
+              <label for="history-source" class="form-label">Source</label>
+              <select id="history-source" class="form-select">
+                <option value="live" selected>Temps réel (RAM)</option>
+                <option value="archive">Archives flash</option>
+              </select>
+            </div>
+            <div class="col-sm-6 col-md-3 history-group" id="history-range-group">
+              <label for="history-range" class="form-label">Nombre de points</label>
+              <select id="history-range" class="form-select">
+                <option value="60">60</option>
+                <option value="120" selected>120</option>
+                <option value="240">240</option>
+                <option value="0">Tous</option>
+              </select>
+            </div>
+            <div class="col-sm-6 col-md-2 d-flex gap-2">
+              <button id="history-refresh" class="btn btn-primary w-100">Rafraîchir</button>
+              <button id="history-export" class="btn btn-secondary w-100">Exporter CSV</button>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <span id="history-storage-status" class="history-status form-hint" aria-live="polite">Flash: --</span>
+            </div>
+          </div>
+          <div id="history-archive-controls" class="history-archive-controls mt-3" aria-live="polite">
+            <div class="row g-2 align-items-center">
+              <div class="col-sm-6 col-md-4">
+                <label for="history-archive-file" class="form-label">Archive</label>
+                <select id="history-archive-file" class="form-select"></select>
+              </div>
+              <div class="col-sm-6 col-md-2">
+                <button id="history-archive-download" class="btn btn-outline-primary w-100">Télécharger</button>
+              </div>
+              <div class="col-md-6">
+                <p id="history-archive-info" class="history-info mb-0"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="history-chart" role="img" aria-label="Évolution tension et courant">
+            <canvas id="history-chart" width="800" height="320"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Derniers échantillons</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped history-table mb-0">
+              <thead>
+                <tr>
+                  <th>Horodatage</th>
+                  <th>Tension (V)</th>
+                  <th>Courant (A)</th>
+                  <th>SOC (%)</th>
+                  <th>Température (°C)</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-config" class="tab-panel" aria-labelledby="tab-config-label">
+      <div class="card">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <h2>Dernière configuration reçue</h2>
+              <dl id="config-last" class="status-kv"></dl>
+            </div>
+            <div class="col-md-6">
+              <h2>Actions</h2>
+              <div class="d-flex flex-wrap gap-2">
+                <button id="config-refresh" class="btn btn-primary">Rafraîchir</button>
+                <button id="config-export" class="btn btn-secondary">Exporter</button>
+                <button id="config-import" class="btn btn-outline-primary">Importer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-mqtt" class="tab-panel" aria-labelledby="tab-mqtt-label">
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Statut du broker</h2>
+            </div>
+            <div class="card-body">
+              <dl id="mqtt-status" class="status-kv"></dl>
+              <div class="d-flex gap-2 mt-3">
+                <button id="mqtt-status-refresh" class="btn btn-primary">Rafraîchir</button>
+                <button id="mqtt-status-stop" class="btn btn-outline-danger">Arrêter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card h-100">
+            <div class="card-header">
+              <h2 class="card-title">Configuration MQTT</h2>
+            </div>
+            <div class="card-body">
+              <dl id="mqtt-config" class="status-kv"></dl>
+              <div class="d-flex gap-2 mt-3">
+                <button id="mqtt-config-refresh" class="btn btn-secondary">Relire</button>
+                <button id="mqtt-config-apply" class="btn btn-primary">Appliquer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
