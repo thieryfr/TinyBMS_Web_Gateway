@@ -1,0 +1,118 @@
+<section id="tab-mqtt" class="tab-panel" aria-labelledby="tab-mqtt-label">
+  <div class="row g-3">
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+          <h3 class="card-title mb-0">État du broker</h3>
+          <button id="mqtt-refresh" class="btn btn-outline-primary btn-sm ms-auto">Actualiser</button>
+        </div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <span id="mqtt-connection-state" class="badge status-badge">--</span>
+            <span id="mqtt-last-error" class="text-secondary small" aria-live="polite">Aucune erreur</span>
+          </div>
+          <dl class="status-kv mt-3">
+            <div><dt>Client</dt><dd id="mqtt-client-started">--</dd></div>
+            <div><dt>Wi-Fi</dt><dd id="mqtt-wifi-state">--</dd></div>
+            <div><dt>Reconnexions</dt><dd id="mqtt-reconnect-count">0</dd></div>
+            <div><dt>Déconnexions</dt><dd id="mqtt-disconnect-count">0</dd></div>
+            <div><dt>Erreurs</dt><dd id="mqtt-error-count">0</dd></div>
+            <div><dt>Dernier événement</dt><dd id="mqtt-last-event">--</dd></div>
+            <div><dt>Horodatage</dt><dd id="mqtt-last-event-time">--</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Répartition des messages</h3>
+        </div>
+        <div class="card-body">
+          <div id="mqtt-messages-chart" class="echart-container" role="img" aria-label="Répartition des messages MQTT"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <form id="mqtt-config-form" class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Configuration de la passerelle</h3>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-6">
+              <label for="mqtt-scheme" class="form-label">Schéma</label>
+              <select id="mqtt-scheme" name="scheme" class="form-select">
+                <option value="mqtt">mqtt</option>
+                <option value="mqtts">mqtts</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label for="mqtt-port" class="form-label">Port</label>
+              <input id="mqtt-port" name="port" type="number" class="form-control" min="1" max="65535" required>
+            </div>
+            <div class="col-12">
+              <label for="mqtt-host" class="form-label">Hôte</label>
+              <input id="mqtt-host" name="host" type="text" class="form-control" required>
+            </div>
+            <div class="col-6">
+              <label for="mqtt-username" class="form-label">Utilisateur</label>
+              <input id="mqtt-username" name="username" type="text" class="form-control">
+            </div>
+            <div class="col-6">
+              <label for="mqtt-password" class="form-label">Mot de passe</label>
+              <input id="mqtt-password" name="password" type="password" class="form-control">
+            </div>
+            <div class="col-6">
+              <label for="mqtt-keepalive" class="form-label">Keepalive (s)</label>
+              <input id="mqtt-keepalive" name="keepalive" type="number" class="form-control" min="0">
+            </div>
+            <div class="col-6">
+              <label for="mqtt-qos" class="form-label">QoS par défaut</label>
+              <input id="mqtt-qos" name="default_qos" type="number" class="form-control" min="0" max="2">
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input id="mqtt-retain" name="retain" type="checkbox" class="form-check-input">
+                <label class="form-check-label" for="mqtt-retain">Retenir l’état</label>
+              </div>
+            </div>
+          </div>
+          <fieldset class="mt-4">
+            <legend class="small text-uppercase text-secondary">Topics personnalisés</legend>
+            <div class="row g-3">
+              <div class="col-12">
+                <label for="mqtt-status-topic" class="form-label">Statut</label>
+                <input id="mqtt-status-topic" name="status_topic" type="text" class="form-control">
+              </div>
+              <div class="col-12">
+                <label for="mqtt-metrics-topic" class="form-label">Mesures</label>
+                <input id="mqtt-metrics-topic" name="metrics_topic" type="text" class="form-control">
+              </div>
+              <div class="col-12">
+                <label for="mqtt-config-topic" class="form-label">Configuration</label>
+                <input id="mqtt-config-topic" name="config_topic" type="text" class="form-control">
+              </div>
+              <div class="col-12">
+                <label for="mqtt-can-raw-topic" class="form-label">CAN brut</label>
+                <input id="mqtt-can-raw-topic" name="can_raw_topic" type="text" class="form-control">
+              </div>
+              <div class="col-12">
+                <label for="mqtt-can-decoded-topic" class="form-label">CAN décodé</label>
+                <input id="mqtt-can-decoded-topic" name="can_decoded_topic" type="text" class="form-control">
+              </div>
+              <div class="col-12">
+                <label for="mqtt-can-ready-topic" class="form-label">CAN prêts</label>
+                <input id="mqtt-can-ready-topic" name="can_ready_topic" type="text" class="form-control">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+        <div class="card-footer">
+          <button type="submit" class="btn btn-primary w-100">Enregistrer la configuration</button>
+          <p id="mqtt-config-message" class="mt-2 mb-0 small" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,90 @@
+<section id="tab-history" class="tab-panel" aria-labelledby="tab-history-label">
+  <div class="card card-stacked mb-4">
+    <div class="card-header flex-wrap align-items-center gap-2">
+      <div>
+        <h3 class="card-title mb-0">Analyse historique</h3>
+        <p class="card-subtitle text-secondary mb-0">Visualisez les échantillons enregistrés et exportez vos données.</p>
+      </div>
+      <span id="history-storage-status" class="badge bg-secondary-lt text-secondary fw-semibold ms-auto" aria-live="polite">Flash: --</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 history-toolbar align-items-end">
+        <div class="col-sm-6 col-lg-3">
+          <label for="history-source" class="form-label">Source</label>
+          <select id="history-source" class="form-select">
+            <option value="live" selected>Temps réel (RAM)</option>
+            <option value="archive">Archives flash</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3" id="history-range-group">
+          <label for="history-range" class="form-label">Nombre de points</label>
+          <select id="history-range" class="form-select">
+            <option value="60">60</option>
+            <option value="120" selected>120</option>
+            <option value="240">240</option>
+            <option value="0">Tous</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label for="history-page-size" class="form-label">Lignes par page</label>
+          <select id="history-page-size" class="form-select">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3 d-flex flex-wrap gap-2">
+          <button id="history-refresh" class="btn btn-primary flex-grow-1">Rafraîchir</button>
+          <button id="history-export" class="btn btn-outline-secondary flex-grow-1">Exporter CSV</button>
+        </div>
+      </div>
+      <div id="history-archive-controls" class="history-archive-controls card bg-body-secondary border-0 mt-3 d-none" aria-live="polite">
+        <div class="card-body py-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-sm-6 col-lg-4">
+              <label for="history-archive-file" class="form-label">Archive</label>
+              <select id="history-archive-file" class="form-select"></select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label d-block">&nbsp;</label>
+              <button id="history-archive-download" class="btn btn-outline-primary w-100">Télécharger</button>
+            </div>
+            <div class="col-lg-6">
+              <p id="history-archive-info" class="history-info mb-0"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="history-chart mt-4" role="img" aria-label="Évolution tension et courant">
+        <div id="history-chart" class="echart-container"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header flex-wrap align-items-center gap-2">
+      <h3 class="card-title mb-0">Derniers échantillons</h3>
+      <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+        <span id="history-table-summary" class="text-secondary small"></span>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-striped table-vcenter mb-0">
+          <thead>
+            <tr>
+              <th>Horodatage</th>
+              <th>Tension (V)</th>
+              <th>Courant (A)</th>
+              <th>SOC (%)</th>
+              <th>Température (°C)</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer">
+      <nav id="history-pagination" class="d-flex justify-content-end" aria-label="Pagination des échantillons"></nav>
+    </div>
+  </div>
+</section>
