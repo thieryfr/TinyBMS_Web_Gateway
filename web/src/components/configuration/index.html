@@ -1,0 +1,207 @@
+<section id="tab-config" class="tab-panel" aria-labelledby="tab-config-label">
+  <div class="card card-stacked mb-4">
+    <div class="card-header flex-wrap align-items-center gap-3">
+      <div>
+        <h3 class="card-title mb-0">Suivi de la configuration</h3>
+        <p class="card-subtitle text-secondary mb-0">Consultez la dernière configuration appliquée et rechargez les paramètres.</p>
+      </div>
+      <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+        <button id="config-refresh" class="btn btn-outline-primary btn-sm">Rafraîchir</button>
+        <span id="config-status" class="badge bg-secondary-lt text-secondary" aria-live="polite">Chargement de la configuration…</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl id="config-last" class="status-kv"></dl>
+    </div>
+  </div>
+
+  <form id="general-config-form" class="card" novalidate>
+    <div class="card-header flex-wrap align-items-center gap-3">
+      <div>
+        <h3 class="card-title mb-0">Paramètres TinyBMS</h3>
+        <p class="card-subtitle text-secondary mb-0">Utilisez les sections ci-dessous pour configurer l’UART, le Wi-Fi et le bus CAN.</p>
+      </div>
+      <div class="ms-auto d-flex flex-wrap gap-2">
+        <button id="general-config-reset" type="button" class="btn btn-outline-secondary">Réinitialiser</button>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="accordion" id="config-accordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="config-device-heading">
+            <button class="accordion-button" type="button" data-accordion-target="#config-device" aria-expanded="true" aria-controls="config-device">Appareil &amp; UART</button>
+          </h2>
+          <div id="config-device" class="accordion-collapse show" role="region" aria-labelledby="config-device-heading">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                  <label for="device-name" class="form-label">Nom du dispositif</label>
+                  <input id="device-name" name="device_name" type="text" class="form-control" maxlength="64" required>
+                  <div class="invalid-feedback">Indiquez un nom pour identifier le module.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="uart-poll-interval" class="form-label">Intervalle sondage UART (ms)</label>
+                  <input id="uart-poll-interval" name="uart_poll_interval_ms" type="number" class="form-control" min="100" max="600000" step="10" required>
+                  <div class="invalid-feedback">Saisissez une valeur entre 100 et 600&nbsp;000 ms.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="uart-tx-gpio" class="form-label">GPIO UART TX</label>
+                  <input id="uart-tx-gpio" name="uart_tx_gpio" type="number" class="form-control" min="-1" max="48" required>
+                  <div class="invalid-feedback">La broche TX doit être comprise entre -1 et 48.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="uart-rx-gpio" class="form-label">GPIO UART RX</label>
+                  <input id="uart-rx-gpio" name="uart_rx_gpio" type="number" class="form-control" min="-1" max="48" required>
+                  <div class="invalid-feedback">La broche RX doit être comprise entre -1 et 48.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="config-wifi-sta-heading">
+            <button class="accordion-button collapsed" type="button" data-accordion-target="#config-wifi-sta" aria-expanded="false" aria-controls="config-wifi-sta">Wi-Fi station</button>
+          </h2>
+          <div id="config-wifi-sta" class="accordion-collapse" role="region" aria-labelledby="config-wifi-sta-heading">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-sta-ssid" class="form-label">SSID</label>
+                  <input id="wifi-sta-ssid" name="wifi_sta_ssid" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-sta-password" class="form-label">Mot de passe</label>
+                  <input id="wifi-sta-password" name="wifi_sta_password" type="password" class="form-control" maxlength="64" autocomplete="new-password">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-sta-hostname" class="form-label">Nom d’hôte</label>
+                  <input id="wifi-sta-hostname" name="wifi_sta_hostname" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-sta-max-retry" class="form-label">Tentatives</label>
+                  <input id="wifi-sta-max-retry" name="wifi_sta_max_retry" type="number" class="form-control" min="0" max="255" required>
+                  <div class="invalid-feedback">Entrez un nombre entre 0 et 255.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="config-wifi-ap-heading">
+            <button class="accordion-button collapsed" type="button" data-accordion-target="#config-wifi-ap" aria-expanded="false" aria-controls="config-wifi-ap">Wi-Fi point d’accès</button>
+          </h2>
+          <div id="config-wifi-ap" class="accordion-collapse" role="region" aria-labelledby="config-wifi-ap-heading">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-ap-ssid" class="form-label">SSID</label>
+                  <input id="wifi-ap-ssid" name="wifi_ap_ssid" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-ap-password" class="form-label">Mot de passe</label>
+                  <input id="wifi-ap-password" name="wifi_ap_password" type="password" class="form-control" maxlength="64" autocomplete="new-password">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-ap-channel" class="form-label">Canal</label>
+                  <input id="wifi-ap-channel" name="wifi_ap_channel" type="number" class="form-control" min="1" max="13" required>
+                  <div class="invalid-feedback">Le canal doit être compris entre 1 et 13.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="wifi-ap-max-clients" class="form-label">Clients simultanés</label>
+                  <input id="wifi-ap-max-clients" name="wifi_ap_max_clients" type="number" class="form-control" min="1" max="10" required>
+                  <div class="invalid-feedback">Choisissez une valeur entre 1 et 10.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="config-can-heading">
+            <button class="accordion-button collapsed" type="button" data-accordion-target="#config-can" aria-expanded="false" aria-controls="config-can">Bus CAN Victron</button>
+          </h2>
+          <div id="config-can" class="accordion-collapse" role="region" aria-labelledby="config-can-heading">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-tx-gpio" class="form-label">GPIO TX</label>
+                  <input id="can-tx-gpio" name="can_tx_gpio" type="number" class="form-control" min="-1" max="39" required>
+                  <div class="invalid-feedback">Renseignez une broche valide.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-rx-gpio" class="form-label">GPIO RX</label>
+                  <input id="can-rx-gpio" name="can_rx_gpio" type="number" class="form-control" min="-1" max="39" required>
+                  <div class="invalid-feedback">Renseignez une broche valide.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-keepalive-interval" class="form-label">Keepalive (ms)</label>
+                  <input id="can-keepalive-interval" name="can_keepalive_interval_ms" type="number" class="form-control" min="10" max="600000" step="10" required>
+                  <div class="invalid-feedback">Valeur entre 10 et 600&nbsp;000 ms.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-keepalive-timeout" class="form-label">Expiration (ms)</label>
+                  <input id="can-keepalive-timeout" name="can_keepalive_timeout_ms" type="number" class="form-control" min="100" max="600000" step="10" required>
+                  <div class="invalid-feedback">Valeur entre 100 et 600&nbsp;000 ms.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-keepalive-retry" class="form-label">Relance (ms)</label>
+                  <input id="can-keepalive-retry" name="can_keepalive_retry_ms" type="number" class="form-control" min="10" max="600000" step="10" required>
+                  <div class="invalid-feedback">Valeur entre 10 et 600&nbsp;000 ms.</div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-publisher-period" class="form-label">Période publication (ms)</label>
+                  <input id="can-publisher-period" name="can_publisher_period_ms" type="number" class="form-control" min="0" max="600000" step="10" required>
+                  <div class="invalid-feedback">Valeur entre 0 et 600&nbsp;000 ms.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="config-identity-heading">
+            <button class="accordion-button collapsed" type="button" data-accordion-target="#config-identity" aria-expanded="false" aria-controls="config-identity">Identité Victron</button>
+          </h2>
+          <div id="config-identity" class="accordion-collapse" role="region" aria-labelledby="config-identity-heading">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-handshake" class="form-label">Handshake ASCII</label>
+                  <input id="can-handshake" name="can_handshake_ascii" type="text" class="form-control" maxlength="8">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-manufacturer" class="form-label">Constructeur</label>
+                  <input id="can-manufacturer" name="can_manufacturer" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-battery-name" class="form-label">Nom batterie</label>
+                  <input id="can-battery-name" name="can_battery_name" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-battery-family" class="form-label">Famille</label>
+                  <input id="can-battery-family" name="can_battery_family" type="text" class="form-control" maxlength="32">
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                  <label for="can-serial-number" class="form-label">Numéro de série</label>
+                  <input id="can-serial-number" name="can_serial_number" type="text" class="form-control" maxlength="32">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="card mt-4">
+    <div class="card-header">
+      <h3 class="card-title mb-0">Registres TinyBMS</h3>
+    </div>
+    <div class="card-body">
+      <div id="config-registers" class="row g-3" role="form"></div>
+    </div>
+  </div>
+</section>

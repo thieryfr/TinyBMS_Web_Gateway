@@ -16,26 +16,49 @@
     </div>
     <script defer src="../node_modules/@tabler/core/dist/js/tabler.min.js"></script>
     <script type="module">
+      const DEFAULT_PARTIAL_BASE = document.baseURI;
+
       async function loadPartials() {
-        const placeholders = document.querySelectorAll('[data-partial]');
-        await Promise.all(
-          Array.from(placeholders).map(async (placeholder) => {
-            const url = placeholder.getAttribute('data-partial');
-            if (!url) {
-              return;
-            }
-            try {
-              const response = await fetch(url);
-              if (!response.ok) {
-                throw new Error(`Impossible de charger le fragment ${url}`);
+        let placeholders = Array.from(document.querySelectorAll('[data-partial]'));
+
+        while (placeholders.length) {
+          await Promise.all(
+            placeholders.map(async (placeholder) => {
+              const url = placeholder.getAttribute('data-partial');
+              if (!url) {
+                return;
               }
-              const markup = await response.text();
-              placeholder.outerHTML = markup.trim();
-            } catch (error) {
-              console.error(error);
-            }
-          })
-        );
+
+              const base = placeholder.getAttribute('data-partial-base') ?? DEFAULT_PARTIAL_BASE;
+              const resolvedUrl = new URL(url, base).toString();
+
+              try {
+                const response = await fetch(resolvedUrl);
+                if (!response.ok) {
+                  throw new Error(`Impossible de charger le fragment ${resolvedUrl}`);
+                }
+
+                const markup = await response.text();
+                const template = document.createElement('template');
+                template.innerHTML = markup.trim();
+
+                const partialBase = resolvedUrl.slice(0, resolvedUrl.lastIndexOf('/') + 1);
+                template.content.querySelectorAll('[data-partial]').forEach((node) => {
+                  if (!node.hasAttribute('data-partial-base')) {
+                    node.setAttribute('data-partial-base', partialBase);
+                  }
+                });
+
+                placeholder.replaceWith(template.content);
+              } catch (error) {
+                console.error(error);
+                placeholder.removeAttribute('data-partial');
+              }
+            })
+          );
+
+          placeholders = Array.from(document.querySelectorAll('[data-partial]'));
+        }
       }
 
       if (document.readyState === 'loading') {
@@ -44,5 +67,6 @@
         loadPartials();
       }
     </script>
+    <script src="../dashboard.js" type="module"></script>
   </body>
 </html>
