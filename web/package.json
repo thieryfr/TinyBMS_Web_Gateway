@@ -1,0 +1,16 @@
+{
+  "name": "tinybms-web-gateway",
+  "version": "0.1.0",
+  "description": "Frontend assets for the TinyBMS Web Gateway dashboard.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"No build step defined\"",
+    "lint": "echo \"No lint command configured\""
+  },
+  "dependencies": {
+    "@tabler/core": "^1.0.0-beta20",
+    "@tabler/icons-webfont": "^3.19.0",
+    "echarts": "^5.5.0"
+  }
+}
