@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@tabler/core": "^1.0.0-beta20",
-    "@tabler/icons-webfont": "^3.19.0",
-    "echarts": "^5.5.0"
+    "@tabler/icons-webfont": "^3.19.0"
   }
 }
