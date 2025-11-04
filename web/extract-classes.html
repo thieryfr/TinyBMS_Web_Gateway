@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extracteur Tabler CSS - TinyBMS</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .step {
+            background: #e7f1ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0d6efd;
+        }
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .module-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .module-card.essential {
+            border-left: 4px solid #198754;
+        }
+        .module-card.conditional {
+            border-left: 4px solid #ffc107;
+        }
+        .module-card.remove {
+            border-left: 4px solid #dc3545;
+        }
+        .progress {
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #0d6efd;
+            transition: width 0.3s ease;
+        }
+        button {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0b5ed7;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #d1e7dd;
+            border-radius: 8px;
+            display: none;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Extracteur Tabler CSS - TinyBMS</h1>
+            <p>Outil d'extraction des classes CSS Tabler pour ESP32</p>
+        </div>
+
+        <div class="step">
+            <h3>📋 Étape 1: Modules à conserver/supprimer</h3>
+            <div class="modules-grid">
+                <div class="module-card essential">
+                    <strong>✅ Essentiels</strong>
+                    <ul>
+                        <li>bootstrap-grid</li>
+                        <li>utilities</li>
+                        <li>cards</li>
+                        <li>buttons</li>
+                        <li>forms</li>
+                        <li>navbar</li>
+                        <li>navs</li>
+                        <li>badges</li>
+                        <li>tables</li>
+                        <li>typography</li>
+                        <li>icons</li>
+                    </ul>
+                </div>
+                <div class="module-card conditional">
+                    <strong>⚠️ Conditionnels</strong>
+                    <ul>
+                        <li>accordion</li>
+                        <li>list-group</li>
+                    </ul>
+                </div>
+                <div class="module-card remove">
+                    <strong>❌ À supprimer</strong>
+                    <ul>
+                        <li>alerts</li>
+                        <li>breadcrumb</li>
+                        <li>carousel</li>
+                        <li>charts</li>
+                        <li>datepicker</li>
+                        <li>dropdown</li>
+                        <li>modal</li>
+                        <li>pagination</li>
+                        <li>progress</li>
+                        <li>toasts</li>
+                        <li>tooltips</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>📥 Étape 2: Télécharger Tabler CSS</h3>
+            <p>Collez le contenu de <code>tabler.min.css</code> ci-dessous :</p>
+            <textarea id="cssInput" placeholder="Collez le contenu de tabler.min.css ici..."></textarea>
+            <div style="margin-top: 10px;">
+                <button onclick="loadDefaultCSS()">Charger un exemple de structure</button>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>⚙️ Étape 3: Extraire les classes</h3>
+            <button id="extractBtn" onclick="extractCSS()" disabled>Extraire les classes Tabler</button>
+            <div class="progress">
+                <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="result" class="result">
+            <h3>📊 Résultats de l'extraction</h3>
+            <div class="stats">
+                <div class="stat-card">
+                    <div id="originalSize">0 KB</div>
+                    <small>Original</small>
+                </div>
+                <div class="stat-card">
+                    <div id="reducedSize">0 KB</div>
+                    <small>Réduit</small>
+                </div>
+                <div class="stat-card">
+                    <div id="reductionPercent">0%</div>
+                    <small>Réduction</small>
+                </div>
+                <div class="stat-card">
+                    <div id="rulesCount">0</div>
+                    <small>Règles CSS</small>
+                </div>
+            </div>
+            
+            <textarea id="cssOutput" readonly placeholder="Le CSS réduit apparaîtra ici..."></textarea>
+            
+            <div style="margin-top: 15px;">
+                <button onclick="downloadCSS()">📥 Télécharger tabler.reduit.css</button>
+                <button onclick="copyToClipboard()">📋 Copier dans le presse-papier</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mise à jour de l'état du bouton d'extraction
+        document.getElementById('cssInput').addEventListener('input', function() {
+            const extractBtn = document.getElementById('extractBtn');
+            extractBtn.disabled = this.value.trim().length === 0;
+        });
+
+        // Classes et modules à conserver
+        const MODULES_TO_KEEP = {
+            // Layout et Grid
+            'container': true, 'container-': true, 'row': true, 'col-': true, 'g-': true,
+            // Display et Flexbox
+            'd-': true, 'flex-': true, 'align-': true, 'justify-': true, 'gap-': true,
+            // Spacing
+            'm-': true, 'p-': true, 'mt-': true, 'mb-': true, 'ms-': true, 'me-': true,
+            // Cards
+            'card': true, 'card-': true,
+            // Navigation
+            'navbar': true, 'nav-': true, 'tabs': true,
+            // Buttons
+            'btn': true, 'btn-': true,
+            // Forms
+            'form-': true, 'invalid-': true,
+            // Badges
+            'badge': true, 'bg-': true, 'text-': true,
+            // Tables
+            'table': true, 'table-': true,
+            // Lists
+            'list-group': true,
+            // Accordion
+            'accordion': true,
+            // Typography
+            'fs-': true, 'fw-': true, 'display-': true, 'text-': true, 'h': true,
+            // Sizing
+            'w-': true, 'h-': true,
+            // Shadows
+            'shadow-': true,
+            // Position
+            'position-': true,
+            // Icons
+            'ti': true
+        };
+
+        // Modules à supprimer
+        const MODULES_TO_REMOVE = [
+            'alert', 'breadcrumb', 'carousel', 'chart', 'datepicker', 'dropdown',
+            'modal', 'pagination', 'progress', 'toast', 'tooltip', 'popover',
+            'offcanvas', 'placeholder', 'spinner', 'ratio', 'helpers', 'transitions'
+        ];
+
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+
+        function extractCSS() {
+            const originalCSS = document.getElementById('cssInput').value;
+            if (!originalCSS) return;
+
+            updateProgress(10);
+            
+            const lines = originalCSS.split('\n');
+            let extractedCSS = '';
+            let ruleCount = 0;
+            let inKeepRule = false;
+            let currentRule = '';
+
+            updateProgress(30);
+
+            // Extraire les règles CSS basées sur les sélecteurs à conserver
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                // Vérifier si c'est le début d'une règle CSS
+                if (line.includes('{') && !line.includes('}')) {
+                    const selector = line.split('{')[0].trim();
+                    
+                    // Vérifier si ce sélecteur doit être conservé
+                    const shouldKeep = shouldKeepSelector(selector);
+                    
+                    if (shouldKeep) {
+                        inKeepRule = true;
+                        currentRule = line + '\n';
+                        ruleCount++;
+                    } else {
+                        inKeepRule = false;
+                    }
+                } 
+                // Si on est dans une règle à conserver, ajouter la ligne
+                else if (inKeepRule) {
+                    currentRule += line + '\n';
+                    
+                    // Si c'est la fin de la règle, l'ajouter au résultat
+                    if (line.includes('}')) {
+                        extractedCSS += currentRule + '\n';
+                        inKeepRule = false;
+                        currentRule = '';
+                    }
+                }
+
+                // Mise à jour progressive de la barre
+                if (i % Math.floor(lines.length / 10) === 0) {
+                    updateProgress(30 + (i / lines.length) * 60);
+                }
+            }
+
+            updateProgress(95);
+
+            // Ajouter les variables CSS essentielles
+            extractedCSS = addEssentialVariables() + '\n\n' + extractedCSS;
+
+            // Afficher les résultats
+            document.getElementById('cssOutput').value = extractedCSS;
+            
+            // Calculer les statistiques
+            const originalSize = new Blob([originalCSS]).size;
+            const reducedSize = new Blob([extractedCSS]).size;
+            const reduction = ((originalSize - reducedSize) / originalSize * 100).toFixed(1);
+            
+            document.getElementById('originalSize').textContent = (originalSize / 1024).toFixed(1) + ' KB';
+            document.getElementById('reducedSize').textContent = (reducedSize / 1024).toFixed(1) + ' KB';
+            document.getElementById('reductionPercent').textContent = reduction + '%';
+            document.getElementById('rulesCount').textContent = ruleCount;
+            
+            document.getElementById('result').style.display = 'block';
+            updateProgress(100);
+        }
+
+        function shouldKeepSelector(selector) {
+            // Ignorer les media queries et keyframes pour l'instant
+            if (selector.startsWith('@') || selector.includes('*') || selector.includes('::')) {
+                return true; // On garde les media queries pour la responsivité
+            }
+            
+            // Vérifier les modules à supprimer
+            for (const module of MODULES_TO_REMOVE) {
+                if (selector.includes(module) && !selector.includes('accordion') && !selector.includes('list-group')) {
+                    return false;
+                }
+            }
+            
+            // Vérifier les sélecteurs à conserver
+            for (const keepPattern in MODULES_TO_KEEP) {
+                if (selector.includes(keepPattern)) {
+                    return true;
+                }
+            }
+            
+            // Garder les sélecteurs de base (html, body, etc.)
+            if (selector === 'html' || selector === 'body' || selector === ':root') {
+                return true;
+            }
+            
+            return false;
+        }
+
+        function addEssentialVariables() {
+            return `:root {
+  --tblr-primary: #206bc4;
+  --tblr-success: #2fb344;
+  --tblr-danger: #d63939;
+  --tblr-warning: #f76707;
+  --tblr-info: #4299e1;
+  --tblr-blue: #206bc4;
+  --tblr-cyan: #4299e1;
+  --tblr-green: #2fb344;
+  --tblr-orange: #f76707;
+  --tblr-font-sans-serif: "Segoe UI", system-ui, -apple-system, sans-serif;
+}`;
+        }
+
+        function downloadCSS() {
+            const css = document.getElementById('cssOutput').value;
+            const blob = new Blob([css], { type: 'text/css' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tabler.reduit.css';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function copyToClipboard() {
+            const output = document.getElementById('cssOutput');
+            output.select();
+            document.execCommand('copy');
+            alert('CSS copié dans le presse-papier !');
+        }
+
+        function loadDefaultCSS() {
+            // Structure exemple pour tester
+            const exampleCSS = `/* Exemple de structure Tabler CSS */
+.container { max-width: 1200px; }
+.row { display: flex; }
+.col-1 { width: 8.333333%; }
+.card { background: white; }
+.btn { display: inline-block; }
+.form-control { border: 1px solid #ccc; }
+/* ... autres règles ... */`;
+            
+            document.getElementById('cssInput').value = exampleCSS;
+            document.getElementById('extractBtn').disabled = false;
+        }
+    </script>
+</body>
+</html>
