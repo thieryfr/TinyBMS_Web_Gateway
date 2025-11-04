@@ -4,17 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TinyBMS Web Gateway</title>
-    <link rel="stylesheet" href="./assets/css/tabler.min.css" />
-    <link rel="stylesheet" href="./assets/tabler-icons.min.css" />
-    <link rel="stylesheet" href="./style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.common.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico" />
+
+    <!-- 1. Tabler CSS + Icons -->
+    <link rel="stylesheet" href="../assets/css/tabler.min.css" />
+    <link rel="stylesheet" href="../assets/css/tabler-icons.min.css" />
+
+    <!-- 2. Styles personnalisés (surchargent Tabler) -->
+    <link rel="stylesheet" href="../style.css" />
   </head>
   <body class="theme-dark">
     <div id="app" class="page">
-      <div data-partial="./src/layout/header.html"></div>
-      <div data-partial="./src/layout/main.html"></div>
+      <div data-partial="./layout/header.html"></div>
+      <div data-partial="./layout/main.html"></div>
     </div>
-    <script defer src="./assets/js/tabler.min.js"></script>
+
+    <!-- Tabler JS (composants UI) -->
+    <script defer src="../assets/js/tabler.min.js"></script>
+
+    <!-- Chargement des partials -->
     <script type="module">
       const DEFAULT_PARTIAL_BASE = document.baseURI;
 
@@ -25,18 +33,14 @@
           await Promise.all(
             placeholders.map(async (placeholder) => {
               const url = placeholder.getAttribute('data-partial');
-              if (!url) {
-                return;
-              }
+              if (!url) return;
 
               const base = placeholder.getAttribute('data-partial-base') ?? DEFAULT_PARTIAL_BASE;
               const resolvedUrl = new URL(url, base).toString();
 
               try {
                 const response = await fetch(resolvedUrl);
-                if (!response.ok) {
-                  throw new Error(`Impossible de charger le fragment ${resolvedUrl}`);
-                }
+                if (!response.ok) throw new Error(`Impossible de charger ${resolvedUrl}`);
 
                 const markup = await response.text();
                 const template = document.createElement('template');
@@ -59,6 +63,9 @@
 
           placeholders = Array.from(document.querySelectorAll('[data-partial]'));
         }
+
+        // Événement global : partials chargés
+        document.dispatchEvent(new CustomEvent('partials-loaded'));
       }
 
       if (document.readyState === 'loading') {
@@ -67,6 +74,8 @@
         loadPartials();
       }
     </script>
-    <script src="./dashboard.js" type="module"></script>
+
+    <!-- Dashboard : attend que les partials soient chargés -->
+    <script type="module" src="../dashboard.js"></script>
   </body>
 </html>
