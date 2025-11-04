@@ -1,0 +1,12 @@
+['02', '02em', '03', '04', '04em', '05', '05em', '08', '1', '12', '15', '18', '1rem', '2', '22', '25', 
+'25rem', '2rem', '2s', '3', '35', '35rem', '3s', '4', '4rem', '5', '55', '55rem', '5rem', '6', '65rem', 
+'6rem', '7', '75', '75rem', '85rem', '8rem', '95', '95rem', '9rem', 'active', 'app-header', 
+'avatar', 'branding', 'button', 'card', 'card-body', 'card-header', 'card-stats', 'card-title', 'checkbox', 
+'config-card', 'config-description', 'config-form-actions', 'config-form-grid', 'config-grid', 'config-header', 
+'config-header-actions', 'config-header-text', 'config-subheading', 'd-none', 'disabled', 'error', 'form-row', 
+'history-chart', 'mqtt-form', 'mqtt-layout', 'nav-item', 'nav-link', 'page', 'page-item', 'page-link', 'pagination', 
+'primary', 'row', 'row-cards', 'secondary', 'segmented-control', 'segmented-control-label', 'status-badge', 
+'status-badge--connected', 'status-badge--disconnected', 'status-badge--error', 'status-indicator', 'subtitle', 
+'success', 'tab-button', 'tab-panel', 'tabs', 'text-danger', 'text-success', 'theme-dark', 'timeline', 
+'timeline-compact', 'timeline-item', 'timeline-item-content', 'timeline-item-description', 'timeline-item-marker', 
+'timeline-item-time', 'timeline-item-title']
