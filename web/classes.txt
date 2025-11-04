@@ -25,13 +25,25 @@ Pour faire un inventaire précis des modules Tabler que tu utilises (basé sur l
 'timeline-compact', 'timeline-item', 'timeline-item-content', 'timeline-item-description', 'timeline-item-marker', 
 'timeline-item-time', 'timeline-item-title']
 
-Objetif: refactoring du fichier  web/assets/css/tabler.min.css pour ne garder que les classes necessaire dans le but de reduire la taille de ce fichiers sur notre ESP32 ESP-IDF
-Pour faire un inventaire précis des modules Tabler que tu utilises (basé sur les classes CSS dans ton HTML, partials et JS), j’ai besoin d’accéder au contenu réel des fichiers de ton répertoire web/. Le lien GitHub que tu fournis est une vue d’arbre (tree view), qui liste les fichiers/dossiers, mais sans leur contenu détaillé – et mon outil de browse n’a pas pu extraire assez d’infos utiles (seulement la structure basique, pas les classes CSS).
+Objetif: refactoring du fichier  "web/assets/css/tabler.min.css" pour ne garder que les classes necessaire dans le but de reduire la taille de "tabler.min.css" sur notre ESP32-CAN-X2 compilé sous ESP-IDF
+task:
+1- Faire un inventaire précis et exhaustif des modules Tabler basé sur les classes CSS.
+2- Fournir un fichier txt que je pourrais copier ici:
 
-•  fichiers:
+Lien GitHub:
+https://github.com/thieryfr/TinyBMS_Web_Gateway/tree/main/web
+
+Liste des fichiers dans leurs repertoires respectif:
+web/index.html
+web/dashboard.js
+web/style.css
 web/src/index.html
 web/src/layout/header.html
 web/src/layout/main.html
+web/src/js/charts/base.js
+web/src/js/charts/batteryCharts.js
+web/src/js/charts/canCharts.js
+web/src/js/charts/uartCharts.js
 web/src/components/configuration/index.html
 web/src/components/history/index.html
 web/src/components/mqtt/index.html
