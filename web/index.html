@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-partials-loaded="false">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="../assets/css/tabler.min.css" />
     <link rel="stylesheet" href="../assets/css/tabler-icons.min.css" />
 
-    <!-- 2. Styles personnalisés (surchargent Tabler) -->
+    <!-- 2. Styles personnalisés -->
     <link rel="stylesheet" href="../style.css" />
   </head>
   <body class="theme-dark">
@@ -19,7 +19,6 @@
       <div data-partial="./layout/main.html"></div>
     </div>
 
-    <!-- Tabler JS (composants UI) -->
     <script defer src="../assets/js/tabler.min.js"></script>
 
     <!-- Chargement des partials -->
@@ -64,7 +63,8 @@
           placeholders = Array.from(document.querySelectorAll('[data-partial]'));
         }
 
-        // Événement global : partials chargés
+        // Marque comme chargé + notifie
+        document.documentElement.dataset.partialsLoaded = 'true';
         document.dispatchEvent(new CustomEvent('partials-loaded'));
       }
 
@@ -75,7 +75,6 @@
       }
     </script>
 
-    <!-- Dashboard : attend que les partials soient chargés -->
     <script type="module" src="../dashboard.js"></script>
   </body>
 </html>
