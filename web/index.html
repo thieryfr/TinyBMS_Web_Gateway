@@ -63,7 +63,6 @@
           placeholders = Array.from(document.querySelectorAll('[data-partial]'));
         }
 
-        // Marque comme chargé + notifie
         document.documentElement.dataset.partialsLoaded = 'true';
         document.dispatchEvent(new CustomEvent('partials-loaded'));
       }
