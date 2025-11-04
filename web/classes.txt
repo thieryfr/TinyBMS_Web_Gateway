@@ -1,3 +1,17 @@
+Identifie les composants que tu utilises :
+	•  Regarde ton HTML/JS : Tu sembles utiliser des classes Tabler comme page, theme-dark, status-badge, tabs (tab-button, tab-panel), cards, badges, etc.
+	•  Dans src/scss/ui/ de Tabler, les modules sont séparés (ex. : _tabs.scss, _badges.scss, _cards.scss, _buttons.scss).
+	•  Liste tes besoins : Par exemple, si c’est basique (layout + UI elements), commence par importer seulement les essentials.
+4.  Customise le fichier principal SCSS :
+	•  Copie src/scss/tabler.scss vers un nouveau fichier, ex. : custom-tabler.scss (dans ton projet TinyBMS).
+	•  Édite-le pour importer seulement ce que tu veux. Exemple minimal (basé sur ton code) :
+
+Pour faire un inventaire précis des modules Tabler que tu utilises (basé sur les classes CSS dans ton HTML, partials et JS), j’ai besoin d’accéder au contenu réel des fichiers de ton répertoire web/. Le lien GitHub que tu fournis est une vue d’arbre (tree view), qui liste les fichiers/dossiers, mais sans leur contenu détaillé – et mon outil de browse n’a pas pu extraire assez d’infos utiles (seulement la structure basique, pas les classes CSS).
+
+•  Étape 1 (faite ci dessous) : Extraction des classes de index.html + dashboard.js + style.css.
+•  Étape 2 : Fournis-moi les partials de /layout/ (ex. : header.html, main.html) – ils contiennent probablement plus de classes (ex. : tables pour history, forms pour config/MQTT).
+•  Étape 3 : Une fois tout, je génère ton custom-tabler.scss exact et un script pour build/purge.
+
 ['02', '02em', '03', '04', '04em', '05', '05em', '08', '1', '12', '15', '18', '1rem', '2', '22', '25', 
 '25rem', '2rem', '2s', '3', '35', '35rem', '3s', '4', '4rem', '5', '55', '55rem', '5rem', '6', '65rem', 
 '6rem', '7', '75', '75rem', '85rem', '8rem', '95', '95rem', '9rem', 'active', 'app-header', 
@@ -10,3 +24,12 @@
 'success', 'tab-button', 'tab-panel', 'tabs', 'text-danger', 'text-success', 'theme-dark', 'timeline', 
 'timeline-compact', 'timeline-item', 'timeline-item-content', 'timeline-item-description', 'timeline-item-marker', 
 'timeline-item-time', 'timeline-item-title']
+
+Étape 2 : Fournis-moi les partials de /layout/ (ex. : header.html, main.html) – ils contiennent probablement plus de classes (ex. : tables pour history, forms pour config/MQTT).
+•  fichiers:
+web/src/index.html
+web/src/layout/header.html
+web/src/layout/main.html
+web/src/components/configuration/index.html
+web/src/components/history/index.html
+web/src/components/mqtt/index.html
