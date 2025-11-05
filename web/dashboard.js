@@ -328,6 +328,16 @@ function setupRealtimeViewControls() {
     setupGroup('can-view', 'can');
 }
 
+function refreshCanCharts() {
+    if (state.canRealtime.charts) {
+        state.canRealtime.charts.update({
+            rawFrames: state.canRealtime.frames.raw,
+            decodedFrames: state.canRealtime.frames.decoded,
+            filters: state.canRealtime.filters,
+        });
+    }
+}
+
 function setupCanFilters() {
     const source = document.getElementById('can-filter-source');
     if (source) {
@@ -809,7 +819,18 @@ function connectWebSocket(path, onMessage) {
 function handleTelemetryMessage(data) {
     state.telemetry = data;
     updateBatteryDisplay(data);
-    state.batteryCharts?.update(data);
+
+    // Map telemetry data to chart format
+    if (state.batteryCharts) {
+        state.batteryCharts.update({
+            voltage: data.pack_voltage_v,
+            current: data.pack_current_a,
+            soc: data.state_of_charge_pct,
+            soh: data.state_of_health_pct,
+            voltagesMv: data.cell_voltage_mv,
+            balancingStates: data.cell_balancing,
+        });
+    }
 }
 
 function handleEventMessage(data) {
@@ -829,7 +850,9 @@ function handleUartMessage(data) {
         addTimelineItem(state.uartRealtime.timeline.raw, data, 'raw');
     }
 
-    state.uartRealtime.charts?.update(state.uartRealtime.frames.raw);
+    if (state.uartRealtime.charts) {
+        state.uartRealtime.charts.update({ rawFrames: state.uartRealtime.frames.raw });
+    }
 }
 
 function handleCanMessage(data) {
@@ -842,7 +865,13 @@ function handleCanMessage(data) {
         addTimelineItem(state.canRealtime.timeline.raw, data, 'can');
     }
 
-    state.canRealtime.charts?.update(state.canRealtime.frames.raw, state.canRealtime.filters);
+    if (state.canRealtime.charts) {
+        state.canRealtime.charts.update({
+            rawFrames: state.canRealtime.frames.raw,
+            decodedFrames: state.canRealtime.frames.decoded,
+            filters: state.canRealtime.filters,
+        });
+    }
 }
 
 function addTimelineItem(timeline, data, type) {
