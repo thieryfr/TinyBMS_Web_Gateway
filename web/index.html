@@ -4,25 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TinyBMS Web Gateway</title>
-    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico" />
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
 
     <!-- 1. Tabler CSS + Icons -->
-    <link rel="stylesheet" href="../assets/css/tabler.min.css" />
-    <link rel="stylesheet" href="../assets/css/tabler-icons.min.css" />
+    <link rel="stylesheet" href="/assets/css/tabler.min.css" />
+    <link rel="stylesheet" href="/assets/css/tabler-icons.min.css" />
 
     <!-- 2. Styles personnalisés -->
-    <link rel="stylesheet" href="../style.css" />
-    
+    <link rel="stylesheet" href="/style.css" />
+
     <!-- 3. Echarts -->
-    <script src="../assets/js/echarts.simple.min.js" type="module"></script>
+    <script src="/assets/js/echarts.simple.min.js" type="module"></script>
   </head>
   <body class="theme-dark">
     <div id="app" class="page">
-      <div data-partial="./layout/header.html"></div>
-      <div data-partial="./layout/main.html"></div>
+      <div data-partial="/src/layout/header.html"></div>
+      <div data-partial="/src/layout/main.html"></div>
     </div>
 
-    <script defer src="../assets/js/tabler.min.js"></script>
+    <script defer src="/assets/js/tabler.min.js"></script>
 
     <!-- Chargement des partials -->
     <script type="module">
@@ -77,6 +77,6 @@
       }
     </script>
 
-    <script type="module" src="../dashboard.js"></script>
+    <script type="module" src="/dashboard.js"></script>
   </body>
 </html>
