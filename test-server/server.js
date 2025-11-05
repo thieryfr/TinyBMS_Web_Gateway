@@ -200,39 +200,123 @@ app.post('/api/ota', (req, res) => {
 });
 
 // ============================================================================
-// WebSocket Server
+// WebSocket Servers
 // ============================================================================
 
-const wss = new WebSocket.Server({ server, path: '/ws' });
+// Create separate WebSocket servers for each endpoint
+const wssTelemetry = new WebSocket.Server({ noServer: true });
+const wssEvents = new WebSocket.Server({ noServer: true });
+const wssUart = new WebSocket.Server({ noServer: true });
+const wssCan = new WebSocket.Server({ noServer: true });
 
-// Track WebSocket clients
-const clients = new Set();
+// Track clients for each WebSocket
+const telemetryClients = new Set();
+const eventClients = new Set();
+const uartClients = new Set();
+const canClients = new Set();
 
-wss.on('connection', (ws, req) => {
+// Handle WebSocket upgrade
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+
+  if (pathname === '/ws/telemetry') {
+    wssTelemetry.handleUpgrade(request, socket, head, (ws) => {
+      wssTelemetry.emit('connection', ws, request);
+    });
+  } else if (pathname === '/ws/events') {
+    wssEvents.handleUpgrade(request, socket, head, (ws) => {
+      wssEvents.emit('connection', ws, request);
+    });
+  } else if (pathname === '/ws/uart') {
+    wssUart.handleUpgrade(request, socket, head, (ws) => {
+      wssUart.emit('connection', ws, request);
+    });
+  } else if (pathname === '/ws/can') {
+    wssCan.handleUpgrade(request, socket, head, (ws) => {
+      wssCan.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// Telemetry WebSocket
+wssTelemetry.on('connection', (ws, req) => {
   const clientIp = req.socket.remoteAddress;
-  console.log(`[WebSocket] Client connected: ${clientIp}`);
+  console.log(`[WebSocket /ws/telemetry] Client connected: ${clientIp}`);
 
-  clients.add(ws);
+  telemetryClients.add(ws);
 
   // Send initial telemetry
-  ws.send(JSON.stringify({
-    type: 'telemetry',
-    data: telemetry.getSnapshot()
-  }));
+  ws.send(JSON.stringify(telemetry.getSnapshot()));
 
   ws.on('close', () => {
-    console.log(`[WebSocket] Client disconnected: ${clientIp}`);
-    clients.delete(ws);
+    console.log(`[WebSocket /ws/telemetry] Client disconnected: ${clientIp}`);
+    telemetryClients.delete(ws);
   });
 
   ws.on('error', (error) => {
-    console.error(`[WebSocket] Error: ${error.message}`);
-    clients.delete(ws);
+    console.error(`[WebSocket /ws/telemetry] Error: ${error.message}`);
+    telemetryClients.delete(ws);
+  });
+});
+
+// Events WebSocket
+wssEvents.on('connection', (ws, req) => {
+  const clientIp = req.socket.remoteAddress;
+  console.log(`[WebSocket /ws/events] Client connected: ${clientIp}`);
+
+  eventClients.add(ws);
+
+  ws.on('close', () => {
+    console.log(`[WebSocket /ws/events] Client disconnected: ${clientIp}`);
+    eventClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error(`[WebSocket /ws/events] Error: ${error.message}`);
+    eventClients.delete(ws);
+  });
+});
+
+// UART WebSocket
+wssUart.on('connection', (ws, req) => {
+  const clientIp = req.socket.remoteAddress;
+  console.log(`[WebSocket /ws/uart] Client connected: ${clientIp}`);
+
+  uartClients.add(ws);
+
+  ws.on('close', () => {
+    console.log(`[WebSocket /ws/uart] Client disconnected: ${clientIp}`);
+    uartClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error(`[WebSocket /ws/uart] Error: ${error.message}`);
+    uartClients.delete(ws);
+  });
+});
+
+// CAN WebSocket
+wssCan.on('connection', (ws, req) => {
+  const clientIp = req.socket.remoteAddress;
+  console.log(`[WebSocket /ws/can] Client connected: ${clientIp}`);
+
+  canClients.add(ws);
+
+  ws.on('close', () => {
+    console.log(`[WebSocket /ws/can] Client disconnected: ${clientIp}`);
+    canClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error(`[WebSocket /ws/can] Error: ${error.message}`);
+    canClients.delete(ws);
   });
 });
 
 /**
- * Broadcast event to all WebSocket clients
+ * Broadcast event to event WebSocket clients
  */
 function broadcastEvent(eventType, data) {
   const message = JSON.stringify({
@@ -241,7 +325,7 @@ function broadcastEvent(eventType, data) {
     timestamp: Date.now()
   });
 
-  clients.forEach(client => {
+  eventClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
     }
@@ -249,19 +333,56 @@ function broadcastEvent(eventType, data) {
 }
 
 /**
- * Broadcast telemetry to all clients
+ * Broadcast telemetry to telemetry clients
  */
 function broadcastTelemetry() {
   const snapshot = telemetry.getSnapshot();
+  const message = JSON.stringify(snapshot);
 
-  const message = JSON.stringify({
-    type: 'telemetry',
-    data: snapshot
-  });
-
-  clients.forEach(client => {
+  telemetryClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
+    }
+  });
+}
+
+/**
+ * Broadcast UART frame to UART clients
+ */
+function broadcastUartFrame() {
+  // Simulate UART frame
+  const frame = {
+    timestamp_ms: Date.now(),
+    raw: Array.from({ length: 8 }, () => Math.floor(Math.random() * 256)),
+    decoded: {
+      command: '0x03',
+      address: Math.floor(Math.random() * 256),
+      data: Array.from({ length: 4 }, () => Math.floor(Math.random() * 256))
+    }
+  };
+
+  uartClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(frame));
+    }
+  });
+}
+
+/**
+ * Broadcast CAN frame to CAN clients
+ */
+function broadcastCanFrame() {
+  // Simulate CAN frame
+  const frame = {
+    timestamp_ms: Date.now(),
+    id: Math.floor(Math.random() * 0x7FF),
+    data: Array.from({ length: 8 }, () => Math.floor(Math.random() * 256)),
+    dlc: 8
+  };
+
+  canClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(frame));
     }
   });
 }
@@ -301,6 +422,20 @@ setInterval(() => {
   broadcastEvent('notification', randomEvent);
 }, 30000);
 
+/**
+ * Broadcast UART frames at 2Hz
+ */
+setInterval(() => {
+  broadcastUartFrame();
+}, 500);
+
+/**
+ * Broadcast CAN frames at 10Hz
+ */
+setInterval(() => {
+  broadcastCanFrame();
+}, 100);
+
 // ============================================================================
 // Start Server
 // ============================================================================
@@ -312,10 +447,15 @@ server.listen(PORT, () => {
   console.log('='.repeat(60));
   console.log('');
   console.log(`  🌐 Web Interface:  http://localhost:${PORT}`);
-  console.log(`  📡 WebSocket:      ws://localhost:${PORT}/ws`);
   console.log(`  📁 Web Directory:  ${WEB_DIR}`);
   console.log('');
-  console.log('  Available Endpoints:');
+  console.log('  WebSocket Endpoints:');
+  console.log(`    📡 /ws/telemetry       - Battery telemetry (1Hz)`);
+  console.log(`    📡 /ws/events          - System events`);
+  console.log(`    📡 /ws/uart            - UART frames (2Hz)`);
+  console.log(`    📡 /ws/can             - CAN frames (10Hz)`);
+  console.log('');
+  console.log('  REST API Endpoints:');
   console.log('    GET  /api/status            - System status');
   console.log('    GET  /api/config            - Device config');
   console.log('    POST /api/config            - Update config');
