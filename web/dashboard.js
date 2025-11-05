@@ -1,8 +1,8 @@
 // dashboard.js
-import { BatteryRealtimeCharts } from './src/js/charts/batteryCharts.js';
-import { UartCharts } from './src/js/charts/uartCharts.js';
-import { CanCharts } from './src/js/charts/canCharts.js';
-import { initChart } from './src/js/charts/base.js';
+import { BatteryRealtimeCharts } from '/src/js/charts/batteryCharts.js';
+import { UartCharts } from '/src/js/charts/uartCharts.js';
+import { CanCharts } from '/src/js/charts/canCharts.js';
+import { initChart } from '/src/js/charts/base.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
