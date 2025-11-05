@@ -1,3 +1,6 @@
+// Get echarts from global scope (loaded via script tag)
+const echarts = window.echarts;
+
 const DEFAULT_THEME_NAME = 'tinybms-dark';
 let themeRegistered = false;
 
