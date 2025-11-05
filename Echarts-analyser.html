@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyseur complet de fonctions ECharts</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2980b9;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-color: #ecf0f1;
+            --dark-color: #2c3e50;
+            --text-color: #333;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        h1 {
+            color: var(--dark-color);
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+        }
+        
+        .upload-section {
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #bdc3c7;
+            border-radius: var(--border-radius);
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            background-color: #f8f9fa;
+        }
+        
+        .upload-area.dragover {
+            border-color: var(--primary-color);
+            background-color: #e8f4fc;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #bdc3c7;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background-color: #95a5a6;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #7f8c8d;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .results {
+            margin-top: 30px;
+        }
+        
+        .summary-card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 15px;
+            background-color: var(--light-color);
+            border-radius: var(--border-radius);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+        
+        .file-results {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        
+        .file-result {
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 20px;
+        }
+        
+        .file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        .file-name {
+            font-weight: bold;
+            color: var(--dark-color);
+            word-break: break-all;
+        }
+        
+        .function-count {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .function-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .function-item {
+            padding: 10px;
+            background-color: var(--light-color);
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--primary-color);
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .function-item.used {
+            border-left-color: var(--success-color);
+        }
+        
+        .function-item.unused {
+            border-left-color: #bdc3c7;
+            opacity: 0.6;
+        }
+        
+        .error {
+            color: var(--danger-color);
+            background-color: #fadbd8;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin: 10px 0;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom-color: var(--primary-color);
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .search-box {
+            margin-bottom: 15px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+        }
+        
+        .legend-color.used {
+            background-color: var(--success-color);
+        }
+        
+        .legend-color.unused {
+            background-color: #bdc3c7;
+        }
+        
+        @media (max-width: 768px) {
+            .stats {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .function-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Analyseur complet de fonctions ECharts</h1>
+            <p class="subtitle">Détecte toutes les fonctions ECharts utilisées dans vos fichiers JavaScript</p>
+        </header>
+        
+        <div class="upload-section">
+            <h2>Sélectionnez vos fichiers JavaScript</h2>
+            <p>Glissez-déposez vos fichiers ou cliquez pour parcourir</p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <p>Glissez-déposez vos fichiers JavaScript ici</p>
+                <p>ou</p>
+                <button class="btn" id="browseBtn">Parcourir les fichiers</button>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".js">
+            </div>
+            
+            <div id="fileList"></div>
+            
+            <div class="controls">
+                <button class="btn" id="analyzeBtn">
+                    <span class="btn-icon">🔍</span>
+                    Analyser les fichiers
+                </button>
+                <button class="btn btn-secondary" id="resetBtn">
+                    <span class="btn-icon">🔄</span>
+                    Réinitialiser
+                </button>
+            </div>
+        </div>
+        
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            <p>Analyse en cours... Cette opération peut prendre quelques minutes</p>
+        </div>
+        
+        <div id="results" class="results" style="display: none;">
+            <div class="tabs">
+                <div class="tab active" data-tab="summary">Résumé</div>
+                <div class="tab" data-tab="files">Fichiers analysés</div>
+                <div class="tab" data-tab="all-functions">Toutes les fonctions</div>
+            </div>
+            
+            <div class="tab-content active" id="summary-tab">
+                <div class="summary-card">
+                    <h2>Résumé de l'analyse</h2>
+                    <div class="stats" id="summaryStats"></div>
+                </div>
+                
+                <div class="summary-card">
+                    <h2>Fonctions les plus utilisées</h2>
+                    <div id="topFunctions"></div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="files-tab">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="fileSearch" placeholder="Rechercher un fichier...">
+                </div>
+                <div class="file-results" id="fileResults"></div>
+            </div>
+            
+            <div class="tab-content" id="all-functions-tab">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="functionSearch" placeholder="Rechercher une fonction...">
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color used"></div>
+                        <span>Fonction utilisée</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color unused"></div>
+                        <span>Fonction non utilisée</span>
+                    </div>
+                </div>
+                <div class="function-list" id="allFunctionsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Liste exhaustive de toutes les fonctions ECharts
+        const allEChartsFunctions = [
+            // Méthodes d'instance
+            'init', 'setOption', 'getOption', 'resize', 'dispatchAction', 
+            'on', 'off', 'getDataURL', 'getConnectedDataURL', 'getModel', 
+            'getViewOfComponentModel', 'getViewOfSeriesModel', 'clear', 
+            'dispose', 'isDisposed', 'showLoading', 'hideLoading', 
+            'getDom', 'getZr', 'getWidth', 'getHeight', 'getRenderedCanvas',
+            'getDevicePixelRatio', 'group', 'connect', 'disconnect',
+            'registerMap', 'getMap', 'registerTheme', 'graphic', 'registerPreprocessor',
+            
+            // Méthodes statiques
+            'registerTheme', 'registerMap', 'getMap', 'registerPreprocessor',
+            'registerPostInit', 'registerAction', 'registerCoordinateSystem',
+            'registerLayout', 'registerVisual', 'registerTransform',
+            'registerComponent', 'registerComponentModel', 'registerComponentView',
+            'registerSeries', 'registerSeriesModel', 'registerSeriesView',
+            'registerChart', 'registerProcessor', 'registerUpdateLifecycle',
+            'registerLoading', 'connect', 'disconnect', 'disconnect', 'extendComponentModel',
+            'extendComponentView', 'extendSeriesModel', 'extendSeriesView',
+            'parseJSON', 'getInstanceByDom', 'getAll', 'dispose',
+            
+            // Méthodes de composants graphiques
+            'getBoundingRect', 'contain', 'setStyle', 'getStyle', 'setShape', 'getShape',
+            'setClipPath', 'getClipPath', 'attr', 'getAnimation', 'stopAnimation',
+            'animate', 'animateTo', 'animateFrom', 'traverse', 'remove',
+            'add', 'insert', 'insertBefore', 'replace', 'replaceWith', 'getParent',
+            'getChildCount', 'getChildAt', 'getChildByName', 'getChildByIndex',
+            'eachChild', 'clone', 'isGroup', 'isImage', 'isText', 'isCircle', 'isSector',
+            'isRing', 'isPolygon', 'isPolyline', 'isRect', 'isLine', 'isBezierCurve',
+            'isArc', 'isCompoundPath', 'isIncremental', 'isPath',
+            
+            // Méthodes de séries
+            'getData', 'getRawData', 'getVisual', 'setVisual', 'getLayout', 'setLayout',
+            'getColor', 'isAnimationEnabled', 'enableAnimation', 'disableAnimation',
+            'isClickable', 'setClickable', 'isHoverable', 'setHoverable',
+            'getZ', 'setZ', 'getZlevel', 'setZlevel', 'getCoordinateSystem',
+            'getEncode', 'setEncode', 'getDimensions', 'getDimensionIndex',
+            'mapDimension', 'getStore', 'getItemVisual', 'setItemVisual',
+            'clearItemVisual', 'getItemLayout', 'setItemLayout', 'getItemModel',
+            'ensureDataIndex', 'convertDataIndex', 'convertSeriesIndex',
+            
+            // Méthodes d'axes
+            'getExtent', 'getTicks', 'getTicksCoords', 'getLabel', 'getFormattedLabel',
+            'getTickCoord', 'getTickCoords', 'getView', 'setRange', 'getRange',
+            'getMinorTicks', 'getMinorTickCoords', 'getSplitLine', 'getSplitArea',
+            'getAxisLine', 'getAxisTick', 'getAxisLabel',
+            
+            // Méthodes de tooltip
+            'showTip', 'hideTip', 'setContent', 'getContent', 'update', 'moveTo',
+            'getSize', 'getPosition', 'enterable', 'setEnterable', 'alwaysShowContent',
+            'setAlwaysShowContent', 'getOption', 'setOption', 'getComponent',
+            
+            // Méthodes de légende
+            'getData', 'getSelected', 'setSelected', 'toggleSelected', 'allSelected',
+            'select', 'unselect', 'toggleAll', 'getItem', 'getItemModel', 'getDataIndex',
+            'getSymbol', 'setSymbol', 'getFormattedLabel', 'getText', 'setText',
+            'getTextStyle', 'setTextStyle', 'getIcon', 'setIcon', 'getItemVisual',
+            'setItemVisual', 'getItemLayout', 'setItemLayout',
+            
+            // Méthodes de grid
+            'getRect', 'setRect', 'getPosition', 'setPosition', 'getSize', 'setSize',
+            'getBoundingRect', 'getViewRect', 'getGridArea', 'setGridArea',
+            
+            // Méthodes de dataZoom
+            'getRange', 'setRange', 'getMinValueSpan', 'setMinValueSpan',
+            'getMaxValueSpan', 'setMaxValueSpan', 'getMinSpan', 'setMinSpan',
+            'getMaxSpan', 'setMaxSpan', 'getOrient', 'setOrient', 'getThrottle',
+            'setThrottle', 'getFilterMode', 'setFilterMode', 'getStartValue',
+            'setStartValue', 'getEndValue', 'setEndValue', 'getStart', 'setStart',
+            'getEnd', 'setEnd',
+            
+            // Méthodes de visualMap
+            'getItemSymbol', 'setItemSymbol', 'getItemSize', 'setItemSize',
+            'getItemColor', 'setItemColor', 'getItemOpacity', 'setItemOpacity',
+            'getTargetSeries', 'setTargetSeries', 'getDimension', 'setDimension',
+            'getSelected', 'setSelected', 'getOutOfRange', 'setOutOfRange',
+            'getController', 'getVisual', 'setVisual', 'getValueState', 'getDataIndex',
+            'getDataValue', 'getVisualMeta', 'getColorMapper', 'getOpacityMapper',
+            
+            // Méthodes de timeline
+            'getData', 'getCurrentIndex', 'setCurrentIndex', 'getPlayState',
+            'setPlayState', 'play', 'stop', 'next', 'prev', 'getOption', 'setOption',
+            'getLabel', 'setLabel', 'getCheckpointStyle', 'setCheckpointStyle',
+            'getControlStyle', 'setControlStyle', 'getProgress', 'setProgress',
+            'getLineStyle', 'setLineStyle', 'getSymbol', 'setSymbol', 'getSymbolSize',
+            'setSymbolSize', 'getSymbolRotate', 'setSymbolRotate', 'getSymbolOffset',
+            'setSymbolOffset', 'getSymbolKeepAspect', 'setSymbolKeepAspect',
+            
+            // Méthodes de brush
+            'getBrushType', 'setBrushType', 'getBrushMode', 'setBrushMode',
+            'getTransformable', 'setTransformable', 'getBrushStyle', 'setBrushStyle',
+            'getZ', 'setZ', 'getZlevel', 'setZlevel', 'getBrushModel', 'getCoveredAreas',
+            'getPanelId', 'setPanelId', 'getAreas', 'setAreas', 'getBrushSelector',
+            'setBrushSelector', 'getBrushRange', 'setBrushRange'
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('fileInput');
+            const browseBtn = document.getElementById('browseBtn');
+            const uploadArea = document.getElementById('uploadArea');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const resultsDiv = document.getElementById('results');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const fileListDiv = document.getElementById('fileList');
+            const summaryStatsDiv = document.getElementById('summaryStats');
+            const topFunctionsDiv = document.getElementById('topFunctions');
+            const fileResultsDiv = document.getElementById('fileResults');
+            const allFunctionsListDiv = document.getElementById('allFunctionsList');
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            const fileSearchInput = document.getElementById('fileSearch');
+            const functionSearchInput = document.getElementById('functionSearch');
+            
+            let selectedFiles = [];
+            let analysisResults = null;
+            
+            // Événements
+            browseBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleFileDrop);
+            analyzeBtn.addEventListener('click', analyzeFiles);
+            resetBtn.addEventListener('click', resetAnalysis);
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabId = tab.getAttribute('data-tab');
+                    switchTab(tabId);
+                });
+            });
+            
+            fileSearchInput.addEventListener('input', filterFiles);
+            functionSearchInput.addEventListener('input', filterFunctions);
+            
+            function handleFileSelect(e) {
+                const files = Array.from(e.target.files);
+                addFiles(files);
+            }
+            
+            function handleDragOver(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            }
+            
+            function handleDragLeave(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+            }
+            
+            function handleFileDrop(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files).filter(file => 
+                    file.type === 'application/javascript' || file.name.endsWith('.js')
+                );
+                addFiles(files);
+            }
+            
+            function addFiles(files) {
+                selectedFiles = selectedFiles.concat(files);
+                updateFileList();
+            }
+            
+            function updateFileList() {
+                if (selectedFiles.length === 0) {
+                    fileListDiv.innerHTML = '<p>Aucun fichier sélectionné</p>';
+                    return;
+                }
+                
+                fileListDiv.innerHTML = `
+                    <h3>Fichiers sélectionnés (${selectedFiles.length})</h3>
+                    <ul>
+                        ${selectedFiles.map(file => `<li>${file.name}</li>`).join('')}
+                    </ul>
+                `;
+            }
+            
+            function analyzeFiles() {
+                if (selectedFiles.length === 0) {
+                    showError('Veuillez sélectionner au moins un fichier JavaScript.');
+                    return;
+                }
+                
+                // Réinitialiser les résultats précédents
+                resultsDiv.style.display = 'none';
+                loadingIndicator.style.display = 'block';
+                analyzeBtn.disabled = true;
+                
+                // Analyser chaque fichier
+                analyzeAllFiles(selectedFiles);
+            }
+            
+            function analyzeAllFiles(files) {
+                const promises = [];
+                
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    promises.push(analyzeFile(file));
+                }
+                
+                Promise.all(promises).then(results => {
+                    loadingIndicator.style.display = 'none';
+                    analyzeBtn.disabled = false;
+                    
+                    analysisResults = processResults(results);
+                    displayResults(analysisResults);
+                    resultsDiv.style.display = 'block';
+                }).catch(error => {
+                    loadingIndicator.style.display = 'none';
+                    analyzeBtn.disabled = false;
+                    showError('Erreur lors de l\'analyse des fichiers: ' + error.message);
+                });
+            }
+            
+            function analyzeFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        try {
+                            const content = e.target.result;
+                            const foundFunctions = [];
+                            
+                            // Rechercher toutes les fonctions ECharts dans le contenu
+                            allEChartsFunctions.forEach(func => {
+                                // Recherche des patterns d'utilisation courants
+                                const patterns = [
+                                    new RegExp(`\\.${func}\\(`, 'g'),
+                                    new RegExp(`\\b${func}\\(`, 'g'),
+                                    new RegExp(`\\[['"]${func}['"]\\]`, 'g'),
+                                    new RegExp(`['"]${func}['"]`, 'g')
+                                ];
+                                
+                                let count = 0;
+                                for (const pattern of patterns) {
+                                    const matches = content.match(pattern);
+                                    if (matches) {
+                                        count += matches.length;
+                                    }
+                                }
+                                
+                                if (count > 0) {
+                                    foundFunctions.push({
+                                        name: func,
+                                        count: count
+                                    });
+                                }
+                            });
+                            
+                            resolve({
+                                fileName: file.name,
+                                functions: foundFunctions,
+                                fileSize: file.size
+                            });
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    
+                    reader.onerror = function() {
+                        reject(new Error(`Erreur de lecture du fichier ${file.name}`));
+                    };
+                    
+                    reader.readAsText(file);
+                });
+            }
+            
+            function processResults(results) {
+                // Compter les fonctions globales
+                const globalFunctionCounts = {};
+                let totalFunctionsFound = 0;
+                let totalFilesWithECharts = 0;
+                
+                results.forEach(result => {
+                    if (result.functions.length > 0) {
+                        totalFilesWithECharts++;
+                        totalFunctionsFound += result.functions.length;
+                        
+                        result.functions.forEach(func => {
+                            if (!globalFunctionCounts[func.name]) {
+                                globalFunctionCounts[func.name] = 0;
+                            }
+                            globalFunctionCounts[func.name] += func.count;
+                        });
+                    }
+                });
+                
+                // Trier les fonctions par utilisation
+                const sortedFunctions = Object.entries(globalFunctionCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+                
+                // Identifier les fonctions non utilisées
+                const unusedFunctions = allEChartsFunctions.filter(func => 
+                    !globalFunctionCounts[func]
+                );
+                
+                return {
+                    fileResults: results,
+                    globalFunctionCounts,
+                    totalFunctionsFound,
+                    totalFilesWithECharts,
+                    sortedFunctions,
+                    unusedFunctions,
+                    totalFiles: results.length
+                };
+            }
+            
+            function displayResults(results) {
+                displaySummary(results);
+                displayFileResults(results.fileResults);
+                displayAllFunctions(results.globalFunctionCounts);
+            }
+            
+            function displaySummary(results) {
+                const { totalFiles, totalFilesWithECharts, totalFunctionsFound, sortedFunctions } = results;
+                
+                summaryStatsDiv.innerHTML = `
+                    <div class="stat">
+                        <div class="stat-value">${totalFiles}</div>
+                        <div class="stat-label">Fichiers analysés</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${totalFilesWithECharts}</div>
+                        <div class="stat-label">Fichiers avec ECharts</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${totalFunctionsFound}</div>
+                        <div class="stat-label">Fonctions trouvées</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${allEChartsFunctions.length}</div>
+                        <div class="stat-label">Fonctions ECharts totales</div>
+                    </div>
+                `;
+                
+                if (sortedFunctions.length > 0) {
+                    topFunctionsDiv.innerHTML = `
+                        <div class="function-list">
+                            ${sortedFunctions.map(([func, count]) => `
+                                <div class="function-item used">
+                                    ${func} (${count} utilisation${count > 1 ? 's' : ''})
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    topFunctionsDiv.innerHTML = '<p>Aucune fonction ECharts trouvée</p>';
+                }
+            }
+            
+            function displayFileResults(fileResults) {
+                fileResultsDiv.innerHTML = '';
+                
+                fileResults.forEach(result => {
+                    if (result.functions.length === 0) return;
+                    
+                    const fileResult = document.createElement('div');
+                    fileResult.className = 'file-result';
+                    fileResult.setAttribute('data-filename', result.fileName);
+                    
+                    fileResult.innerHTML = `
+                        <div class="file-header">
+                            <div class="file-name">${result.fileName}</div>
+                            <div class="function-count">${result.functions.length} fonction(s)</div>
+                        </div>
+                        <div class="function-list">
+                            ${result.functions.map(func => `
+                                <div class="function-item used">
+                                    ${func.name} (${func.count} utilisation${func.count > 1 ? 's' : ''})
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    
+                    fileResultsDiv.appendChild(fileResult);
+                });
+                
+                if (fileResultsDiv.children.length === 0) {
+                    fileResultsDiv.innerHTML = '<p>Aucun fichier ne contient de fonctions ECharts</p>';
+                }
+            }
+            
+            function displayAllFunctions(globalFunctionCounts) {
+                allFunctionsListDiv.innerHTML = '';
+                
+                allEChartsFunctions.forEach(func => {
+                    const isUsed = globalFunctionCounts[func];
+                    const count = isUsed ? globalFunctionCounts[func] : 0;
+                    
+                    const functionItem = document.createElement('div');
+                    functionItem.className = `function-item ${isUsed ? 'used' : 'unused'}`;
+                    functionItem.setAttribute('data-function', func);
+                    
+                    if (isUsed) {
+                        functionItem.textContent = `${func} (${count} utilisation${count > 1 ? 's' : ''})`;
+                    } else {
+                        functionItem.textContent = `${func} (non utilisée)`;
+                    }
+                    
+                    allFunctionsListDiv.appendChild(functionItem);
+                });
+            }
+            
+            function filterFiles() {
+                const searchTerm = fileSearchInput.value.toLowerCase();
+                const fileResults = document.querySelectorAll('.file-result');
+                
+                fileResults.forEach(result => {
+                    const fileName = result.getAttribute('data-filename').toLowerCase();
+                    if (fileName.includes(searchTerm)) {
+                        result.style.display = 'block';
+                    } else {
+                        result.style.display = 'none';
+                    }
+                });
+            }
+            
+            function filterFunctions() {
+                const searchTerm = functionSearchInput.value.toLowerCase();
+                const functionItems = document.querySelectorAll('#allFunctionsList .function-item');
+                
+                functionItems.forEach(item => {
+                    const functionName = item.getAttribute('data-function').toLowerCase();
+                    if (functionName.includes(searchTerm)) {
+                        item.style.display = 'block';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            }
+            
+            function switchTab(tabId) {
+                // Désactiver tous les onglets
+                tabs.forEach(tab => tab.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+                
+                // Activer l'onglet sélectionné
+                document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+            }
+            
+            function resetAnalysis() {
+                selectedFiles = [];
+                fileInput.value = '';
+                updateFileList();
+                resultsDiv.style.display = 'none';
+                analysisResults = null;
+            }
+            
+            function showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error';
+                errorDiv.textContent = message;
+                resultsDiv.appendChild(errorDiv);
+            }
+            
+            // Initialisation
+            updateFileList();
+        });
+    </script>
+</body>
+</html>
