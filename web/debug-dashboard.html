@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Dashboard.js</title>
+    <link rel="stylesheet" href="/assets/css/tabler.min.css">
+    <style>
+        body {
+            padding: 40px;
+            background: #1e1e2e;
+            color: #fff;
+            font-family: system-ui;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .success { background: #2d5f2e; }
+        .error { background: #5f2d2d; }
+        .warning { background: #5f4d2d; }
+        .info { background: #2d3e5f; }
+
+        .debug-section {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .debug-section h3 {
+            margin-top: 0;
+            color: #00a896;
+        }
+
+        .code {
+            background: #1e1e2e;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .test-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .test-list li {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+
+        .test-pass { background: #2d5f2e; }
+        .test-fail { background: #5f2d2d; }
+        .test-warn { background: #5f4d2d; }
+
+        .btn {
+            background: #00a896;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #008c7a;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Dashboard.js</h1>
+
+    <div id="status" class="status info">Préparation des tests...</div>
+
+    <div class="debug-section">
+        <h3>Actions de test</h3>
+        <button class="btn" onclick="runAllTests()">🔄 Relancer tous les tests</button>
+        <button class="btn" onclick="testModuleImport()">📦 Tester import des modules</button>
+        <button class="btn" onclick="clearLogs()">🗑️ Effacer les logs</button>
+    </div>
+
+    <div class="debug-section">
+        <h3>Tests de pré-requis</h3>
+        <ul id="test-results" class="test-list"></ul>
+    </div>
+
+    <div class="debug-section">
+        <h3>Console en temps réel</h3>
+        <div id="console-log" class="code"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>Informations détaillées</h3>
+        <div id="debug-info" class="code"></div>
+    </div>
+
+    <!-- Hidden DOM elements that dashboard.js expects -->
+    <div style="display: none;">
+        <div id="history-chart"></div>
+        <div id="battery-soc-gauge"></div>
+        <div id="uart-frames-chart"></div>
+        <div id="history-table-body"></div>
+        <div id="mqtt-messages-chart"></div>
+        <div id="battery-pack-sparkline"></div>
+        <div id="battery-cell-chart"></div>
+        <div id="can-heatmap-chart"></div>
+        <div id="can-throughput-chart"></div>
+        <div id="uart-timeline-raw"></div>
+        <div id="uart-timeline-decoded"></div>
+        <div id="can-timeline-raw"></div>
+        <div id="can-timeline-decoded"></div>
+    </div>
+
+    <!-- Load ECharts before dashboard.js -->
+    <script src="/assets/js/echarts.simple.min.js"></script>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const testResultsDiv = document.getElementById('test-results');
+        const debugInfoDiv = document.getElementById('debug-info');
+        const consoleLogDiv = document.getElementById('console-log');
+
+        let tests = [];
+        let debugInfo = [];
+        let consoleLog = [];
+
+        // Capture all console outputs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        console.log = function(...args) {
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+            consoleLog.push('[LOG] ' + new Date().toLocaleTimeString() + ' - ' + msg);
+            originalLog.apply(console, args);
+            updateConsole();
+        };
+
+        console.error = function(...args) {
+            const msg = args.map(a => {
+                if (a instanceof Error) return a.stack || a.message;
+                if (typeof a === 'object') return JSON.stringify(a, null, 2);
+                return String(a);
+            }).join(' ');
+            consoleLog.push('[ERROR] ' + new Date().toLocaleTimeString() + ' - ' + msg);
+            originalError.apply(console, args);
+            updateConsole();
+        };
+
+        console.warn = function(...args) {
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+            consoleLog.push('[WARN] ' + new Date().toLocaleTimeString() + ' - ' + msg);
+            originalWarn.apply(console, args);
+            updateConsole();
+        };
+
+        function addTest(name, passed, details) {
+            tests.push({ name, passed, details });
+            updateTests();
+        }
+
+        function addDebugInfo(info) {
+            debugInfo.push(info);
+            updateDebugInfo();
+        }
+
+        function updateTests() {
+            testResultsDiv.innerHTML = tests.map(test => {
+                const className = test.passed === 'warn' ? 'test-warn' : (test.passed ? 'test-pass' : 'test-fail');
+                const icon = test.passed === 'warn' ? '⚠️' : (test.passed ? '✅' : '❌');
+                return `<li class="${className}">
+                    ${icon} ${test.name}
+                    ${test.details ? '<br><small>' + test.details + '</small>' : ''}
+                </li>`;
+            }).join('');
+        }
+
+        function updateDebugInfo() {
+            debugInfoDiv.textContent = debugInfo.join('\n');
+        }
+
+        function updateConsole() {
+            consoleLogDiv.textContent = consoleLog.slice(-100).join('\n'); // Keep last 100 logs
+            consoleLogDiv.scrollTop = consoleLogDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            consoleLog = [];
+            updateConsole();
+        }
+
+        async function runAllTests() {
+            tests = [];
+            debugInfo = [];
+            statusDiv.className = 'status info';
+            statusDiv.textContent = '🔄 Tests en cours...';
+
+            console.log('=== Début des tests Dashboard.js ===');
+
+            // Test 1: ECharts disponible
+            if (typeof window.echarts !== 'undefined') {
+                addTest('ECharts chargé (window.echarts)', true, 'Version: ' + window.echarts.version);
+                addDebugInfo('✓ window.echarts disponible (version ' + window.echarts.version + ')');
+            } else {
+                addTest('ECharts chargé (window.echarts)', false, 'window.echarts is undefined');
+                addDebugInfo('✗ window.echarts n\'est pas disponible');
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ ECharts non chargé - arrêt des tests';
+                return;
+            }
+
+            // Test 2: Vérifier les méthodes ECharts nécessaires
+            const requiredEchartsMethods = ['init', 'registerTheme', 'connect', 'disconnect', 'dispose'];
+            const missingMethods = requiredEchartsMethods.filter(method => typeof window.echarts[method] !== 'function');
+            if (missingMethods.length === 0) {
+                addTest('Méthodes ECharts requises', true, 'Toutes présentes: ' + requiredEchartsMethods.join(', '));
+                addDebugInfo('✓ Toutes les méthodes ECharts requises sont disponibles');
+            } else {
+                addTest('Méthodes ECharts requises', false, 'Manquantes: ' + missingMethods.join(', '));
+                addDebugInfo('✗ Méthodes manquantes: ' + missingMethods.join(', '));
+            }
+
+            // Test 3: Vérifier les éléments DOM requis
+            const requiredElements = ['history-chart', 'battery-soc-gauge', 'uart-frames-chart', 'history-table-body', 'mqtt-messages-chart'];
+            const missingElements = requiredElements.filter(id => !document.getElementById(id));
+            if (missingElements.length === 0) {
+                addTest('Éléments DOM requis', true, requiredElements.length + ' éléments trouvés');
+                addDebugInfo('✓ Tous les éléments DOM requis sont présents');
+            } else {
+                addTest('Éléments DOM requis', 'warn', 'Manquants: ' + missingElements.join(', '));
+                addDebugInfo('⚠ Éléments DOM manquants: ' + missingElements.join(', '));
+            }
+
+            // Test 4: Vérifier que les scripts peuvent importer des modules
+            try {
+                const supportsModules = 'noModule' in HTMLScriptElement.prototype;
+                addTest('Support des modules ES6', supportsModules, 'Navigateur: ' + navigator.userAgent.split(' ').pop());
+                addDebugInfo(supportsModules ? '✓ Modules ES6 supportés' : '✗ Modules ES6 non supportés');
+            } catch (e) {
+                addTest('Support des modules ES6', false, e.message);
+                addDebugInfo('✗ Erreur vérification modules: ' + e.message);
+            }
+
+            // Test 5: Vérifier les propriétés ECharts détaillées
+            const echartsProps = Object.keys(window.echarts);
+            addDebugInfo('\nPropriétés ECharts (' + echartsProps.length + ' total):');
+            addDebugInfo(echartsProps.sort().join(', '));
+
+            // Test 6: Test d'import dynamique
+            console.log('Test import des modules dashboard.js...');
+            await testModuleImport();
+
+            console.log('=== Fin des tests ===');
+        }
+
+        async function testModuleImport() {
+            try {
+                // Test 1: Import de base.js
+                addTest('Import de base.js', 'info', 'Tentative...');
+                const baseModule = await import('/src/js/charts/base.js');
+                addTest('Import de base.js', true, 'Exports: ' + Object.keys(baseModule).join(', '));
+                addDebugInfo('✓ base.js importé avec succès');
+                addDebugInfo('  Exports: ' + Object.keys(baseModule).join(', '));
+
+                // Vérifier si echarts est exporté correctement
+                if (baseModule.echarts) {
+                    addTest('base.js exporte echarts', true, 'Version: ' + (baseModule.echarts.version || 'unknown'));
+                    addDebugInfo('✓ base.js exporte echarts correctement');
+                } else {
+                    addTest('base.js exporte echarts', false, 'echarts non exporté');
+                    addDebugInfo('✗ base.js n\'exporte pas echarts');
+                }
+
+                // Test 2: Import de batteryCharts.js
+                try {
+                    const batteryModule = await import('/src/js/charts/batteryCharts.js');
+                    addTest('Import de batteryCharts.js', true, 'Exports: ' + Object.keys(batteryModule).join(', '));
+                    addDebugInfo('✓ batteryCharts.js importé avec succès');
+                } catch (e) {
+                    addTest('Import de batteryCharts.js', false, e.message);
+                    addDebugInfo('✗ Erreur batteryCharts.js: ' + e.message);
+                    console.error('Erreur import batteryCharts:', e);
+                }
+
+                // Test 3: Import de dashboard.js
+                try {
+                    // Déclencher l'événement partials-loaded avant d'importer dashboard.js
+                    document.documentElement.dataset.partialsLoaded = 'true';
+
+                    console.log('Déclenchement de l\'événement partials-loaded...');
+                    document.dispatchEvent(new CustomEvent('partials-loaded'));
+
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    addTest('Import de dashboard.js', 'info', 'Tentative...');
+                    const dashboardModule = await import('/dashboard.js');
+                    addTest('Import de dashboard.js', true, 'Module chargé');
+                    addDebugInfo('✓ dashboard.js importé avec succès');
+
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ Tous les modules se chargent correctement!';
+                } catch (e) {
+                    addTest('Import de dashboard.js', false, e.message);
+                    addDebugInfo('✗ Erreur dashboard.js: ' + e.message);
+                    addDebugInfo('Stack: ' + (e.stack || 'N/A'));
+                    console.error('Erreur import dashboard:', e);
+
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ Erreur lors du chargement de dashboard.js';
+                }
+
+            } catch (e) {
+                addTest('Import des modules', false, e.message);
+                addDebugInfo('✗ Erreur import: ' + e.message);
+                addDebugInfo('Stack: ' + (e.stack || 'N/A'));
+                console.error('Erreur import modules:', e);
+
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Erreur lors des imports';
+            }
+        }
+
+        // Lancer les tests au chargement
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 100);
+        });
+
+        // Capturer les erreurs globales
+        window.addEventListener('error', (event) => {
+            console.error('Erreur globale:', event.error || event.message);
+            addDebugInfo('⚠ ERREUR GLOBALE: ' + (event.error ? event.error.message : event.message));
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Promise rejetée:', event.reason);
+            addDebugInfo('⚠ PROMISE REJETÉE: ' + (event.reason ? event.reason.message : event.reason));
+        });
+    </script>
+</body>
+</html>
