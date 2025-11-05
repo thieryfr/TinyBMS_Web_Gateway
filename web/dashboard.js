@@ -170,15 +170,22 @@ class MqttMessageChart {
                 series: [
                     {
                         name: 'Flux MQTT',
-                        type: 'funnel',
-                        left: '3%',
-                        width: '45%',
-                        minSize: '20%',
-                        maxSize: '100%',
-                        sort: 'descending',
-                        gap: 4,
-                        label: { position: 'inside', formatter: '{b}\n{c}' },
+                        type: 'pie',
+                        center: ['25%', '50%'],
+                        radius: ['30%', '65%'],
+                        label: {
+                            show: true,
+                            formatter: '{b}\n{c}',
+                            color: 'rgba(255,255,255,0.85)'
+                        },
                         itemStyle: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        },
                         data: [],
                     },
                     {
@@ -207,9 +214,9 @@ class MqttMessageChart {
 
         const total = this.data.reduce((sum, e) => sum + e.value, 0);
         const categories = this.data.map((e) => e.label);
-        const funnelData = this.data.map((e) => ({ name: e.label, value: e.value }));
+        const pieData = this.data.map((e) => ({ name: e.label, value: e.value }));
         const barData = this.data.map((e) => ({ name: e.label, value: e.value }));
-        const hasData = funnelData.length > 0;
+        const hasData = pieData.length > 0;
 
         const tooltipFormatter = (params) => {
             const name = params.name || params.data?.name || '';
@@ -224,7 +231,7 @@ class MqttMessageChart {
             {
                 tooltip: { formatter: tooltipFormatter },
                 yAxis: { data: categories },
-                series: [{ data: funnelData }, { data: barData }],
+                series: [{ data: pieData }, { data: barData }],
                 graphic: hasData
                     ? []
                     : [{
