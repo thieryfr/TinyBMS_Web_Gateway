@@ -222,11 +222,37 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- Hidden elements required by dashboard.js initialization -->
+                <div style="display: none;">
+                    <div id="history-chart"></div>
+                    <div id="battery-soc-gauge"></div>
+                    <div id="uart-frames-chart"></div>
+                    <div id="history-table-body"></div>
+                    <div id="mqtt-messages-chart"></div>
+                    <div id="battery-pack-sparkline"></div>
+                    <div id="battery-cell-chart"></div>
+                    <div id="can-heatmap-chart"></div>
+                    <div id="can-throughput-chart"></div>
+                </div>
             </div>
         </main>
     </div>
 
     <script defer src="/assets/js/tabler.min.js"></script>
+
+    <!-- Trigger partials-loaded event immediately since we don't use partials -->
+    <script>
+        // Mark partials as loaded immediately
+        document.documentElement.dataset.partialsLoaded = 'true';
+
+        // Also dispatch the event for good measure
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[Simple] Triggering partials-loaded event');
+            document.dispatchEvent(new CustomEvent('partials-loaded'));
+        });
+    </script>
+
     <script type="module" src="/dashboard.js"></script>
 </body>
 </html>
