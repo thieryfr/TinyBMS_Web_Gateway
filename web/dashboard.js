@@ -657,6 +657,321 @@ async function initialise() {
     connectWebSocket('/ws/can', handleCanMessage);
 }
 
+// === UTILITY FUNCTIONS ===
+
+function set(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function formatValue(value, suffix = '') {
+    if (!Number.isFinite(value)) return '--';
+    return value.toFixed(2) + suffix;
+}
+
+function formatDuration(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return '--';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}j ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+}
+
+// === API FUNCTIONS ===
+
+async function fetchStatus() {
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (data.battery) {
+            updateBatteryDisplay(data.battery);
+        }
+        return data;
+    } catch (error) {
+        console.error('[API] fetchStatus error:', error);
+        throw error;
+    }
+}
+
+async function fetchLiveHistory(limit = 120) {
+    try {
+        const res = await fetch(`/api/history?limit=${limit}`);
+        const data = await res.json();
+        state.liveHistory = data.entries || [];
+        if (state.historyChart) {
+            state.historyChart.setData(state.liveHistory);
+        }
+        return data;
+    } catch (error) {
+        console.error('[API] fetchLiveHistory error:', error);
+        throw error;
+    }
+}
+
+async function fetchRegisters() {
+    try {
+        const res = await fetch('/api/registers');
+        const data = await res.json();
+        if (data.registers) {
+            state.registers.clear();
+            data.registers.forEach(reg => {
+                state.registers.set(reg.address, reg);
+            });
+        }
+        return data;
+    } catch (error) {
+        console.error('[API] fetchRegisters error:', error);
+        throw error;
+    }
+}
+
+async function fetchConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        state.config.last = data;
+        return data;
+    } catch (error) {
+        console.error('[API] fetchConfig error:', error);
+        throw error;
+    }
+}
+
+async function fetchHistoryArchives() {
+    try {
+        const res = await fetch('/api/history/files');
+        const data = await res.json();
+        state.archives = data.files || [];
+        return data;
+    } catch (error) {
+        console.error('[API] fetchHistoryArchives error:', error);
+        throw error;
+    }
+}
+
+// === WEB SOCKETS ===
+
+function connectWebSocket(path, onMessage) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${protocol}//${window.location.host}${path}`;
+
+    console.log(`[WebSocket] Connecting to ${url}...`);
+
+    const ws = new WebSocket(url);
+
+    ws.onopen = () => {
+        console.log(`[WebSocket] Connected to ${path}`);
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            onMessage(data);
+        } catch (error) {
+            console.error(`[WebSocket ${path}] Parse error:`, error);
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error(`[WebSocket ${path}] Error:`, error);
+    };
+
+    ws.onclose = () => {
+        console.log(`[WebSocket ${path}] Disconnected. Reconnecting in 3s...`);
+        setTimeout(() => connectWebSocket(path, onMessage), 3000);
+    };
+
+    return ws;
+}
+
+function handleTelemetryMessage(data) {
+    state.telemetry = data;
+    updateBatteryDisplay(data);
+    state.batteryCharts?.update(data);
+}
+
+function handleEventMessage(data) {
+    console.log('[Event]', data);
+    if (data.type === 'notification') {
+        // Handle notifications
+    }
+}
+
+function handleUartMessage(data) {
+    state.uartRealtime.frames.raw.push(data);
+    if (state.uartRealtime.frames.raw.length > MAX_STORED_FRAMES) {
+        state.uartRealtime.frames.raw.shift();
+    }
+
+    if (state.uartRealtime.timeline.raw) {
+        addTimelineItem(state.uartRealtime.timeline.raw, data, 'raw');
+    }
+
+    state.uartRealtime.charts?.update(state.uartRealtime.frames.raw);
+}
+
+function handleCanMessage(data) {
+    state.canRealtime.frames.raw.push(data);
+    if (state.canRealtime.frames.raw.length > MAX_STORED_FRAMES) {
+        state.canRealtime.frames.raw.shift();
+    }
+
+    if (state.canRealtime.timeline.raw) {
+        addTimelineItem(state.canRealtime.timeline.raw, data, 'can');
+    }
+
+    state.canRealtime.charts?.update(state.canRealtime.frames.raw, state.canRealtime.filters);
+}
+
+function addTimelineItem(timeline, data, type) {
+    const item = document.createElement('li');
+    item.className = 'timeline-item';
+    item.innerHTML = `
+        <div class="timeline-time">${new Date(data.timestamp_ms || Date.now()).toLocaleTimeString()}</div>
+        <div class="timeline-content">
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+        </div>
+    `;
+    timeline.insertBefore(item, timeline.firstChild);
+
+    // Keep only MAX_TIMELINE_ITEMS
+    while (timeline.children.length > MAX_TIMELINE_ITEMS) {
+        timeline.removeChild(timeline.lastChild);
+    }
+}
+
+// === BATTERY DISPLAY ===
+
+function updateBatteryDisplay(data) {
+    if (!data) return;
+
+    // Update voltage
+    set('battery-voltage', formatValue(data.pack_voltage_v, ' V'));
+    set('battery-minmax', `min ${data.min_cell_mv || 0} mV • max ${data.max_cell_mv || 0} mV`);
+
+    // Update current
+    set('battery-current', formatValue(data.pack_current_a, ' A'));
+    set('battery-balancing', `Équilibrage: ${data.balancing_bits > 0 ? 'Actif' : 'Inactif'}`);
+
+    // Update SOC/SOH
+    set('battery-soc', formatValue(data.state_of_charge_pct, '%'));
+    set('battery-soh', formatValue(data.state_of_health_pct, '%'));
+
+    // Update temperatures
+    set('battery-temperature', formatValue(data.average_temperature_c, ' °C'));
+    set('battery-temp-extra', `MOSFET: ${formatValue(data.mosfet_temperature_c, ' °C')}`);
+
+    // Update system info
+    const sysInfo = document.getElementById('battery-system-info');
+    if (sysInfo) {
+        sysInfo.innerHTML = `
+            <dt>Uptime</dt><dd>${formatDuration(data.uptime_seconds * 1000)}</dd>
+            <dt>Cycles</dt><dd>${data.cycle_count || 0}</dd>
+            <dt>Capacité</dt><dd>${data.battery_capacity_ah || 0} Ah</dd>
+        `;
+    }
+
+    // Update cell voltages table
+    updateCellVoltages(data.cell_voltage_mv, data.cell_balancing);
+
+    // Update registers
+    updateRegisters(data.registers || []);
+
+    // Update alarms/warnings
+    updateAlarmsWarnings(data.alarm_bits, data.warning_bits);
+}
+
+function updateCellVoltages(voltages, balancing) {
+    if (!voltages || !Array.isArray(voltages)) return;
+
+    const summary = document.getElementById('battery-cell-summary');
+    if (summary) {
+        const min = Math.min(...voltages);
+        const max = Math.max(...voltages);
+        const diff = max - min;
+        summary.textContent = `Δ ${diff} mV (${min} — ${max} mV)`;
+    }
+
+    // Update balancing badges
+    const badges = document.getElementById('battery-balancing-badges');
+    if (badges && balancing) {
+        badges.innerHTML = '';
+        balancing.forEach((active, index) => {
+            if (active) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-warning';
+                badge.textContent = `C${index + 1}`;
+                badges.appendChild(badge);
+            }
+        });
+        if (badges.children.length === 0) {
+            badges.innerHTML = '<span class="text-muted">Aucune cellule en équilibrage</span>';
+        }
+    }
+}
+
+function updateRegisters(registers) {
+    const tbody = document.getElementById('battery-registers');
+    if (!tbody || !Array.isArray(registers) || registers.length === 0) return;
+
+    tbody.innerHTML = registers.map(reg => `
+        <tr>
+            <td>0x${reg.address?.toString(16).padStart(2, '0').toUpperCase() || '??'}</td>
+            <td>0x${reg.value?.toString(16).padStart(4, '0').toUpperCase() || '????'}</td>
+        </tr>
+    `).join('');
+}
+
+function updateAlarmsWarnings(alarms, warnings) {
+    const alarmsDiv = document.getElementById('battery-alarms');
+    const warningsDiv = document.getElementById('battery-warnings');
+
+    if (alarmsDiv) {
+        if (!alarms || alarms === 0) {
+            alarmsDiv.innerHTML = '<div class="list-group-item text-muted">Aucune alarme</div>';
+        } else {
+            alarmsDiv.innerHTML = '<div class="list-group-item text-danger">Alarme active</div>';
+        }
+    }
+
+    if (warningsDiv) {
+        if (!warnings || warnings === 0) {
+            warningsDiv.innerHTML = '<div class="list-group-item text-muted">Aucun avertissement</div>';
+        } else {
+            warningsDiv.innerHTML = '<div class="list-group-item text-warning">Avertissement actif</div>';
+        }
+    }
+}
+
+// === TAB NAVIGATION ===
+
+function setupTabs() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.getAttribute('data-tab');
+
+            // Remove active class from all buttons and panels
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanels.forEach(panel => panel.classList.remove('active'));
+
+            // Add active class to clicked button and corresponding panel
+            button.classList.add('active');
+            const panel = document.getElementById(`tab-${tabId}`);
+            if (panel) {
+                panel.classList.add('active');
+            }
+        });
+    });
+}
+
 // === ATTENTE DES PARTIALS ===
 function waitForPartials() {
     if (document.documentElement.dataset.partialsLoaded === 'true') {

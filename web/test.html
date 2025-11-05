@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Server</title>
+    <style>
+        body {
+            background: #1e1e2e;
+            color: white;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #2d5; }
+        .error { background: #d25; }
+        pre { background: #2a2a3a; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>TinyBMS Test Server</h1>
+    <div id="status"></div>
+    <button onclick="testAPI()">Test API</button>
+    <button onclick="testWebSocket()">Test WebSocket</button>
+    <pre id="output"></pre>
+
+    <script>
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+
+        function log(msg) {
+            output.textContent += new Date().toLocaleTimeString() + ' - ' + msg + '\n';
+        }
+
+        async function testAPI() {
+            try {
+                log('Testing /api/status...');
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                log('✓ API works! SOC: ' + data.battery.state_of_charge_pct + '%');
+                status.innerHTML = '<div class="status success">API: OK</div>';
+            } catch (e) {
+                log('✗ API failed: ' + e.message);
+                status.innerHTML = '<div class="status error">API: FAILED</div>';
+            }
+        }
+
+        function testWebSocket() {
+            try {
+                log('Connecting to /ws/telemetry...');
+                const ws = new WebSocket('ws://localhost:3000/ws/telemetry');
+
+                ws.onopen = () => {
+                    log('✓ WebSocket connected!');
+                    status.innerHTML += '<div class="status success">WebSocket: CONNECTED</div>';
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    log('✓ Received data: ' + JSON.stringify(data).substring(0, 100) + '...');
+                };
+
+                ws.onerror = (error) => {
+                    log('✗ WebSocket error: ' + error);
+                    status.innerHTML += '<div class="status error">WebSocket: ERROR</div>';
+                };
+            } catch (e) {
+                log('✗ WebSocket failed: ' + e.message);
+            }
+        }
+
+        // Auto-test on load
+        window.onload = () => {
+            log('Page loaded');
+            testAPI();
+            setTimeout(testWebSocket, 1000);
+        };
+    </script>
+</body>
+</html>
