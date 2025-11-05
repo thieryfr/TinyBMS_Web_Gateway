@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Tabler Icons</title>
+    <link rel="stylesheet" href="/assets/css/tabler.min.css">
+    <link rel="stylesheet" href="/assets/css/tabler-icons.min.css">
+    <style>
+        body {
+            padding: 40px;
+            background: #1e1e2e;
+            color: #fff;
+            font-family: system-ui;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .icon-test {
+            padding: 20px;
+            background: #2a2a3e;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .icon-test i {
+            font-size: 48px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .success { background: #2d5f2e; }
+        .error { background: #5f2d2d; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test des icônes Tabler</h1>
+
+    <div id="status" class="status">Chargement...</div>
+
+    <h2>Icônes principales de l'interface</h2>
+    <div class="test-grid">
+        <div class="icon-test">
+            <i class="ti ti-battery"></i>
+            <div>battery</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-bolt"></i>
+            <div>bolt</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-current-ac"></i>
+            <div>current-ac</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-temperature"></i>
+            <div>temperature</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-alert-triangle"></i>
+            <div>alert-triangle</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-alert-circle"></i>
+            <div>alert-circle</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-info-circle"></i>
+            <div>info-circle</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-terminal-2"></i>
+            <div>terminal-2</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-antenna-bars-5"></i>
+            <div>antenna-bars-5</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-settings-code"></i>
+            <div>settings-code</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-device-analytics"></i>
+            <div>device-analytics</div>
+        </div>
+        <div class="icon-test">
+            <i class="ti ti-chart-line"></i>
+            <div>chart-line</div>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('load', () => {
+            // Vérifier si les fonts sont chargées
+            const statusDiv = document.getElementById('status');
+
+            // Vérifier si la font tabler-icons est disponible
+            setTimeout(() => {
+                const testIcon = document.querySelector('.ti');
+                const computedFont = window.getComputedStyle(testIcon).fontFamily;
+
+                console.log('Font family:', computedFont);
+
+                if (computedFont.includes('tabler-icons')) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ Police Tabler Icons chargée avec succès ! Font: ' + computedFont;
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ Police Tabler Icons non chargée. Font actuelle: ' + computedFont;
+                }
+
+                // Afficher les infos des fichiers
+                console.log('Font files should be at:');
+                console.log('- /assets/css/fonts/tabler-icons.woff2');
+                console.log('- /assets/css/fonts/tabler-icons.woff');
+                console.log('- /assets/css/fonts/tabler-icons.ttf');
+            }, 500);
+        });
+    </script>
+</body>
+</html>
