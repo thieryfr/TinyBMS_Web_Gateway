@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TinyBMS - Test Simple</title>
+    <link rel="stylesheet" href="/assets/css/tabler.min.css" />
+    <link rel="stylesheet" href="/assets/css/tabler-icons.min.css" />
+    <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="theme-dark">
+    <div class="page">
+        <header class="navbar navbar-dark app-header">
+            <div class="container-xl">
+                <h1 class="navbar-brand">🔋 TinyBMS - Version Simplifiée</h1>
+            </div>
+        </header>
+
+        <main class="page-body">
+            <div class="container-xl">
+                <!-- Status Cards -->
+                <div class="row row-cards g-3 mb-4">
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-lg bg-primary-lt me-3">
+                                        <i class="ti ti-bolt"></i>
+                                    </span>
+                                    <div>
+                                        <div class="text-secondary">Tension pack</div>
+                                        <div class="h2 mb-0" id="voltage">-- V</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-lg bg-warning-lt me-3">
+                                        <i class="ti ti-current-ac"></i>
+                                    </span>
+                                    <div>
+                                        <div class="text-secondary">Courant pack</div>
+                                        <div class="h2 mb-0" id="current">-- A</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-lg bg-success-lt me-3">
+                                        <i class="ti ti-battery-charging"></i>
+                                    </span>
+                                    <div>
+                                        <div class="text-secondary">État de charge</div>
+                                        <div class="h2 mb-0" id="soc">-- %</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-lg bg-danger-lt me-3">
+                                        <i class="ti ti-temperature"></i>
+                                    </span>
+                                    <div>
+                                        <div class="text-secondary">Température</div>
+                                        <div class="h2 mb-0" id="temp">-- °C</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Details -->
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Données Détaillées</h3>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tr><th>Voltage min</th><td id="min-cell">-- mV</td></tr>
+                                    <tr><th>Voltage max</th><td id="max-cell">-- mV</td></tr>
+                                    <tr><th>SOH</th><td id="soh">-- %</td></tr>
+                                    <tr><th>Équilibrage</th><td id="balancing">--</td></tr>
+                                    <tr><th>Cycles</th><td id="cycles">--</td></tr>
+                                    <tr><th>Capacité</th><td id="capacity">-- Ah</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Cellules (16)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="cells" class="d-flex flex-wrap gap-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Log -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h3 class="card-title">Console de Debug</h3>
+                    </div>
+                    <div class="card-body">
+                        <pre id="console" style="max-height: 200px; overflow-y: auto; font-size: 11px;"></pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Simple logging
+        const consoleDiv = document.getElementById('console');
+        function log(msg) {
+            const time = new Date().toLocaleTimeString();
+            consoleDiv.textContent = `[${time}] ${msg}\n` + consoleDiv.textContent;
+            console.log(msg);
+        }
+
+        log('Page chargée');
+
+        // Update functions
+        function updateDisplay(data) {
+            try {
+                document.getElementById('voltage').textContent = (data.pack_voltage_v || 0).toFixed(2) + ' V';
+                document.getElementById('current').textContent = (data.pack_current_a || 0).toFixed(2) + ' A';
+                document.getElementById('soc').textContent = (data.state_of_charge_pct || 0).toFixed(1) + ' %';
+                document.getElementById('temp').textContent = (data.average_temperature_c || 0).toFixed(1) + ' °C';
+
+                document.getElementById('min-cell').textContent = (data.min_cell_mv || 0) + ' mV';
+                document.getElementById('max-cell').textContent = (data.max_cell_mv || 0) + ' mV';
+                document.getElementById('soh').textContent = (data.state_of_health_pct || 0).toFixed(1) + ' %';
+                document.getElementById('balancing').textContent = data.balancing_bits > 0 ? 'Actif' : 'Inactif';
+                document.getElementById('cycles').textContent = data.cycle_count || 0;
+                document.getElementById('capacity').textContent = (data.battery_capacity_ah || 0) + ' Ah';
+
+                // Update cells
+                const cellsDiv = document.getElementById('cells');
+                if (data.cell_voltage_mv && data.cell_voltage_mv.length > 0) {
+                    cellsDiv.innerHTML = data.cell_voltage_mv.map((mv, i) =>
+                        `<span class="badge bg-blue-lt">C${i+1}: ${mv}mV</span>`
+                    ).join('');
+                }
+
+                log(`Données mises à jour: SOC ${data.state_of_charge_pct}%`);
+            } catch (e) {
+                log('Erreur updateDisplay: ' + e.message);
+            }
+        }
+
+        // Test API first
+        async function testAPI() {
+            try {
+                log('Test API /api/status...');
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                log('✓ API fonctionne');
+
+                if (data.battery) {
+                    updateDisplay(data.battery);
+                }
+            } catch (e) {
+                log('✗ Erreur API: ' + e.message);
+            }
+        }
+
+        // Connect WebSocket
+        function connectWS() {
+            try {
+                const ws = new WebSocket('ws://localhost:3000/ws/telemetry');
+
+                ws.onopen = () => {
+                    log('✓ WebSocket connecté');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateDisplay(data);
+                    } catch (e) {
+                        log('✗ Erreur parse WS: ' + e.message);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    log('✗ Erreur WebSocket: ' + error);
+                };
+
+                ws.onclose = () => {
+                    log('WebSocket fermé, reconnexion dans 3s...');
+                    setTimeout(connectWS, 3000);
+                };
+            } catch (e) {
+                log('✗ Erreur connectWS: ' + e.message);
+            }
+        }
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            log('DOM ready');
+            testAPI();
+            setTimeout(connectWS, 1000);
+        });
+    </script>
+</body>
+</html>
