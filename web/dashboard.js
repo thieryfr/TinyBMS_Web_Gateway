@@ -754,18 +754,6 @@ async function fetchHistoryArchives() {
     }
 }
 
-async function fetchMqttConfig() {
-    try {
-        const res = await fetch('/api/mqtt/config');
-        const data = await res.json();
-        state.mqtt.lastConfig = data;
-        return data;
-    } catch (error) {
-        console.error('[API] fetchMqttConfig error:', error);
-        throw error;
-    }
-}
-
 // === SETUP FUNCTIONS (STUBS) ===
 
 function setupHistoryControls() {
@@ -781,16 +769,6 @@ function updateArchiveControls() {
 function setupConfigTab() {
     console.log('[Setup] Config tab initialized');
     // Stub for now - config tab setup would go here
-}
-
-function setupRealtimeViewControls() {
-    console.log('[Setup] Realtime view controls initialized');
-    // Stub for now - realtime view controls setup would go here
-}
-
-function setupCanFilters() {
-    console.log('[Setup] CAN filters initialized');
-    // Stub for now - CAN filter setup would go here
 }
 
 // === WEB SOCKETS ===
