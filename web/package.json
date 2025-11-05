@@ -5,14 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:echarts",
-    "build:echarts": "rollup -c rollup.config.js",
     "lint": "echo \"No lint command configured\""
   },
-  "devDependencies": {
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.4",
-    "echarts": "^5.5.1",
-    "rollup": "^4.21.0"
-  }
+  "devDependencies": {}
 }
