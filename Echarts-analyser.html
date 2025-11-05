@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyseur complet de fonctions ECharts</title>
+    <title>Analyseur complet ECharts - Fonctions et Modules</title>
     <style>
         :root {
             --primary-color: #3498db;
@@ -34,7 +34,7 @@
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         
@@ -228,26 +228,43 @@
             font-size: 0.9rem;
         }
         
-        .function-list {
+        .module-count {
+            background-color: var(--success-color);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-left: 8px;
+        }
+        
+        .function-list, .module-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 10px;
+            margin-bottom: 15px;
         }
         
-        .function-item {
+        .function-item, .module-item {
             padding: 10px;
             background-color: var(--light-color);
             border-radius: var(--border-radius);
-            border-left: 4px solid var(--primary-color);
             font-family: monospace;
             font-size: 0.9rem;
         }
         
-        .function-item.used {
+        .function-item {
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .module-item {
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .function-item.used, .module-item.used {
             border-left-color: var(--success-color);
         }
         
-        .function-item.unused {
+        .function-item.unused, .module-item.unused {
             border-left-color: #bdc3c7;
             opacity: 0.6;
         }
@@ -264,12 +281,14 @@
             display: flex;
             margin-bottom: 20px;
             border-bottom: 1px solid #ddd;
+            flex-wrap: wrap;
         }
         
         .tab {
             padding: 10px 20px;
             cursor: pointer;
             border-bottom: 3px solid transparent;
+            white-space: nowrap;
         }
         
         .tab.active {
@@ -318,6 +337,14 @@
             border-radius: 3px;
         }
         
+        .legend-color.function {
+            background-color: var(--primary-color);
+        }
+        
+        .legend-color.module {
+            background-color: var(--success-color);
+        }
+        
         .legend-color.used {
             background-color: var(--success-color);
         }
@@ -326,12 +353,57 @@
             background-color: #bdc3c7;
         }
         
+        .section-title {
+            margin: 20px 0 10px 0;
+            color: var(--dark-color);
+            font-size: 1.2rem;
+        }
+        
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .module-card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .module-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .module-name {
+            font-weight: bold;
+            color: var(--dark-color);
+        }
+        
+        .module-count {
+            background-color: var(--success-color);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+        
         @media (max-width: 768px) {
             .stats {
                 grid-template-columns: 1fr 1fr;
             }
             
-            .function-list {
+            .function-list, .module-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .modules-grid {
                 grid-template-columns: 1fr;
             }
             
@@ -342,14 +414,18 @@
             .btn {
                 width: 100%;
             }
+            
+            .tabs {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Analyseur complet de fonctions ECharts</h1>
-            <p class="subtitle">Détecte toutes les fonctions ECharts utilisées dans vos fichiers JavaScript</p>
+            <h1>Analyseur complet ECharts</h1>
+            <p class="subtitle">Détecte les fonctions ET les modules ECharts utilisés dans vos fichiers JavaScript</p>
         </header>
         
         <div class="upload-section">
@@ -388,6 +464,8 @@
                 <div class="tab active" data-tab="summary">Résumé</div>
                 <div class="tab" data-tab="files">Fichiers analysés</div>
                 <div class="tab" data-tab="all-functions">Toutes les fonctions</div>
+                <div class="tab" data-tab="all-modules">Tous les modules</div>
+                <div class="tab" data-tab="module-usage">Utilisation par module</div>
             </div>
             
             <div class="tab-content active" id="summary-tab">
@@ -399,6 +477,11 @@
                 <div class="summary-card">
                     <h2>Fonctions les plus utilisées</h2>
                     <div id="topFunctions"></div>
+                </div>
+                
+                <div class="summary-card">
+                    <h2>Modules les plus utilisés</h2>
+                    <div id="topModules"></div>
                 </div>
             </div>
             
@@ -415,15 +498,47 @@
                 </div>
                 <div class="legend">
                     <div class="legend-item">
+                        <div class="legend-color function"></div>
+                        <span>Fonction</span>
+                    </div>
+                    <div class="legend-item">
                         <div class="legend-color used"></div>
-                        <span>Fonction utilisée</span>
+                        <span>Utilisée</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color unused"></div>
-                        <span>Fonction non utilisée</span>
+                        <span>Non utilisée</span>
                     </div>
                 </div>
                 <div class="function-list" id="allFunctionsList"></div>
+            </div>
+            
+            <div class="tab-content" id="all-modules-tab">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="moduleSearch" placeholder="Rechercher un module...">
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color module"></div>
+                        <span>Module</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color used"></div>
+                        <span>Utilisé</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color unused"></div>
+                        <span>Non utilisé</span>
+                    </div>
+                </div>
+                <div class="module-list" id="allModulesList"></div>
+            </div>
+            
+            <div class="tab-content" id="module-usage-tab">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="moduleUsageSearch" placeholder="Rechercher un module...">
+                </div>
+                <div id="moduleUsageResults"></div>
             </div>
         </div>
     </div>
@@ -459,72 +574,54 @@
             'getChildCount', 'getChildAt', 'getChildByName', 'getChildByIndex',
             'eachChild', 'clone', 'isGroup', 'isImage', 'isText', 'isCircle', 'isSector',
             'isRing', 'isPolygon', 'isPolyline', 'isRect', 'isLine', 'isBezierCurve',
-            'isArc', 'isCompoundPath', 'isIncremental', 'isPath',
-            
-            // Méthodes de séries
-            'getData', 'getRawData', 'getVisual', 'setVisual', 'getLayout', 'setLayout',
-            'getColor', 'isAnimationEnabled', 'enableAnimation', 'disableAnimation',
-            'isClickable', 'setClickable', 'isHoverable', 'setHoverable',
-            'getZ', 'setZ', 'getZlevel', 'setZlevel', 'getCoordinateSystem',
-            'getEncode', 'setEncode', 'getDimensions', 'getDimensionIndex',
-            'mapDimension', 'getStore', 'getItemVisual', 'setItemVisual',
-            'clearItemVisual', 'getItemLayout', 'setItemLayout', 'getItemModel',
-            'ensureDataIndex', 'convertDataIndex', 'convertSeriesIndex',
-            
-            // Méthodes d'axes
-            'getExtent', 'getTicks', 'getTicksCoords', 'getLabel', 'getFormattedLabel',
-            'getTickCoord', 'getTickCoords', 'getView', 'setRange', 'getRange',
-            'getMinorTicks', 'getMinorTickCoords', 'getSplitLine', 'getSplitArea',
-            'getAxisLine', 'getAxisTick', 'getAxisLabel',
-            
-            // Méthodes de tooltip
-            'showTip', 'hideTip', 'setContent', 'getContent', 'update', 'moveTo',
-            'getSize', 'getPosition', 'enterable', 'setEnterable', 'alwaysShowContent',
-            'setAlwaysShowContent', 'getOption', 'setOption', 'getComponent',
-            
-            // Méthodes de légende
-            'getData', 'getSelected', 'setSelected', 'toggleSelected', 'allSelected',
-            'select', 'unselect', 'toggleAll', 'getItem', 'getItemModel', 'getDataIndex',
-            'getSymbol', 'setSymbol', 'getFormattedLabel', 'getText', 'setText',
-            'getTextStyle', 'setTextStyle', 'getIcon', 'setIcon', 'getItemVisual',
-            'setItemVisual', 'getItemLayout', 'setItemLayout',
-            
-            // Méthodes de grid
-            'getRect', 'setRect', 'getPosition', 'setPosition', 'getSize', 'setSize',
-            'getBoundingRect', 'getViewRect', 'getGridArea', 'setGridArea',
-            
-            // Méthodes de dataZoom
-            'getRange', 'setRange', 'getMinValueSpan', 'setMinValueSpan',
-            'getMaxValueSpan', 'setMaxValueSpan', 'getMinSpan', 'setMinSpan',
-            'getMaxSpan', 'setMaxSpan', 'getOrient', 'setOrient', 'getThrottle',
-            'setThrottle', 'getFilterMode', 'setFilterMode', 'getStartValue',
-            'setStartValue', 'getEndValue', 'setEndValue', 'getStart', 'setStart',
-            'getEnd', 'setEnd',
-            
-            // Méthodes de visualMap
-            'getItemSymbol', 'setItemSymbol', 'getItemSize', 'setItemSize',
-            'getItemColor', 'setItemColor', 'getItemOpacity', 'setItemOpacity',
-            'getTargetSeries', 'setTargetSeries', 'getDimension', 'setDimension',
-            'getSelected', 'setSelected', 'getOutOfRange', 'setOutOfRange',
-            'getController', 'getVisual', 'setVisual', 'getValueState', 'getDataIndex',
-            'getDataValue', 'getVisualMeta', 'getColorMapper', 'getOpacityMapper',
-            
-            // Méthodes de timeline
-            'getData', 'getCurrentIndex', 'setCurrentIndex', 'getPlayState',
-            'setPlayState', 'play', 'stop', 'next', 'prev', 'getOption', 'setOption',
-            'getLabel', 'setLabel', 'getCheckpointStyle', 'setCheckpointStyle',
-            'getControlStyle', 'setControlStyle', 'getProgress', 'setProgress',
-            'getLineStyle', 'setLineStyle', 'getSymbol', 'setSymbol', 'getSymbolSize',
-            'setSymbolSize', 'getSymbolRotate', 'setSymbolRotate', 'getSymbolOffset',
-            'setSymbolOffset', 'getSymbolKeepAspect', 'setSymbolKeepAspect',
-            
-            // Méthodes de brush
-            'getBrushType', 'setBrushType', 'getBrushMode', 'setBrushMode',
-            'getTransformable', 'setTransformable', 'getBrushStyle', 'setBrushStyle',
-            'getZ', 'setZ', 'getZlevel', 'setZlevel', 'getBrushModel', 'getCoveredAreas',
-            'getPanelId', 'setPanelId', 'getAreas', 'setAreas', 'getBrushSelector',
-            'setBrushSelector', 'getBrushRange', 'setBrushRange'
+            'isArc', 'isCompoundPath', 'isIncremental', 'isPath'
         ];
+
+        // Liste exhaustive de tous les modules/components ECharts
+        const allEChartsModules = {
+            // Composants principaux
+            'title': ['text', 'subtext', 'left', 'top', 'right', 'bottom', 'backgroundColor', 'borderColor', 'borderWidth', 'padding', 'itemGap', 'textStyle', 'subtextStyle', 'borderRadius', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY'],
+            'legend': ['type', 'show', 'zlevel', 'z', 'left', 'top', 'right', 'bottom', 'width', 'height', 'orient', 'align', 'padding', 'itemGap', 'itemWidth', 'itemHeight', 'symbolKeepAspect', 'formatter', 'selectedMode', 'inactiveColor', 'selected', 'textStyle', 'tooltip', 'icon', 'data'],
+            'grid': ['show', 'zlevel', 'z', 'left', 'top', 'right', 'bottom', 'width', 'height', 'containLabel', 'backgroundColor', 'borderColor', 'borderWidth', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY'],
+            'xAxis': ['type', 'show', 'gridIndex', 'position', 'offset', 'name', 'nameLocation', 'nameTextStyle', 'nameGap', 'nameRotate', 'inverse', 'boundaryGap', 'min', 'max', 'scale', 'splitNumber', 'minInterval', 'maxInterval', 'interval', 'logBase', 'silent', 'triggerEvent', 'axisLine', 'axisTick', 'axisLabel', 'splitLine', 'splitArea', 'data'],
+            'yAxis': ['type', 'show', 'gridIndex', 'position', 'offset', 'name', 'nameLocation', 'nameTextStyle', 'nameGap', 'nameRotate', 'inverse', 'boundaryGap', 'min', 'max', 'scale', 'splitNumber', 'minInterval', 'maxInterval', 'interval', 'logBase', 'silent', 'triggerEvent', 'axisLine', 'axisTick', 'axisLabel', 'splitLine', 'splitArea', 'data'],
+            'polar': ['zlevel', 'z', 'center', 'radius'],
+            'radiusAxis': ['type', 'show', 'polarIndex', 'name', 'nameLocation', 'nameTextStyle', 'nameGap', 'min', 'max', 'scale', 'splitNumber', 'minInterval', 'maxInterval', 'interval', 'logBase', 'silent', 'triggerEvent', 'axisLine', 'axisTick', 'axisLabel', 'splitLine', 'splitArea'],
+            'angleAxis': ['type', 'show', 'polarIndex', 'startAngle', 'clockwise', 'name', 'nameLocation', 'nameTextStyle', 'nameGap', 'min', 'max', 'scale', 'splitNumber', 'minInterval', 'maxInterval', 'interval', 'logBase', 'silent', 'triggerEvent', 'axisLine', 'axisTick', 'axisLabel', 'splitLine', 'splitArea'],
+            'radar': ['zlevel', 'z', 'center', 'radius', 'startAngle', 'name', 'nameGap', 'splitNumber', 'shape', 'scale', 'silent', 'triggerEvent', 'axisLine', 'axisTick', 'axisLabel', 'splitLine', 'splitArea', 'indicator'],
+            
+            // Composants d'interaction
+            'tooltip': ['show', 'trigger', 'axisPointer', 'showContent', 'alwaysShowContent', 'triggerOn', 'showDelay', 'hideDelay', 'enterable', 'confine', 'appendToBody', 'className', 'transitionDuration', 'formatter', 'backgroundColor', 'borderColor', 'borderWidth', 'padding', 'textStyle', 'extraCssText', 'position', 'order'],
+            'axisPointer': ['show', 'type', 'snap', 'z', 'label', 'lineStyle', 'shadowStyle', 'triggerTooltip', 'value', 'status', 'handle', 'link'],
+            'toolbox': ['show', 'orient', 'itemSize', 'itemGap', 'showTitle', 'feature', 'iconStyle', 'emphasis', 'zlevel', 'z', 'left', 'top', 'right', 'bottom', 'width', 'height'],
+            'brush': ['toolbox', 'brushLink', 'seriesIndex', 'geoIndex', 'xAxisIndex', 'yAxisIndex', 'brushType', 'brushMode', 'transformable', 'brushStyle', 'throttleType', 'throttleDelay', 'removeOnClick', 'z'],
+            'dataZoom': ['type', 'xAxisIndex', 'yAxisIndex', 'radiusAxisIndex', 'angleAxisIndex', 'filterMode', 'start', 'end', 'startValue', 'endValue', 'minSpan', 'maxSpan', 'minValueSpan', 'maxValueSpan', 'orient', 'zoomLock', 'throttle', 'show', 'realtime', 'backgroundColor', 'dataBackground', 'fillerColor', 'borderColor', 'handleIcon', 'handleSize', 'handleStyle', 'moveHandleIcon', 'moveHandleSize', 'moveHandleStyle', 'labelPrecision', 'labelFormatter', 'showDetail', 'showDataShadow', 'z', 'left', 'top', 'right', 'bottom'],
+            'visualMap': ['type', 'min', 'max', 'range', 'calculable', 'realtime', 'inverse', 'precision', 'itemWidth', 'itemHeight', 'align', 'text', 'textGap', 'show', 'dimension', 'seriesIndex', 'hoverLink', 'inRange', 'outOfRange', 'controller', 'zlevel', 'z', 'left', 'top', 'right', 'bottom', 'orient', 'padding', 'backgroundColor', 'borderColor', 'borderWidth', 'color', 'textStyle', 'formatter'],
+            
+            // Séries de graphiques
+            'line': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'showSymbol', 'showAllSymbol', 'hoverAnimation', 'legendHoverLink', 'stack', 'cursor', 'label', 'labelLayout', 'itemStyle', 'lineStyle', 'areaStyle', 'emphasis', 'blur', 'select', 'smooth', 'smoothMonotone', 'sampling', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'bar': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'roundCap', 'showBackground', 'backgroundStyle', 'label', 'labelLayout', 'itemStyle', 'emphasis', 'blur', 'select', 'stack', 'cursor', 'barWidth', 'barMaxWidth', 'barMinHeight', 'barGap', 'barCategoryGap', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'pie': ['name', 'legendHoverLink', 'hoverAnimation', 'hoverOffset', 'selectedMode', 'selectedOffset', 'clockwise', 'startAngle', 'minAngle', 'minShowLabelAngle', 'roseType', 'avoidLabelOverlap', 'stillShowZeroSum', 'cursor', 'label', 'labelLine', 'itemStyle', 'emphasis', 'blur', 'select', 'center', 'radius', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'scatter': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'cursor', 'label', 'labelLayout', 'itemStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'effectScatter': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'cursor', 'label', 'labelLayout', 'itemStyle', 'emphasis', 'blur', 'select', 'rippleEffect', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'radar': ['name', 'radarIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'label', 'labelLayout', 'itemStyle', 'lineStyle', 'areaStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'tree': ['name', 'layout', 'edgeShape', 'edgeForkPosition', 'roam', 'expandAndCollapse', 'initialTreeDepth', 'label', 'leaves', 'itemStyle', 'lineStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'treemap': ['name', 'layout', 'roam', 'nodeClick', 'zoomToNodeRatio', 'levels', 'sort', 'visualDimension', 'visualMin', 'visualMax', 'colorMappingBy', 'visibleMin', 'childrenVisibleMin', 'label', 'upperLabel', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'sunburst': ['name', 'nodeClick', 'roam', 'highlightPolicy', 'radius', 'sort', 'renderLabelForZeroData', 'label', 'itemStyle', 'emphasis', 'blur', 'select', 'levels', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'boxplot': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'hoverAnimation', 'legendHoverLink', 'layout', 'boxWidth', 'itemStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'candlestick': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'hoverAnimation', 'legendHoverLink', 'layout', 'barWidth', 'barMaxWidth', 'itemStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'heatmap': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'geoIndex', 'blurSize', 'minOpacity', 'maxOpacity', 'label', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'map': ['name', 'map', 'roam', 'center', 'aspectScale', 'boundingCoords', 'zoom', 'scaleLimit', 'nameMap', 'nameProperty', 'mapValueCalculation', 'showLegendSymbol', 'label', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'parallel': ['name', 'parallelIndex', 'parallelAxisIndex', 'inactiveOpacity', 'activeOpacity', 'smooth', 'realtime', 'label', 'lineStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'lines': ['name', 'coordinateSystem', 'polyline', 'effect', 'large', 'largeThreshold', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'lineStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'graph': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'geoIndex', 'calendarIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'edgeSymbol', 'edgeSymbolSize', 'cursor', 'label', 'labelLayout', 'itemStyle', 'lineStyle', 'emphasis', 'blur', 'select', 'edgeLabel', 'circular', 'force', 'roam', 'expandAndCollapse', 'focusNodeAdjacency', 'layout', 'data', 'nodes', 'links', 'edges', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'sankey': ['name', 'nodeWidth', 'nodeGap', 'nodeAlign', 'layout', 'draggable', 'focusNodeAdjacency', 'levels', 'label', 'itemStyle', 'lineStyle', 'emphasis', 'blur', 'select', 'edgeLabel', 'data', 'nodes', 'links', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'funnel': ['name', 'min', 'max', 'minSize', 'maxSize', 'sort', 'orient', 'gap', 'funnelAlign', 'label', 'labelLine', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'gauge': ['name', 'min', 'max', 'splitNumber', 'radius', 'startAngle', 'endAngle', 'clockwise', 'axisLine', 'progress', 'splitLine', 'axisTick', 'axisLabel', 'pointer', 'anchor', 'itemStyle', 'emphasis', 'blur', 'select', 'title', 'detail', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'pictorialBar': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'symbol', 'symbolSize', 'symbolRotate', 'symbolKeepAspect', 'symbolOffset', 'symbolRepeat', 'symbolRepeatDirection', 'symbolMargin', 'symbolPosition', 'symbolClip', 'symbolBoundingData', 'symbolPatternSize', 'barWidth', 'barMaxWidth', 'barMinHeight', 'barGap', 'barCategoryGap', 'label', 'labelLayout', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'themeRiver': ['name', 'label', 'itemStyle', 'emphasis', 'blur', 'select', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip'],
+            'custom': ['name', 'coordinateSystem', 'xAxisIndex', 'yAxisIndex', 'polarIndex', 'geoIndex', 'calendarIndex', 'renderItem', 'itemStyle', 'emphasis', 'blur', 'select', 'dimensions', 'encode', 'seriesLayoutBy', 'datasetIndex', 'data', 'markPoint', 'markLine', 'markArea', 'zlevel', 'z', 'silent', 'animation', 'animationThreshold', 'animationDuration', 'animationEasing', 'animationDelay', 'animationDurationUpdate', 'animationEasingUpdate', 'animationDelayUpdate', 'universalTransition', 'tooltip']
+        };
 
         document.addEventListener('DOMContentLoaded', function() {
             const fileInput = document.getElementById('fileInput');
@@ -537,12 +634,17 @@
             const fileListDiv = document.getElementById('fileList');
             const summaryStatsDiv = document.getElementById('summaryStats');
             const topFunctionsDiv = document.getElementById('topFunctions');
+            const topModulesDiv = document.getElementById('topModules');
             const fileResultsDiv = document.getElementById('fileResults');
             const allFunctionsListDiv = document.getElementById('allFunctionsList');
+            const allModulesListDiv = document.getElementById('allModulesList');
+            const moduleUsageResultsDiv = document.getElementById('moduleUsageResults');
             const tabs = document.querySelectorAll('.tab');
             const tabContents = document.querySelectorAll('.tab-content');
             const fileSearchInput = document.getElementById('fileSearch');
             const functionSearchInput = document.getElementById('functionSearch');
+            const moduleSearchInput = document.getElementById('moduleSearch');
+            const moduleUsageSearchInput = document.getElementById('moduleUsageSearch');
             
             let selectedFiles = [];
             let analysisResults = null;
@@ -565,6 +667,8 @@
             
             fileSearchInput.addEventListener('input', filterFiles);
             functionSearchInput.addEventListener('input', filterFunctions);
+            moduleSearchInput.addEventListener('input', filterModules);
+            moduleUsageSearchInput.addEventListener('input', filterModuleUsage);
             
             function handleFileSelect(e) {
                 const files = Array.from(e.target.files);
@@ -654,10 +758,10 @@
                         try {
                             const content = e.target.result;
                             const foundFunctions = [];
+                            const foundModules = [];
                             
                             // Rechercher toutes les fonctions ECharts dans le contenu
                             allEChartsFunctions.forEach(func => {
-                                // Recherche des patterns d'utilisation courants
                                 const patterns = [
                                     new RegExp(`\\.${func}\\(`, 'g'),
                                     new RegExp(`\\b${func}\\(`, 'g'),
@@ -681,9 +785,34 @@
                                 }
                             });
                             
+                            // Rechercher tous les modules ECharts dans le contenu
+                            Object.keys(allEChartsModules).forEach(module => {
+                                const patterns = [
+                                    new RegExp(`['"]${module}['"]\\s*:`, 'g'),
+                                    new RegExp(`type\\s*:\\s*['"]${module}['"]`, 'gi'),
+                                    new RegExp(`\\b${module}\\b`, 'g')
+                                ];
+                                
+                                let count = 0;
+                                for (const pattern of patterns) {
+                                    const matches = content.match(pattern);
+                                    if (matches) {
+                                        count += matches.length;
+                                    }
+                                }
+                                
+                                if (count > 0) {
+                                    foundModules.push({
+                                        name: module,
+                                        count: count
+                                    });
+                                }
+                            });
+                            
                             resolve({
                                 fileName: file.name,
                                 functions: foundFunctions,
+                                modules: foundModules,
                                 fileSize: file.size
                             });
                         } catch (error) {
@@ -702,19 +831,29 @@
             function processResults(results) {
                 // Compter les fonctions globales
                 const globalFunctionCounts = {};
+                const globalModuleCounts = {};
                 let totalFunctionsFound = 0;
+                let totalModulesFound = 0;
                 let totalFilesWithECharts = 0;
                 
                 results.forEach(result => {
-                    if (result.functions.length > 0) {
+                    if (result.functions.length > 0 || result.modules.length > 0) {
                         totalFilesWithECharts++;
                         totalFunctionsFound += result.functions.length;
+                        totalModulesFound += result.modules.length;
                         
                         result.functions.forEach(func => {
                             if (!globalFunctionCounts[func.name]) {
                                 globalFunctionCounts[func.name] = 0;
                             }
                             globalFunctionCounts[func.name] += func.count;
+                        });
+                        
+                        result.modules.forEach(module => {
+                            if (!globalModuleCounts[module.name]) {
+                                globalModuleCounts[module.name] = 0;
+                            }
+                            globalModuleCounts[module.name] += module.count;
                         });
                     }
                 });
@@ -724,18 +863,32 @@
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 10);
                 
+                // Trier les modules par utilisation
+                const sortedModules = Object.entries(globalModuleCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+                
                 // Identifier les fonctions non utilisées
                 const unusedFunctions = allEChartsFunctions.filter(func => 
                     !globalFunctionCounts[func]
                 );
                 
+                // Identifier les modules non utilisés
+                const unusedModules = Object.keys(allEChartsModules).filter(module => 
+                    !globalModuleCounts[module]
+                );
+                
                 return {
                     fileResults: results,
                     globalFunctionCounts,
+                    globalModuleCounts,
                     totalFunctionsFound,
+                    totalModulesFound,
                     totalFilesWithECharts,
                     sortedFunctions,
+                    sortedModules,
                     unusedFunctions,
+                    unusedModules,
                     totalFiles: results.length
                 };
             }
@@ -744,10 +897,12 @@
                 displaySummary(results);
                 displayFileResults(results.fileResults);
                 displayAllFunctions(results.globalFunctionCounts);
+                displayAllModules(results.globalModuleCounts);
+                displayModuleUsage(results);
             }
             
             function displaySummary(results) {
-                const { totalFiles, totalFilesWithECharts, totalFunctionsFound, sortedFunctions } = results;
+                const { totalFiles, totalFilesWithECharts, totalFunctionsFound, totalModulesFound, sortedFunctions, sortedModules } = results;
                 
                 summaryStatsDiv.innerHTML = `
                     <div class="stat">
@@ -763,8 +918,8 @@
                         <div class="stat-label">Fonctions trouvées</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value">${allEChartsFunctions.length}</div>
-                        <div class="stat-label">Fonctions ECharts totales</div>
+                        <div class="stat-value">${totalModulesFound}</div>
+                        <div class="stat-label">Modules trouvés</div>
                     </div>
                 `;
                 
@@ -781,37 +936,70 @@
                 } else {
                     topFunctionsDiv.innerHTML = '<p>Aucune fonction ECharts trouvée</p>';
                 }
+                
+                if (sortedModules.length > 0) {
+                    topModulesDiv.innerHTML = `
+                        <div class="module-list">
+                            ${sortedModules.map(([module, count]) => `
+                                <div class="module-item used">
+                                    ${module} (${count} utilisation${count > 1 ? 's' : ''})
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    topModulesDiv.innerHTML = '<p>Aucun module ECharts trouvé</p>';
+                }
             }
             
             function displayFileResults(fileResults) {
                 fileResultsDiv.innerHTML = '';
                 
                 fileResults.forEach(result => {
-                    if (result.functions.length === 0) return;
+                    if (result.functions.length === 0 && result.modules.length === 0) return;
                     
                     const fileResult = document.createElement('div');
                     fileResult.className = 'file-result';
                     fileResult.setAttribute('data-filename', result.fileName);
                     
+                    const functionsCount = result.functions.length;
+                    const modulesCount = result.modules.length;
+                    
                     fileResult.innerHTML = `
                         <div class="file-header">
                             <div class="file-name">${result.fileName}</div>
-                            <div class="function-count">${result.functions.length} fonction(s)</div>
+                            <div>
+                                ${functionsCount > 0 ? `<span class="function-count">${functionsCount} fonction(s)</span>` : ''}
+                                ${modulesCount > 0 ? `<span class="module-count">${modulesCount} module(s)</span>` : ''}
+                            </div>
                         </div>
-                        <div class="function-list">
-                            ${result.functions.map(func => `
-                                <div class="function-item used">
-                                    ${func.name} (${func.count} utilisation${func.count > 1 ? 's' : ''})
-                                </div>
-                            `).join('')}
-                        </div>
+                        ${functionsCount > 0 ? `
+                            <h4 class="section-title">Fonctions utilisées:</h4>
+                            <div class="function-list">
+                                ${result.functions.map(func => `
+                                    <div class="function-item used">
+                                        ${func.name} (${func.count} utilisation${func.count > 1 ? 's' : ''})
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        ${modulesCount > 0 ? `
+                            <h4 class="section-title">Modules utilisés:</h4>
+                            <div class="module-list">
+                                ${result.modules.map(module => `
+                                    <div class="module-item used">
+                                        ${module.name} (${module.count} utilisation${module.count > 1 ? 's' : ''})
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     `;
                     
                     fileResultsDiv.appendChild(fileResult);
                 });
                 
                 if (fileResultsDiv.children.length === 0) {
-                    fileResultsDiv.innerHTML = '<p>Aucun fichier ne contient de fonctions ECharts</p>';
+                    fileResultsDiv.innerHTML = '<p>Aucun fichier ne contient de fonctions ou modules ECharts</p>';
                 }
             }
             
@@ -834,6 +1022,64 @@
                     
                     allFunctionsListDiv.appendChild(functionItem);
                 });
+            }
+            
+            function displayAllModules(globalModuleCounts) {
+                allModulesListDiv.innerHTML = '';
+                
+                Object.keys(allEChartsModules).forEach(module => {
+                    const isUsed = globalModuleCounts[module];
+                    const count = isUsed ? globalModuleCounts[module] : 0;
+                    
+                    const moduleItem = document.createElement('div');
+                    moduleItem.className = `module-item ${isUsed ? 'used' : 'unused'}`;
+                    moduleItem.setAttribute('data-module', module);
+                    
+                    if (isUsed) {
+                        moduleItem.textContent = `${module} (${count} utilisation${count > 1 ? 's' : ''})`;
+                    } else {
+                        moduleItem.textContent = `${module} (non utilisé)`;
+                    }
+                    
+                    allModulesListDiv.appendChild(moduleItem);
+                });
+            }
+            
+            function displayModuleUsage(results) {
+                moduleUsageResultsDiv.innerHTML = '';
+                
+                const { globalModuleCounts } = results;
+                
+                Object.keys(allEChartsModules)
+                    .filter(module => globalModuleCounts[module])
+                    .sort((a, b) => globalModuleCounts[b] - globalModuleCounts[a])
+                    .forEach(module => {
+                        const moduleCard = document.createElement('div');
+                        moduleCard.className = 'module-card';
+                        moduleCard.setAttribute('data-module', module);
+                        
+                        const properties = allEChartsModules[module];
+                        const count = globalModuleCounts[module];
+                        
+                        moduleCard.innerHTML = `
+                            <div class="module-header">
+                                <div class="module-name">${module}</div>
+                                <div class="module-count">${count} utilisation${count > 1 ? 's' : ''}</div>
+                            </div>
+                            <div class="module-properties">
+                                <strong>Propriétés disponibles:</strong>
+                                <div style="margin-top: 8px; font-size: 0.9rem; color: #666;">
+                                    ${properties.slice(0, 10).join(', ')}${properties.length > 10 ? `... et ${properties.length - 10} autres` : ''}
+                                </div>
+                            </div>
+                        `;
+                        
+                        moduleUsageResultsDiv.appendChild(moduleCard);
+                    });
+                
+                if (moduleUsageResultsDiv.children.length === 0) {
+                    moduleUsageResultsDiv.innerHTML = '<p>Aucun module ECharts utilisé</p>';
+                }
             }
             
             function filterFiles() {
@@ -860,6 +1106,34 @@
                         item.style.display = 'block';
                     } else {
                         item.style.display = 'none';
+                    }
+                });
+            }
+            
+            function filterModules() {
+                const searchTerm = moduleSearchInput.value.toLowerCase();
+                const moduleItems = document.querySelectorAll('#allModulesList .module-item');
+                
+                moduleItems.forEach(item => {
+                    const moduleName = item.getAttribute('data-module').toLowerCase();
+                    if (moduleName.includes(searchTerm)) {
+                        item.style.display = 'block';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            }
+            
+            function filterModuleUsage() {
+                const searchTerm = moduleUsageSearchInput.value.toLowerCase();
+                const moduleCards = document.querySelectorAll('#module-usage-tab .module-card');
+                
+                moduleCards.forEach(card => {
+                    const moduleName = card.getAttribute('data-module').toLowerCase();
+                    if (moduleName.includes(searchTerm)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
                     }
                 });
             }
