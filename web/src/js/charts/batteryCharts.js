@@ -520,7 +520,7 @@ export class BatteryRealtimeCharts {
           {
             tooltip: {
               formatter: ({ value }) => {
-                if (value == null) return 'Temps restant indisponible';
+                if (value == null) return 'Temps restant disponible';
                 const hours = Math.floor(value);
                 const minutes = Math.round((value - hours) * 60);
                 return `${hours}h ${minutes}min restant`;
@@ -596,8 +596,8 @@ export class BatteryRealtimeCharts {
                   },
                   rich: {
                     value: {
-                      fontSize: 18,
-                      fontWeight: 700,
+                      fontSize: 13,
+                      fontWeight: 600,
                       color: 'auto',
                     },
                     unit: {
