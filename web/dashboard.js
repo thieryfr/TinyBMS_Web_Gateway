@@ -945,13 +945,35 @@ function updateBatteryDisplay(data) {
 function updateCellVoltages(voltages, balancing) {
     if (!voltages || !Array.isArray(voltages)) return;
 
+    const validVoltages = voltages.filter(v => v > 0);
+    const min = validVoltages.length > 0 ? Math.min(...validVoltages) : 0;
+    const max = validVoltages.length > 0 ? Math.max(...validVoltages) : 0;
+    const diff = max - min;
+    const avg = validVoltages.length > 0 ? validVoltages.reduce((sum, v) => sum + v, 0) / validVoltages.length : 0;
+
+    // Find indices of min and max
+    const minIndex = voltages.indexOf(min);
+    const maxIndex = voltages.indexOf(max);
+
+    // Calculate max in-balance
+    const inBalances = voltages.map(v => v > 0 ? Math.abs(v - avg) : 0);
+    const maxInBalance = Math.max(...inBalances);
+
+    // Count balancing cells
+    const balancingCount = balancing ? balancing.filter(b => b).length : 0;
+
     const summary = document.getElementById('battery-cell-summary');
     if (summary) {
-        const min = Math.min(...voltages);
-        const max = Math.max(...voltages);
-        const diff = max - min;
-        summary.textContent = `Δ ${diff} mV (${min} — ${max} mV)`;
+        summary.textContent = `Δ ${diff.toFixed(0)} mV (${min} — ${max} mV)`;
     }
+
+    // Update cell statistics
+    set('cell-stat-max', minIndex >= 0 ? `C${maxIndex + 1} (${max} mV)` : '-- (-- mV)');
+    set('cell-stat-min', maxIndex >= 0 ? `C${minIndex + 1} (${min} mV)` : '-- (-- mV)');
+    set('cell-stat-spread', `${diff.toFixed(0)} mV`);
+    set('cell-stat-avg', `${avg.toFixed(0)} mV`);
+    set('cell-stat-inbalance', `±${maxInBalance.toFixed(1)} mV`);
+    set('cell-stat-balancing', `${balancingCount}/${voltages.length}`);
 
     // Update balancing badges
     const badges = document.getElementById('battery-balancing-badges');
