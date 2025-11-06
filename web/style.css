@@ -906,6 +906,79 @@ main {
     }
 }
 
+/* KPI Panel - Professional Statistics Display */
+.kpi-panel {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.kpi-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.kpi-icon i {
+    font-size: 24px;
+}
+
+.kpi-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.kpi-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.kpi-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+@media (max-width: 768px) {
+    .kpi-panel {
+        gap: 1rem;
+    }
+
+    .kpi-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .kpi-icon i {
+        font-size: 20px;
+    }
+
+    .kpi-label {
+        font-size: 0.65rem;
+    }
+
+    .kpi-value {
+        font-size: 0.95rem;
+    }
+}
+
 /* Responsive adjustments for status panel */
 @media (max-width: 1200px) {
     .system-status-panel {

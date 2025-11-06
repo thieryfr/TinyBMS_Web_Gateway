@@ -951,8 +951,40 @@ function addTimelineItem(timeline, data, type) {
 
 // === BATTERY DISPLAY ===
 
+function updateKPI(data) {
+    if (!data) return;
+
+    // Update SOC/SOH
+    const soc = Number.isFinite(data.state_of_charge_pct) ? data.state_of_charge_pct.toFixed(0) : '--';
+    const soh = Number.isFinite(data.state_of_health_pct) ? data.state_of_health_pct.toFixed(0) : '--';
+    set('kpi-soc-soh', `${soc}% / ${soh}%`);
+
+    // Update Power (V × A)
+    if (Number.isFinite(data.pack_voltage_v) && Number.isFinite(data.pack_current_a)) {
+        const power = data.pack_voltage_v * data.pack_current_a;
+        const powerAbs = Math.abs(power);
+        const sign = power >= 0 ? '+' : '-';
+        set('kpi-power', `${sign}${powerAbs.toFixed(0)} W`);
+    } else {
+        set('kpi-power', '-- W');
+    }
+
+    // Update Temperature
+    set('kpi-temperature', formatValue(data.average_temperature_c, ' °C'));
+
+    // Update Uptime
+    if (Number.isFinite(data.uptime_seconds)) {
+        set('kpi-uptime', formatDuration(data.uptime_seconds * 1000));
+    } else {
+        set('kpi-uptime', '--');
+    }
+}
+
 function updateBatteryDisplay(data) {
     if (!data) return;
+
+    // Update KPI panel
+    updateKPI(data);
 
     // Update voltage
     set('battery-voltage', formatValue(data.pack_voltage_v, ' V'));
