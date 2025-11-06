@@ -383,90 +383,170 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="over-voltage-cutoff" class="form-label">
-                        Over-Voltage Cutoff (V)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surtension"></i>
+                        <span>
+                          Over-Voltage Cutoff (V)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surtension"></i>
+                        </span>
+                        <span class="register-number">Reg: 315</span>
                       </label>
-                      <input type="number" class="form-control" id="over-voltage-cutoff" step="0.001" min="3.0" max="4.5" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="over-voltage-cutoff" step="0.001" min="3.0" max="4.5" data-register="315" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-over-voltage-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Min: (Fully Charged + 0.01V) • Max: 4.5V
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="under-voltage-cutoff" class="form-label">
-                        Under-Voltage Cutoff (V)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure sous-tension"></i>
+                        <span>
+                          Under-Voltage Cutoff (V)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure sous-tension"></i>
+                        </span>
+                        <span class="register-number">Reg: 316</span>
                       </label>
-                      <input type="number" class="form-control" id="under-voltage-cutoff" step="0.001" min="0.8" max="3.5" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="under-voltage-cutoff" step="0.001" min="0.8" max="3.5" data-register="316" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-under-voltage-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Min: 0.8V • Max: (Fully Discharged - 0.01V)
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="discharge-over-current-cutoff" class="form-label">
-                        Discharge Over-Current Cutoff (A)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité décharge"></i>
+                        <span>
+                          Discharge Over-Current Cutoff (A)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité décharge"></i>
+                        </span>
+                        <span class="register-number">Reg: 317</span>
                       </label>
-                      <input type="number" class="form-control" id="discharge-over-current-cutoff" step="1" min="1" max="300" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="discharge-over-current-cutoff" step="1" min="1" max="300" data-register="317" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-discharge-over-current-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Dépend du type de PCB, capteur et switch
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="discharge-over-current-timeout" class="form-label">
-                        Discharge Over-Current Cutoff timeout (s)
-                        <i class="ti ti-info-circle text-info ms-1" title="Durée avant coupure"></i>
+                        <span>
+                          Discharge Over-Current Cutoff timeout (s)
+                          <i class="ti ti-info-circle text-info ms-1" title="Durée avant coupure"></i>
+                        </span>
                       </label>
-                      <input type="number" class="form-control" id="discharge-over-current-timeout" step="1" min="0" max="60" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="discharge-over-current-timeout" step="1" min="0" max="60" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-discharge-over-current-timeout">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Temps max avant déconnexion de la charge
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="discharge-peak-current-cutoff" class="form-label">
-                        Discharge Peak-Current Cutoff (A)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure pic de courant"></i>
+                        <span>
+                          Discharge Peak-Current Cutoff (A)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure pic de courant"></i>
+                        </span>
+                        <span class="register-number">Reg: 305</span>
                       </label>
-                      <input type="number" class="form-control" id="discharge-peak-current-cutoff" step="1" min="1" max="500" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="discharge-peak-current-cutoff" step="1" min="1" max="500" data-register="305" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-discharge-peak-current-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Doit être > Discharge Over-Current Cutoff
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="charge-over-current-cutoff" class="form-label">
-                        Charge Over-Current Cutoff (A)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité charge"></i>
+                        <span>
+                          Charge Over-Current Cutoff (A)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité charge"></i>
+                        </span>
+                        <span class="register-number">Reg: 318</span>
                       </label>
-                      <input type="number" class="form-control" id="charge-over-current-cutoff" step="1" min="1" max="300" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charge-over-current-cutoff" step="1" min="1" max="300" data-register="318" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charge-over-current-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Dépend du type de PCB, capteur et switch
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="over-heat-cutoff" class="form-label">
-                        Over-Heat Cutoff (°C)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surchauffe"></i>
+                        <span>
+                          Over-Heat Cutoff (°C)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surchauffe"></i>
+                        </span>
+                        <span class="register-number">Reg: 319</span>
                       </label>
-                      <input type="number" class="form-control" id="over-heat-cutoff" step="1" min="20" max="90" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="over-heat-cutoff" step="1" min="20" max="90" data-register="319" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-over-heat-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 20°C - 90°C
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="low-temp-charger-cutoff" class="form-label">
-                        Low Temperature Charger Cutoff (°C)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure basse température"></i>
+                        <span>
+                          Low Temperature Charger Cutoff (°C)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure basse température"></i>
+                        </span>
+                        <span class="register-number">Reg: 320</span>
                       </label>
-                      <input type="number" class="form-control" id="low-temp-charger-cutoff" step="1" min="-40" max="10" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="low-temp-charger-cutoff" step="1" min="-40" max="10" data-register="320" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-low-temp-charger-cutoff">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: -40°C - 10°C
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="automatic-recovery" class="form-label">
-                        Automatic Recovery (s)
-                        <i class="ti ti-info-circle text-info ms-1" title="Récupération automatique"></i>
+                        <span>
+                          Automatic Recovery (s)
+                          <i class="ti ti-info-circle text-info ms-1" title="Récupération automatique"></i>
+                        </span>
+                        <span class="register-number">Reg: 332</span>
                       </label>
-                      <input type="number" class="form-control" id="automatic-recovery" step="1" min="0" max="30" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="automatic-recovery" step="1" min="0" max="30" data-register="332" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-automatic-recovery">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         0 = désactivé • 1-30s = délai de récupération
                       </div>
@@ -487,10 +567,11 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="invert-current-sensor" role="switch">
+                        <input class="form-check-input" type="checkbox" id="invert-current-sensor" data-register="329" role="switch">
                         <label class="form-check-label" for="invert-current-sensor">
                           Invert External Current Sensor Direction
                           <i class="ti ti-info-circle text-info ms-1" title="Inverser la direction du capteur"></i>
+                          <span class="register-number ms-2">Reg: 329</span>
                         </label>
                       </div>
                       <div class="form-hint text-muted small">
@@ -545,23 +626,41 @@
                 <div class="card-body">
                   <div class="row g-3">
                     <div class="col-12">
-                      <label for="bms-mode" class="form-label">BMS Operation Mode</label>
-                      <select class="form-select" id="bms-mode" required>
-                        <option value="dual-port">Dual Port</option>
-                        <option value="single-port">Single Port</option>
-                      </select>
+                      <label for="bms-mode" class="form-label">
+                        <span>BMS Operation Mode</span>
+                        <span class="register-number">Reg: 340</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="bms-mode" data-register="340" required>
+                          <option value="dual-port">Dual Port</option>
+                          <option value="single-port">Single Port</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-bms-mode">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Dual: switches séparés • Single: switch commun
                       </div>
                     </div>
                     <div class="col-12" id="single-port-switch-type-group" style="display: none;">
-                      <label for="single-port-switch-type" class="form-label">Single Port Switch Type</label>
-                      <select class="form-select" id="single-port-switch-type">
-                        <option value="internal-fet">Internal FET</option>
-                        <option value="aido1">AIDO1 (External)</option>
-                        <option value="dido1">DIDO1 (External)</option>
-                        <option value="aiho1">AIHO1 (External)</option>
-                      </select>
+                      <label for="single-port-switch-type" class="form-label">
+                        <span>Single Port Switch Type</span>
+                        <span class="register-number">Reg: 341</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="single-port-switch-type" data-register="341">
+                          <option value="internal-fet">Internal FET</option>
+                          <option value="aido1">AIDO1 (External)</option>
+                          <option value="dido1">DIDO1 (External)</option>
+                          <option value="aiho1">AIHO1 (External)</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-single-port-switch-type">--</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -578,44 +677,80 @@
                 <div class="card-body">
                   <div class="row g-3">
                     <div class="col-12">
-                      <label for="load-switch-type" class="form-label">Switch Type</label>
-                      <select class="form-select" id="load-switch-type" required>
-                        <option value="discharge-fet">Discharge FET</option>
-                        <option value="aido1">AIDO1 (External)</option>
-                        <option value="dido1">DIDO1 (External)</option>
-                        <option value="aiho1">AIHO1 (External)</option>
-                      </select>
+                      <label for="load-switch-type" class="form-label">
+                        <span>Switch Type</span>
+                        <span class="register-number">Reg: 331</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="load-switch-type" data-register="331" required>
+                          <option value="discharge-fet">Discharge FET</option>
+                          <option value="aido1">AIDO1 (External)</option>
+                          <option value="dido1">DIDO1 (External)</option>
+                          <option value="aiho1">AIHO1 (External)</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-load-switch-type">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="ignition" class="form-label">Ignition</label>
-                      <select class="form-select" id="ignition" required>
-                        <option value="disabled">Disabled</option>
-                        <option value="aido1">AIDO1</option>
-                        <option value="dido1">DIDO1</option>
-                        <option value="aiho1">AIHO1</option>
-                      </select>
+                      <label for="ignition" class="form-label">
+                        <span>Ignition</span>
+                        <span class="register-number">Reg: 334</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="ignition" data-register="334" required>
+                          <option value="disabled">Disabled</option>
+                          <option value="aido1">AIDO1</option>
+                          <option value="dido1">DIDO1</option>
+                          <option value="aiho1">AIHO1</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-ignition">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="precharge" class="form-label">Precharge</label>
-                      <select class="form-select" id="precharge" required>
-                        <option value="disabled">Disabled</option>
-                        <option value="discharge-fet">Discharge FET</option>
-                        <option value="aido1">AIDO1</option>
-                        <option value="dido1">DIDO1</option>
-                        <option value="aiho1">AIHO1</option>
-                      </select>
+                      <label for="precharge" class="form-label">
+                        <span>Precharge</span>
+                        <span class="register-number">Reg: 337</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="precharge" data-register="337" required>
+                          <option value="disabled">Disabled</option>
+                          <option value="discharge-fet">Discharge FET</option>
+                          <option value="aido1">AIDO1</option>
+                          <option value="dido1">DIDO1</option>
+                          <option value="aiho1">AIHO1</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-precharge">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="precharge-duration" class="form-label">Precharge Duration</label>
-                      <select class="form-select" id="precharge-duration" required>
-                        <option value="0.1">0.1 s</option>
-                        <option value="0.2">0.2 s</option>
-                        <option value="0.5">0.5 s</option>
-                        <option value="1.0" selected>1.0 s</option>
-                        <option value="2.0">2.0 s</option>
-                        <option value="3.0">3.0 s</option>
-                        <option value="4.0">4.0 s</option>
-                      </select>
+                      <label for="precharge-duration" class="form-label">
+                        <span>Precharge Duration</span>
+                        <span class="register-number">Reg: 338</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="precharge-duration" data-register="338" required>
+                          <option value="0.1">0.1 s</option>
+                          <option value="0.2">0.2 s</option>
+                          <option value="0.5">0.5 s</option>
+                          <option value="1.0" selected>1.0 s</option>
+                          <option value="2.0">2.0 s</option>
+                          <option value="3.0">3.0 s</option>
+                          <option value="4.0">4.0 s</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-precharge-duration">--</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -632,42 +767,91 @@
                 <div class="card-body">
                   <div class="row g-3">
                     <div class="col-12">
-                      <label for="charger-type" class="form-label">Charger Type</label>
-                      <select class="form-select" id="charger-type" required>
-                        <option value="generic-cc-cv" selected>Generic CC/CV</option>
-                      </select>
+                      <label for="charger-type" class="form-label">
+                        <span>Charger Type</span>
+                        <span class="register-number">Reg: 330</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="charger-type" data-register="330" required>
+                          <option value="generic-cc-cv" selected>Generic CC/CV</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charger-type">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="charger-detection" class="form-label">Detection</label>
-                      <select class="form-select" id="charger-detection" required>
-                        <option value="internal" selected>Internal</option>
-                        <option value="aido1">AIDO1 (External)</option>
-                        <option value="dido1">DIDO1 (External)</option>
-                        <option value="aiho1">AIHO1 (External)</option>
-                      </select>
+                      <label for="charger-detection" class="form-label">
+                        <span>Detection</span>
+                        <span class="register-number">Reg: 335</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="charger-detection" data-register="335" required>
+                          <option value="internal" selected>Internal</option>
+                          <option value="aido1">AIDO1 (External)</option>
+                          <option value="dido1">DIDO1 (External)</option>
+                          <option value="aiho1">AIHO1 (External)</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charger-detection">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="charger-startup-delay" class="form-label">Charger Startup Delay (s)</label>
-                      <input type="number" class="form-control" id="charger-startup-delay" step="1" min="0" max="60" value="20" required>
+                      <label for="charger-startup-delay" class="form-label">
+                        <span>
+                          Charger Startup Delay (s)
+                        </span>
+                        <span class="register-number">Reg: 310</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charger-startup-delay" step="1" min="0" max="60" value="20" data-register="310" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charger-startup-delay">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Délai avant coupure si pas de courant détecté
                       </div>
                     </div>
                     <div class="col-12">
-                      <label for="charger-disable-delay" class="form-label">Charger Disable Delay (s)</label>
-                      <input type="number" class="form-control" id="charger-disable-delay" step="1" min="0" max="60" value="5" required>
+                      <label for="charger-disable-delay" class="form-label">
+                        <span>
+                          Charger Disable Delay (s)
+                        </span>
+                        <span class="register-number">Reg: 311</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charger-disable-delay" step="1" min="0" max="60" value="5" data-register="311" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charger-disable-delay">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Délai avant désactivation après déconnexion
                       </div>
                     </div>
                     <div class="col-12" id="charger-switch-type-group">
-                      <label for="charger-switch-type" class="form-label">Switch Type</label>
-                      <select class="form-select" id="charger-switch-type" required>
-                        <option value="charge-fet" selected>Charge FET</option>
-                        <option value="aido1">AIDO1 (External)</option>
-                        <option value="dido1">DIDO1 (External)</option>
-                        <option value="aiho1">AIHO1 (External)</option>
-                      </select>
+                      <label for="charger-switch-type" class="form-label">
+                        <span>Switch Type</span>
+                        <span class="register-number">Reg: 333</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="charger-switch-type" data-register="333" required>
+                          <option value="charge-fet" selected>Charge FET</option>
+                          <option value="aido1">AIDO1 (External)</option>
+                          <option value="dido1">DIDO1 (External)</option>
+                          <option value="aiho1">AIHO1 (External)</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charger-switch-type">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
                       <div class="form-check form-switch">
@@ -678,8 +862,19 @@
                       </div>
                     </div>
                     <div class="col-12">
-                      <label for="charge-restart-level" class="form-label">Charge Restart Level (%)</label>
-                      <input type="number" class="form-control" id="charge-restart-level" step="1" min="60" max="95" value="90" required>
+                      <label for="charge-restart-level" class="form-label">
+                        <span>
+                          Charge Restart Level (%)
+                        </span>
+                        <span class="register-number">Reg: 321</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charge-restart-level" step="1" min="60" max="95" value="90" data-register="321" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charge-restart-level">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         SOC minimum pour redémarrage automatique
                       </div>
@@ -721,25 +916,43 @@
                       <input type="number" class="form-control" id="pulses-per-unit" step="1" min="1" max="100000" value="1000" required>
                     </div>
                     <div class="col-12">
-                      <label for="protocol" class="form-label">Broadcast Protocol</label>
-                      <select class="form-select" id="protocol" required>
-                        <option value="cav3">CA V3 (Ebike Analyzer)</option>
-                        <option value="ascii">ASCII</option>
-                        <option value="soc-bar">SOC BAR</option>
-                      </select>
+                      <label for="protocol" class="form-label">
+                        <span>Broadcast Protocol</span>
+                        <span class="register-number">Reg: 343</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="protocol" data-register="343" required>
+                          <option value="cav3">CA V3 (Ebike Analyzer)</option>
+                          <option value="ascii">ASCII</option>
+                          <option value="soc-bar">SOC BAR</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-protocol">--</span>
+                        </span>
+                      </div>
                     </div>
                     <div class="col-12">
-                      <label for="broadcast" class="form-label">Broadcast Interval</label>
-                      <select class="form-select" id="broadcast" required>
-                        <option value="disabled" selected>Disabled</option>
-                        <option value="0.1">0.1 s</option>
-                        <option value="0.2">0.2 s</option>
-                        <option value="0.5">0.5 s</option>
-                        <option value="1.0">1.0 s</option>
-                        <option value="2.0">2.0 s</option>
-                        <option value="5.0">5.0 s</option>
-                        <option value="10.0">10.0 s</option>
-                      </select>
+                      <label for="broadcast" class="form-label">
+                        <span>Broadcast Interval</span>
+                        <span class="register-number">Reg: 342</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="broadcast" data-register="342" required>
+                          <option value="disabled" selected>Disabled</option>
+                          <option value="0.1">0.1 s</option>
+                          <option value="0.2">0.2 s</option>
+                          <option value="0.5">0.5 s</option>
+                          <option value="1.0">1.0 s</option>
+                          <option value="2.0">2.0 s</option>
+                          <option value="5.0">5.0 s</option>
+                          <option value="10.0">10.0 s</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-broadcast">--</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -756,11 +969,20 @@
                 <div class="card-body">
                   <div class="row g-3">
                     <div class="col-12">
-                      <label for="temperature-sensor-type" class="form-label">Temperature Sensor Type</label>
-                      <select class="form-select" id="temperature-sensor-type" required>
-                        <option value="dual-10k-ntc" selected>Dual 10K NTC Sensor</option>
-                        <option value="multipoint-active">Multipoint Active Sensor</option>
-                      </select>
+                      <label for="temperature-sensor-type" class="form-label">
+                        <span>Temperature Sensor Type</span>
+                        <span class="register-number">Reg: 339</span>
+                      </label>
+                      <div class="field-with-current">
+                        <select class="form-select" id="temperature-sensor-type" data-register="339" required>
+                          <option value="dual-10k-ntc" selected>Dual 10K NTC Sensor</option>
+                          <option value="multipoint-active">Multipoint Active Sensor</option>
+                        </select>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-temperature-sensor-type">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Dual 10K NTC: 10K @ 25°C, Beta 3977K
                       </div>
