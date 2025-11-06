@@ -105,21 +105,19 @@
       <div class="tab-pane fade show active" id="cell-settings" role="tabpanel" aria-labelledby="cell-settings-tab">
         <form id="tinybms-cell-settings-form">
           <div class="row g-4">
-            <!-- Cell Charging Characteristics -->
-            <div class="col-lg-4">
+            <!-- Cell Settings (All in One) -->
+            <div class="col-12">
               <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-battery-charging me-2"></i>
-                Cell Charging Characteristics
+                <i class="ti ti-battery-4 me-2"></i>
+                Cell Settings
               </h4>
               <div class="card bg-dark border border-secondary">
                 <div class="card-body">
                   <div class="row g-3">
-                    <div class="col-12">
+                    <!-- Reg 300 -->
+                    <div class="col-lg-4">
                       <label for="fully-charged-voltage" class="form-label">
-                        <span>
-                          Fully Charged Voltage (V)
-                          <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme pleine charge"></i>
-                        </span>
+                        <span>Fully Charged Voltage (V)</span>
                         <span class="register-number">Reg: 300</span>
                       </label>
                       <div class="field-with-current">
@@ -133,45 +131,11 @@
                         Min: (Fully Discharged + 0.01V) • Max: (Over-Voltage Cutoff - 0.01V)
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="charge-finished-current" class="form-label">
-                        <span>
-                          Charge Finished Current (A)
-                          <i class="ti ti-info-circle text-info ms-1" title="Courant de fin de charge"></i>
-                        </span>
-                        <span class="register-number">Reg: 304</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="charge-finished-current" step="0.1" min="0.1" max="150" data-register="304" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-charge-finished-current">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Dépend du type de PCB et du capteur de courant
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Cell Discharging Characteristics -->
-            <div class="col-lg-4">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-battery-off me-2"></i>
-                Cell Discharging Characteristics
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
+                    <!-- Reg 301 -->
+                    <div class="col-lg-4">
                       <label for="fully-discharged-voltage" class="form-label">
-                        <span>
-                          Fully Discharged Voltage (V)
-                          <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme déchargée"></i>
-                        </span>
+                        <span>Fully Discharged Voltage (V)</span>
                         <span class="register-number">Reg: 301</span>
                       </label>
                       <div class="field-with-current">
@@ -185,26 +149,11 @@
                         Min: (Under-Voltage Cutoff + 0.01V) • Max: (Fully Charged - 0.01V)
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Balancing Settings -->
-            <div class="col-lg-4">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-scale me-2"></i>
-                Balancing
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
+                    <!-- Reg 303 -->
+                    <div class="col-lg-4">
                       <label for="early-balancing-threshold" class="form-label">
-                        <span>
-                          Early Balancing Threshold (V)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de démarrage de l'équilibrage"></i>
-                        </span>
+                        <span>Early Balancing Threshold (V)</span>
                         <span class="register-number">Reg: 303</span>
                       </label>
                       <div class="field-with-current">
@@ -218,64 +167,29 @@
                         Plage: 1.0V - 4.5V
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="allowed-disbalance" class="form-label">
-                        <span>
-                          Allowed Disbalance (mV)
-                          <i class="ti ti-info-circle text-info ms-1" title="Déséquilibre maximum autorisé"></i>
-                        </span>
-                        <span class="register-number">Reg: 308</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="allowed-disbalance" step="1" min="15" max="100" data-register="308" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-allowed-disbalance">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Plage: 15mV - 100mV
-                      </div>
-                    </div>
-                    <div class="col-12">
-                      <label for="number-of-series-cells" class="form-label">
-                        <span>
-                          Number of Series Cells
-                          <i class="ti ti-info-circle text-info ms-1" title="Nombre de cellules en série"></i>
-                        </span>
-                        <span class="register-number">Reg: 307</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="number-of-series-cells" step="1" min="4" max="16" data-register="307" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-number-of-series-cells">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Plage: 4 - 16 cellules
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- State of Charge / Health -->
-            <div class="col-lg-4">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-gauge me-2"></i>
-                State Of Charge / Health
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label for="battery-capacity" class="form-label">
-                        <span>
-                          Battery Capacity (Ah)
-                          <i class="ti ti-info-circle text-info ms-1" title="Capacité de la batterie"></i>
+                    <!-- Reg 304 -->
+                    <div class="col-lg-4">
+                      <label for="charge-finished-current" class="form-label">
+                        <span>Charge Finished Current (A)</span>
+                        <span class="register-number">Reg: 304</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charge-finished-current" step="0.1" min="0.1" max="150" data-register="304" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charge-finished-current">--</span>
                         </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Dépend du type de PCB et du capteur de courant
+                      </div>
+                    </div>
+
+                    <!-- Reg 306 -->
+                    <div class="col-lg-4">
+                      <label for="battery-capacity" class="form-label">
+                        <span>Battery Capacity (Ah)</span>
                         <span class="register-number">Reg: 306</span>
                       </label>
                       <div class="field-with-current">
@@ -289,31 +203,47 @@
                         Plage: 0.1Ah - 655Ah
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="set-soc-manually" class="form-label">
-                        <span>
-                          Set SOC manually (%)
-                          <i class="ti ti-info-circle text-info ms-1" title="Définir le SOC manuellement"></i>
-                        </span>
-                        <span class="register-number">Reg: 328</span>
+
+                    <!-- Reg 307 -->
+                    <div class="col-lg-4">
+                      <label for="number-of-series-cells" class="form-label">
+                        <span>Number of Series Cells</span>
+                        <span class="register-number">Reg: 307</span>
                       </label>
                       <div class="field-with-current">
-                        <input type="number" class="form-control" id="set-soc-manually" step="1" min="0" max="100" data-register="328" required>
+                        <input type="number" class="form-control" id="number-of-series-cells" step="1" min="4" max="16" data-register="307" required>
                         <span class="current-value">
                           <span class="current-value-label">Actuel:</span>
-                          <span id="current-set-soc-manually">--</span>
+                          <span id="current-number-of-series-cells">--</span>
                         </span>
                       </div>
                       <div class="form-hint text-muted small">
-                        Plage: 0% - 100%
+                        Plage: 4 - 16 cellules
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="battery-maximum-cycles" class="form-label">
-                        <span>
-                          Battery Maximum Cycles Count
-                          <i class="ti ti-info-circle text-info ms-1" title="Nombre maximum de cycles"></i>
+
+                    <!-- Reg 308 -->
+                    <div class="col-lg-4">
+                      <label for="allowed-disbalance" class="form-label">
+                        <span>Allowed Disbalance (mV)</span>
+                        <span class="register-number">Reg: 308</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="allowed-disbalance" step="1" min="15" max="100" data-register="308" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-allowed-disbalance">--</span>
                         </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Plage: 15mV - 100mV
+                      </div>
+                    </div>
+
+                    <!-- Reg 322 -->
+                    <div class="col-lg-4">
+                      <label for="battery-maximum-cycles" class="form-label">
+                        <span>Battery Maximum Cycles Count</span>
                         <span class="register-number">Reg: 322</span>
                       </label>
                       <div class="field-with-current">
@@ -327,12 +257,11 @@
                         Cycles avant dégradation significative
                       </div>
                     </div>
-                    <div class="col-12">
+
+                    <!-- Reg 323 -->
+                    <div class="col-lg-4">
                       <label for="set-soh-manually" class="form-label">
-                        <span>
-                          Set SOH manually (%)
-                          <i class="ti ti-info-circle text-info ms-1" title="Définir le SOH manuellement"></i>
-                        </span>
+                        <span>Set SOH manually (%)</span>
                         <span class="register-number">Reg: 323</span>
                       </label>
                       <div class="field-with-current">
@@ -340,6 +269,24 @@
                         <span class="current-value">
                           <span class="current-value-label">Actuel:</span>
                           <span id="current-set-soh-manually">--</span>
+                        </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Plage: 0% - 100%
+                      </div>
+                    </div>
+
+                    <!-- Reg 328 -->
+                    <div class="col-lg-4">
+                      <label for="set-soc-manually" class="form-label">
+                        <span>Set SOC manually (%)</span>
+                        <span class="register-number">Reg: 328</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="set-soc-manually" step="1" min="0" max="100" data-register="328" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-set-soc-manually">--</span>
                         </span>
                       </div>
                       <div class="form-hint text-muted small">
@@ -372,78 +319,19 @@
       <div class="tab-pane fade" id="safety" role="tabpanel" aria-labelledby="safety-tab">
         <form id="tinybms-safety-form">
           <div class="row g-4">
-            <!-- Critical Events -->
-            <div class="col-lg-4">
+            <!-- Safety Settings (All in One) -->
+            <div class="col-12">
               <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-alert-triangle me-2"></i>
-                Critical Events
+                <i class="ti ti-shield-check me-2"></i>
+                Safety Settings
               </h4>
               <div class="card bg-dark border border-secondary">
                 <div class="card-body">
                   <div class="row g-3">
-                    <div class="col-12">
-                      <label for="over-voltage-cutoff" class="form-label">
-                        <span>
-                          Over-Voltage Cutoff (V)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surtension"></i>
-                        </span>
-                        <span class="register-number">Reg: 315</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="over-voltage-cutoff" step="0.001" min="3.0" max="4.5" data-register="315" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-over-voltage-cutoff">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Min: (Fully Charged + 0.01V) • Max: 4.5V
-                      </div>
-                    </div>
-                    <div class="col-12">
-                      <label for="under-voltage-cutoff" class="form-label">
-                        <span>
-                          Under-Voltage Cutoff (V)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure sous-tension"></i>
-                        </span>
-                        <span class="register-number">Reg: 316</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="under-voltage-cutoff" step="0.001" min="0.8" max="3.5" data-register="316" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-under-voltage-cutoff">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Min: 0.8V • Max: (Fully Discharged - 0.01V)
-                      </div>
-                    </div>
-                    <div class="col-12">
-                      <label for="discharge-over-current-cutoff" class="form-label">
-                        <span>
-                          Discharge Over-Current Cutoff (A)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité décharge"></i>
-                        </span>
-                        <span class="register-number">Reg: 317</span>
-                      </label>
-                      <div class="field-with-current">
-                        <input type="number" class="form-control" id="discharge-over-current-cutoff" step="1" min="1" max="300" data-register="317" required>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-discharge-over-current-cutoff">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Dépend du type de PCB, capteur et switch
-                      </div>
-                    </div>
-                    <div class="col-12">
+                    <!-- Reg 305 -->
+                    <div class="col-lg-4">
                       <label for="discharge-peak-current-cutoff" class="form-label">
-                        <span>
-                          Discharge Peak-Current Cutoff (A)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure pic de courant"></i>
-                        </span>
+                        <span>Discharge Peak-Current Cutoff (A)</span>
                         <span class="register-number">Reg: 305</span>
                       </label>
                       <div class="field-with-current">
@@ -457,12 +345,65 @@
                         Doit être > Discharge Over-Current Cutoff
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="charge-over-current-cutoff" class="form-label">
-                        <span>
-                          Charge Over-Current Cutoff (A)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité charge"></i>
+
+                    <!-- Reg 315 -->
+                    <div class="col-lg-4">
+                      <label for="over-voltage-cutoff" class="form-label">
+                        <span>Over-Voltage Cutoff (V)</span>
+                        <span class="register-number">Reg: 315</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="over-voltage-cutoff" step="0.001" min="3.0" max="4.5" data-register="315" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-over-voltage-cutoff">--</span>
                         </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Min: (Fully Charged + 0.01V) • Max: 4.5V
+                      </div>
+                    </div>
+
+                    <!-- Reg 316 -->
+                    <div class="col-lg-4">
+                      <label for="under-voltage-cutoff" class="form-label">
+                        <span>Under-Voltage Cutoff (V)</span>
+                        <span class="register-number">Reg: 316</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="under-voltage-cutoff" step="0.001" min="0.8" max="3.5" data-register="316" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-under-voltage-cutoff">--</span>
+                        </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Min: 0.8V • Max: (Fully Discharged - 0.01V)
+                      </div>
+                    </div>
+
+                    <!-- Reg 317 -->
+                    <div class="col-lg-4">
+                      <label for="discharge-over-current-cutoff" class="form-label">
+                        <span>Discharge Over-Current Cutoff (A)</span>
+                        <span class="register-number">Reg: 317</span>
+                      </label>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="discharge-over-current-cutoff" step="1" min="1" max="300" data-register="317" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-discharge-over-current-cutoff">--</span>
+                        </span>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Dépend du type de PCB, capteur et switch
+                      </div>
+                    </div>
+
+                    <!-- Reg 318 -->
+                    <div class="col-lg-4">
+                      <label for="charge-over-current-cutoff" class="form-label">
+                        <span>Charge Over-Current Cutoff (A)</span>
                         <span class="register-number">Reg: 318</span>
                       </label>
                       <div class="field-with-current">
@@ -476,12 +417,11 @@
                         Dépend du type de PCB, capteur et switch
                       </div>
                     </div>
-                    <div class="col-12">
+
+                    <!-- Reg 319 -->
+                    <div class="col-lg-4">
                       <label for="over-heat-cutoff" class="form-label">
-                        <span>
-                          Over-Heat Cutoff (°C)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surchauffe"></i>
-                        </span>
+                        <span>Over-Heat Cutoff (°C)</span>
                         <span class="register-number">Reg: 319</span>
                       </label>
                       <div class="field-with-current">
@@ -495,12 +435,11 @@
                         Plage: 20°C - 90°C
                       </div>
                     </div>
-                    <div class="col-12">
+
+                    <!-- Reg 320 -->
+                    <div class="col-lg-4">
                       <label for="low-temp-charger-cutoff" class="form-label">
-                        <span>
-                          Low Temperature Charger Cutoff (°C)
-                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure basse température"></i>
-                        </span>
+                        <span>Low Temperature Charger Cutoff (°C)</span>
                         <span class="register-number">Reg: 320</span>
                       </label>
                       <div class="field-with-current">
@@ -514,12 +453,25 @@
                         Plage: -40°C - 10°C
                       </div>
                     </div>
-                    <div class="col-12">
+
+                    <!-- Reg 329 -->
+                    <div class="col-lg-4">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="invert-current-sensor" data-register="329" role="switch">
+                        <label class="form-check-label" for="invert-current-sensor">
+                          Invert External Current Sensor Direction
+                          <span class="register-number ms-2">Reg: 329</span>
+                        </label>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Inverse les lectures de courant
+                      </div>
+                    </div>
+
+                    <!-- Reg 332 -->
+                    <div class="col-lg-4">
                       <label for="automatic-recovery" class="form-label">
-                        <span>
-                          Automatic Recovery (s)
-                          <i class="ti ti-info-circle text-info ms-1" title="Récupération automatique"></i>
-                        </span>
+                        <span>Automatic Recovery (s)</span>
                         <span class="register-number">Reg: 332</span>
                       </label>
                       <div class="field-with-current">
@@ -531,33 +483,6 @@
                       </div>
                       <div class="form-hint text-muted small">
                         0 = désactivé • 1-30s = délai de récupération
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Options -->
-            <div class="col-lg-4">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-settings me-2"></i>
-                Options
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="invert-current-sensor" data-register="329" role="switch">
-                        <label class="form-check-label" for="invert-current-sensor">
-                          Invert External Current Sensor Direction
-                          <i class="ti ti-info-circle text-info ms-1" title="Inverser la direction du capteur"></i>
-                          <span class="register-number ms-2">Reg: 329</span>
-                        </label>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Inverse les lectures de courant
                       </div>
                     </div>
                   </div>
