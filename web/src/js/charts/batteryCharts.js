@@ -581,7 +581,7 @@ export class BatteryRealtimeCharts {
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 28,
+                  fontSize: 20,
                   fontWeight: 800,
                   offsetCenter: [0, '0%'],
                   color: 'auto',
@@ -596,12 +596,12 @@ export class BatteryRealtimeCharts {
                   },
                   rich: {
                     value: {
-                      fontSize: 32,
+                      fontSize: 24,
                       fontWeight: 800,
                       color: 'auto',
                     },
                     unit: {
-                      fontSize: 16,
+                      fontSize: 13,
                       fontWeight: 600,
                       color: 'rgba(255,255,255,0.6)',
                       padding: [0, 0, 0, 4],
