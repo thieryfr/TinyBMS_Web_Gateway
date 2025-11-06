@@ -4,6 +4,7 @@ import { EnergyCharts } from '/src/js/charts/energyCharts.js';
 import { UartCharts } from '/src/js/charts/uartCharts.js';
 import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
+import { SystemStatus } from '/src/js/systemStatus.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
@@ -33,6 +34,7 @@ const state = {
     },
     batteryCharts: null,
     energyCharts: null,
+    systemStatus: null,
     uartRealtime: {
         frames: { raw: [], decoded: [] },
         timeline: { raw: null, decoded: null },
@@ -460,6 +462,11 @@ function updateMqttStatus(status, error) {
 
     state.mqtt.lastStatus = status;
 
+    // Update system status
+    if (state.systemStatus) {
+        state.systemStatus.handleMqttStatus(status);
+    }
+
     if (status.connected) {
         badge.textContent = 'Connecté';
         badge.classList.add('status-badge--connected');
@@ -648,6 +655,9 @@ async function initialise() {
         energyBarChartElement: document.getElementById('energy-bar-chart'),
     });
 
+    state.systemStatus = new SystemStatus();
+    state.systemStatus.init();
+
     state.uartRealtime.timeline.raw = document.getElementById('uart-timeline-raw');
     state.uartRealtime.timeline.decoded = document.getElementById('uart-timeline-decoded');
     state.uartRealtime.charts = new UartCharts({ distributionElement: document.getElementById('uart-frames-chart') });
@@ -715,6 +725,10 @@ async function fetchStatus() {
         const data = await res.json();
         if (data.battery) {
             updateBatteryDisplay(data.battery);
+            // Set initial system status
+            if (state.systemStatus) {
+                state.systemStatus.setInitialStatus(data.battery);
+            }
         }
         return data;
     } catch (error) {
@@ -855,10 +869,21 @@ function handleTelemetryMessage(data) {
             energyDischargedWh: data.energy_discharged_wh,
         });
     }
+
+    // Update system status
+    if (state.systemStatus) {
+        state.systemStatus.handleTelemetryUpdate(data);
+    }
 }
 
 function handleEventMessage(data) {
     console.log('[Event]', data);
+
+    // Update system status
+    if (state.systemStatus) {
+        state.systemStatus.handleEvent(data);
+    }
+
     if (data.type === 'notification') {
         // Handle notifications
     }
