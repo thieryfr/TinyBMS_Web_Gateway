@@ -1,33 +1,8 @@
 <header class="navbar navbar-expand-md navbar-dark app-header">
   <div class="container-xl flex-column flex-md-row">
-    <div class="navbar-brand d-flex flex-column gap-2 align-items-start">
-      <span class="navbar-brand-text fw-bold fs-4">TinyBMS System Status</span>
-      <div class="system-status-panel">
-        <div class="status-module" data-module="wifi">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">WiFi</span>
-        </div>
-        <div class="status-module" data-module="storage">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Storage</span>
-        </div>
-        <div class="status-module" data-module="uart">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">UART BMS</span>
-        </div>
-        <div class="status-module" data-module="can">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">CAN Bus</span>
-        </div>
-        <div class="status-module" data-module="mqtt">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">MQTT</span>
-        </div>
-        <div class="status-module" data-module="webserver">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Web Server</span>
-        </div>
-      </div>
+    <div class="navbar-brand d-flex flex-column gap-1 align-items-start">
+      <span class="navbar-brand-text fw-bold fs-2">TinyBMS Web Gateway</span>
+      <span class="subtitle">Système de monitoring et configuration ESP32-CAN-X2</span>
     </div>
     <div class="navbar-nav ms-md-auto mt-3 mt-md-0">
       <div class="nav-item">
@@ -51,37 +26,66 @@
     </div>
   </div>
   <div class="container-xl mt-3">
-    <ul class="nav nav-tabs tabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button active" data-tab="battery" role="tab">
-          Temps réel – Batterie
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button" data-tab="uart" role="tab">
-          Temps réel – UART
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button" data-tab="can" role="tab">
-          Temps réel – CAN Bus
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button" data-tab="history" role="tab">
-          Historique
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button" data-tab="config" role="tab">
-          Configuration
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link tab-button" data-tab="mqtt" role="tab">
-          MQTT
-        </button>
-      </li>
-    </ul>
+    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
+      <ul class="nav nav-tabs tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button active" data-tab="battery" role="tab">
+            Temps réel – Batterie
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button" data-tab="uart" role="tab">
+            Temps réel – UART
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button" data-tab="can" role="tab">
+            Temps réel – CAN Bus
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button" data-tab="history" role="tab">
+            Historique
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button" data-tab="config" role="tab">
+            Configuration
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button type="button" class="nav-link tab-button" data-tab="mqtt" role="tab">
+            MQTT
+          </button>
+        </li>
+      </ul>
+
+      <div class="system-status-panel">
+        <div class="status-module" data-module="wifi">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">WiFi</span>
+        </div>
+        <div class="status-module" data-module="storage">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">Storage</span>
+        </div>
+        <div class="status-module" data-module="uart">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">UART</span>
+        </div>
+        <div class="status-module" data-module="can">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">CAN</span>
+        </div>
+        <div class="status-module" data-module="mqtt">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">MQTT</span>
+        </div>
+        <div class="status-module" data-module="webserver">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">Web</span>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
