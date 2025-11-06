@@ -1,62 +1,61 @@
 <header class="navbar navbar-expand-md navbar-dark app-header">
-  <div class="container-xl flex-column flex-md-row">
-    <div class="navbar-brand d-flex align-items-start">
-      <div class="kpi-panel">
-        <div class="kpi-item">
-          <div class="kpi-icon bg-success-lt">
-            <i class="ti ti-battery-charging"></i>
-          </div>
-          <div class="kpi-content">
-            <div class="kpi-label">SOC / SOH</div>
-            <div class="kpi-value" id="kpi-soc-soh">-- % / -- %</div>
-          </div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-icon bg-primary-lt">
-            <i class="ti ti-bolt"></i>
-          </div>
-          <div class="kpi-content">
-            <div class="kpi-label">Puissance</div>
-            <div class="kpi-value" id="kpi-power">-- W</div>
-          </div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-icon bg-warning-lt">
-            <i class="ti ti-refresh"></i>
-          </div>
-          <div class="kpi-content">
-            <div class="kpi-label">Cycles</div>
-            <div class="kpi-value" id="kpi-cycles">--</div>
-          </div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-icon bg-info-lt">
-            <i class="ti ti-gauge"></i>
-          </div>
-          <div class="kpi-content">
-            <div class="kpi-label">CVL</div>
-            <div class="kpi-value" id="kpi-cvl">-- V</div>
-          </div>
-        </div>
+  <div class="container-xl">
+    <!-- Logo et titre -->
+    <div class="app-logo">
+      <div class="app-logo-icon">
+        <i class="ti ti-battery-charging-2"></i>
+      </div>
+      <div class="app-logo-text">
+        <div class="app-logo-title">TinyBMS Gateway</div>
+        <div class="app-logo-subtitle">Battery Management</div>
       </div>
     </div>
-    <div class="navbar-nav ms-md-auto mt-3 mt-md-0">
-      <div class="nav-item">
-        <div class="d-flex flex-column flex-md-row gap-3 align-items-start align-items-md-center">
-          <div class="d-flex align-items-center gap-2">
-            <i class="ti ti-arrow-down-circle text-success fs-3"></i>
-            <div class="d-flex flex-column">
-              <span class="text-secondary small">Énergie IN</span>
-              <span class="fw-bold text-success" id="energy-in">-- kWh</span>
-            </div>
-          </div>
-          <div class="d-flex align-items-center gap-2">
-            <i class="ti ti-arrow-up-circle text-warning fs-3"></i>
-            <div class="d-flex flex-column">
-              <span class="text-secondary small">Énergie OUT</span>
-              <span class="fw-bold text-warning" id="energy-out">-- kWh</span>
-            </div>
-          </div>
+
+    <!-- KPI Panel -->
+    <div class="kpi-panel">
+      <div class="kpi-item" data-tooltip="État de charge et santé de la batterie">
+        <div class="kpi-icon bg-success-lt">
+          <i class="ti ti-battery-charging"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">SOC / SOH</div>
+          <div class="kpi-value" id="kpi-soc-soh">-- % / -- %</div>
+        </div>
+      </div>
+      <div class="kpi-item" data-tooltip="Puissance actuelle du pack">
+        <div class="kpi-icon bg-primary-lt">
+          <i class="ti ti-bolt"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">Puissance</div>
+          <div class="kpi-value" id="kpi-power">-- W</div>
+        </div>
+      </div>
+      <div class="kpi-item" data-tooltip="Charge restante estimée">
+        <div class="kpi-icon bg-cyan-lt">
+          <i class="ti ti-clock-hour-4"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">Restant</div>
+          <div class="kpi-value" id="kpi-time-remaining">-- h</div>
+        </div>
+      </div>
+      <div class="kpi-item" data-tooltip="Tension limite de charge">
+        <div class="kpi-icon bg-info-lt">
+          <i class="ti ti-gauge"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">CVL</div>
+          <div class="kpi-value" id="kpi-cvl">-- V</div>
+        </div>
+      </div>
+      <div class="kpi-item" data-tooltip="Nombre de cycles de charge">
+        <div class="kpi-icon bg-warning-lt">
+          <i class="ti ti-refresh"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">Cycles</div>
+          <div class="kpi-value" id="kpi-cycles">--</div>
         </div>
       </div>
     </div>

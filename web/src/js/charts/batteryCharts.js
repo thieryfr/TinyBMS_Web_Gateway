@@ -17,7 +17,7 @@ function sanitizeNumber(value) {
 }
 
 export class BatteryRealtimeCharts {
-  constructor({ gaugeElement, voltageSparklineElement, currentSparklineElement, cellChartElement, temperatureGaugeElement } = {}) {
+  constructor({ gaugeElement, voltageSparklineElement, currentSparklineElement, cellChartElement, temperatureGaugeElement, remainingGaugeElement } = {}) {
     this.sparklineLimit = DEFAULT_SPARKLINE_LIMIT;
     this.voltageSamples = [];
     this.currentSamples = [];
@@ -513,6 +513,109 @@ export class BatteryRealtimeCharts {
           { renderer: 'svg' }
         )
       : null;
+
+    this.remainingGauge = remainingGaugeElement
+      ? initChart(
+          remainingGaugeElement,
+          {
+            tooltip: {
+              formatter: ({ value }) =>
+                value != null ? `${value.toFixed(1)}%` : 'Charge restante indisponible',
+            },
+            series: [
+              {
+                name: 'Charge Restante',
+                type: 'gauge',
+                startAngle: 180,
+                endAngle: 0,
+                min: 0,
+                max: 100,
+                splitNumber: 10,
+                center: ['50%', '70%'],
+                radius: '95%',
+                pointer: {
+                  icon: 'path://M2.9,0.7L2.9,0.7c1.4,0,2.6,1.2,2.6,2.6v115c0,1.4-1.2,2.6-2.6,2.6l0,0c-1.4,0-2.6-1.2-2.6-2.6V3.3C0.3,1.9,1.4,0.7,2.9,0.7z',
+                  length: '70%',
+                  width: 6,
+                  itemStyle: {
+                    color: 'auto',
+                  },
+                },
+                axisLine: {
+                  lineStyle: {
+                    width: 16,
+                    color: [
+                      [0.2, '#ef4444'],
+                      [0.5, '#f59e0b'],
+                      [0.8, '#10b981'],
+                      [1, '#00d4aa'],
+                    ],
+                  },
+                },
+                axisTick: {
+                  distance: -16,
+                  length: 6,
+                  lineStyle: { color: 'rgba(255,255,255,0.4)', width: 2 },
+                },
+                splitLine: {
+                  distance: -16,
+                  length: 10,
+                  lineStyle: { color: 'rgba(255,255,255,0.5)', width: 3 },
+                },
+                axisLabel: {
+                  color: 'rgba(255,255,255,0.8)',
+                  distance: 20,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  formatter: '{value}%',
+                },
+                detail: {
+                  valueAnimation: true,
+                  fontSize: 28,
+                  fontWeight: 800,
+                  offsetCenter: [0, '0%'],
+                  color: 'auto',
+                  formatter: (value) =>
+                    value != null ? `{value|${value.toFixed(0)}}{unit|%}` : '{value|--}{unit|%}',
+                  rich: {
+                    value: {
+                      fontSize: 32,
+                      fontWeight: 800,
+                      color: 'auto',
+                    },
+                    unit: {
+                      fontSize: 18,
+                      fontWeight: 600,
+                      color: 'rgba(255,255,255,0.6)',
+                      padding: [0, 0, 0, 4],
+                    },
+                  },
+                },
+                anchor: {
+                  show: true,
+                  showAbove: true,
+                  size: 12,
+                  itemStyle: {
+                    color: 'auto',
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    borderWidth: 2,
+                  },
+                },
+                title: {
+                  show: false,
+                },
+                data: [
+                  {
+                    value: 0,
+                    name: 'Charge',
+                  },
+                ],
+              },
+            ],
+          },
+          { renderer: 'svg' }
+        )
+      : null;
   }
 
   /**
@@ -590,6 +693,7 @@ export class BatteryRealtimeCharts {
     this.updateSparkline({ voltage, current });
     this.updateCellChart(voltagesMv);
     this.updateTemperatureGauge(temperature);
+    this.updateRemainingGauge(soc);
   }
 
   updateGauge(rawSoc, rawSoh) {
@@ -634,6 +738,25 @@ export class BatteryRealtimeCharts {
             {
               value: value,
               name: 'Température',
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  updateRemainingGauge(rawSoc) {
+    if (!this.remainingGauge) {
+      return;
+    }
+    const value = sanitizeNumber(rawSoc);
+    this.remainingGauge.chart.setOption({
+      series: [
+        {
+          data: [
+            {
+              value: value == null ? null : Math.max(0, Math.min(100, value)),
+              name: 'Charge',
             },
           ],
         },
