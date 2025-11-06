@@ -4,6 +4,13 @@ const DEFAULT_SPARKLINE_LIMIT = 60;
 const UNDER_VOLTAGE_CUTOFF = 2800; // mV
 const OVER_VOLTAGE_CUTOFF = 3800; // mV
 
+// Default register values for dynamic axes
+const DEFAULT_OVERVOLTAGE_MV = 3800;
+const DEFAULT_UNDERVOLTAGE_MV = 2800;
+const DEFAULT_PEAK_DISCHARGE_A = 70;
+const DEFAULT_CHARGE_OVERCURRENT_A = 90;
+const NUM_CELLS = 16;
+
 function sanitizeNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -15,6 +22,16 @@ export class BatteryRealtimeCharts {
     this.voltageSamples = [];
     this.currentSamples = [];
     this.cellVoltages = [];
+
+    // Dynamic axis limits from BMS registers
+    this.voltageLimits = {
+      min: (DEFAULT_UNDERVOLTAGE_MV * 0.9 * NUM_CELLS) / 1000, // Convert mV to V
+      max: (DEFAULT_OVERVOLTAGE_MV * 1.1 * NUM_CELLS) / 1000,
+    };
+    this.currentLimits = {
+      min: -DEFAULT_CHARGE_OVERCURRENT_A, // Negative for charging
+      max: DEFAULT_PEAK_DISCHARGE_A * 1.1,
+    };
 
     this.gauge = gaugeElement
       ? initChart(
@@ -201,9 +218,19 @@ export class BatteryRealtimeCharts {
             },
             yAxis: {
               type: 'value',
-              show: false,
-              min: (value) => value.min,
-              max: (value) => value.max,
+              show: true,
+              position: 'right',
+              min: this.voltageLimits.min,
+              max: this.voltageLimits.max,
+              axisLabel: {
+                formatter: '{value} V',
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: 10,
+              },
+              axisLine: { show: false },
+              splitLine: {
+                lineStyle: { color: 'rgba(255,255,255,0.08)' },
+              },
             },
             series: [
               {
@@ -262,9 +289,19 @@ export class BatteryRealtimeCharts {
             },
             yAxis: {
               type: 'value',
-              show: false,
-              min: (value) => value.min,
-              max: (value) => value.max,
+              show: true,
+              position: 'right',
+              min: this.currentLimits.min,
+              max: this.currentLimits.max,
+              axisLabel: {
+                formatter: '{value} A',
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: 10,
+              },
+              axisLine: { show: false },
+              splitLine: {
+                lineStyle: { color: 'rgba(255,255,255,0.08)' },
+              },
             },
             series: [
               {
@@ -474,7 +511,70 @@ export class BatteryRealtimeCharts {
       : null;
   }
 
-  update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature } = {}) {
+  /**
+   * Update axis limits based on BMS register values
+   * @param {Object} registers - Register data containing voltage and current limits
+   */
+  updateAxisLimits(registers) {
+    if (!registers) {
+      return;
+    }
+
+    // Extract register values
+    const overvoltage_mv = registers.overvoltage_cutoff_mv || DEFAULT_OVERVOLTAGE_MV;
+    const undervoltage_mv = registers.undervoltage_cutoff_mv || DEFAULT_UNDERVOLTAGE_MV;
+    const peak_discharge_a = registers.peak_discharge_current_a || DEFAULT_PEAK_DISCHARGE_A;
+    const charge_overcurrent_a = registers.charge_overcurrent_a || DEFAULT_CHARGE_OVERCURRENT_A;
+
+    // Calculate new limits
+    // Voltage: overvoltage +10% and undervoltage -10%, multiplied by 16 cells, converted to V
+    const newVoltageLimits = {
+      min: (undervoltage_mv * 0.9 * NUM_CELLS) / 1000,
+      max: (overvoltage_mv * 1.1 * NUM_CELLS) / 1000,
+    };
+
+    // Current: peak discharge +10% for max, charge overcurrent (negative) for min
+    const newCurrentLimits = {
+      min: -charge_overcurrent_a,
+      max: peak_discharge_a * 1.1,
+    };
+
+    // Update limits if they changed
+    const voltageLimitsChanged =
+      Math.abs(this.voltageLimits.min - newVoltageLimits.min) > 0.01 ||
+      Math.abs(this.voltageLimits.max - newVoltageLimits.max) > 0.01;
+
+    const currentLimitsChanged =
+      Math.abs(this.currentLimits.min - newCurrentLimits.min) > 0.1 ||
+      Math.abs(this.currentLimits.max - newCurrentLimits.max) > 0.1;
+
+    if (voltageLimitsChanged) {
+      this.voltageLimits = newVoltageLimits;
+      if (this.voltageSparkline) {
+        this.voltageSparkline.chart.setOption({
+          yAxis: {
+            min: this.voltageLimits.min,
+            max: this.voltageLimits.max,
+          },
+        });
+      }
+    }
+
+    if (currentLimitsChanged) {
+      this.currentLimits = newCurrentLimits;
+      if (this.currentSparkline) {
+        this.currentSparkline.chart.setOption({
+          yAxis: {
+            min: this.currentLimits.min,
+            max: this.currentLimits.max,
+          },
+        });
+      }
+    }
+  }
+
+  update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature, registers } = {}) {
+    this.updateAxisLimits(registers);
     this.updateGauge(soc, soh);
     this.updateSparkline({ voltage, current });
     this.updateCellChart(voltagesMv);
