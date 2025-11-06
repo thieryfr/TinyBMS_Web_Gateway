@@ -3,6 +3,16 @@
   #tinybms-config-content .form-label {
     color: white !important;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  #tinybms-config-content .form-label .register-number {
+    color: #6c757d;
+    font-size: 0.875rem;
+    font-weight: normal;
   }
 
   #tinybms-config-content .form-control,
@@ -22,6 +32,29 @@
 
   #tinybms-config-content h4 {
     color: white !important;
+  }
+
+  #tinybms-config-content .field-with-current {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  #tinybms-config-content .current-value {
+    color: #8ab4f8;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  #tinybms-config-content .current-value-label {
+    color: #6c757d;
+    margin-right: 0.25rem;
+  }
+
+  /* Réduction de la largeur des champs config générale */
+  #general-config-form .form-control,
+  #general-config-form .form-select {
+    max-width: 15em;
   }
 </style>
 
@@ -83,20 +116,38 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="fully-charged-voltage" class="form-label">
-                        Fully Charged Voltage (V)
-                        <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme pleine charge"></i>
+                        <span>
+                          Fully Charged Voltage (V)
+                          <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme pleine charge"></i>
+                        </span>
+                        <span class="register-number">Reg: 300</span>
                       </label>
-                      <input type="number" class="form-control" id="fully-charged-voltage" step="0.001" min="2.5" max="4.5" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="fully-charged-voltage" step="0.001" min="2.5" max="4.5" data-register="300" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-fully-charged-voltage">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Min: (Fully Discharged + 0.01V) • Max: (Over-Voltage Cutoff - 0.01V)
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="charge-finished-current" class="form-label">
-                        Charge Finished Current (A)
-                        <i class="ti ti-info-circle text-info ms-1" title="Courant de fin de charge"></i>
+                        <span>
+                          Charge Finished Current (A)
+                          <i class="ti ti-info-circle text-info ms-1" title="Courant de fin de charge"></i>
+                        </span>
+                        <span class="register-number">Reg: 304</span>
                       </label>
-                      <input type="number" class="form-control" id="charge-finished-current" step="0.1" min="0.1" max="150" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="charge-finished-current" step="0.1" min="0.1" max="150" data-register="304" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-charge-finished-current">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Dépend du type de PCB et du capteur de courant
                       </div>
@@ -117,10 +168,19 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="fully-discharged-voltage" class="form-label">
-                        Fully Discharged Voltage (V)
-                        <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme déchargée"></i>
+                        <span>
+                          Fully Discharged Voltage (V)
+                          <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme déchargée"></i>
+                        </span>
+                        <span class="register-number">Reg: 301</span>
                       </label>
-                      <input type="number" class="form-control" id="fully-discharged-voltage" step="0.001" min="2.0" max="4.0" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="fully-discharged-voltage" step="0.001" min="2.0" max="4.0" data-register="301" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-fully-discharged-voltage">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Min: (Under-Voltage Cutoff + 0.01V) • Max: (Fully Charged - 0.01V)
                       </div>
@@ -141,30 +201,57 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="early-balancing-threshold" class="form-label">
-                        Early Balancing Threshold (V)
-                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de démarrage de l'équilibrage"></i>
+                        <span>
+                          Early Balancing Threshold (V)
+                          <i class="ti ti-info-circle text-info ms-1" title="Seuil de démarrage de l'équilibrage"></i>
+                        </span>
+                        <span class="register-number">Reg: 303</span>
                       </label>
-                      <input type="number" class="form-control" id="early-balancing-threshold" step="0.001" min="1.0" max="4.5" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="early-balancing-threshold" step="0.001" min="1.0" max="4.5" data-register="303" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-early-balancing-threshold">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 1.0V - 4.5V
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="allowed-disbalance" class="form-label">
-                        Allowed Disbalance (mV)
-                        <i class="ti ti-info-circle text-info ms-1" title="Déséquilibre maximum autorisé"></i>
+                        <span>
+                          Allowed Disbalance (mV)
+                          <i class="ti ti-info-circle text-info ms-1" title="Déséquilibre maximum autorisé"></i>
+                        </span>
+                        <span class="register-number">Reg: 308</span>
                       </label>
-                      <input type="number" class="form-control" id="allowed-disbalance" step="1" min="15" max="100" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="allowed-disbalance" step="1" min="15" max="100" data-register="308" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-allowed-disbalance">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 15mV - 100mV
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="number-of-series-cells" class="form-label">
-                        Number of Series Cells
-                        <i class="ti ti-info-circle text-info ms-1" title="Nombre de cellules en série"></i>
+                        <span>
+                          Number of Series Cells
+                          <i class="ti ti-info-circle text-info ms-1" title="Nombre de cellules en série"></i>
+                        </span>
+                        <span class="register-number">Reg: 307</span>
                       </label>
-                      <input type="number" class="form-control" id="number-of-series-cells" step="1" min="4" max="16" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="number-of-series-cells" step="1" min="4" max="16" data-register="307" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-number-of-series-cells">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 4 - 16 cellules
                       </div>
@@ -185,40 +272,76 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="battery-capacity" class="form-label">
-                        Battery Capacity (Ah)
-                        <i class="ti ti-info-circle text-info ms-1" title="Capacité de la batterie"></i>
+                        <span>
+                          Battery Capacity (Ah)
+                          <i class="ti ti-info-circle text-info ms-1" title="Capacité de la batterie"></i>
+                        </span>
+                        <span class="register-number">Reg: 306</span>
                       </label>
-                      <input type="number" class="form-control" id="battery-capacity" step="0.1" min="0.1" max="655" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="battery-capacity" step="0.1" min="0.1" max="655" data-register="306" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-battery-capacity">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 0.1Ah - 655Ah
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="set-soc-manually" class="form-label">
-                        Set SOC manually (%)
-                        <i class="ti ti-info-circle text-info ms-1" title="Définir le SOC manuellement"></i>
+                        <span>
+                          Set SOC manually (%)
+                          <i class="ti ti-info-circle text-info ms-1" title="Définir le SOC manuellement"></i>
+                        </span>
+                        <span class="register-number">Reg: 328</span>
                       </label>
-                      <input type="number" class="form-control" id="set-soc-manually" step="1" min="0" max="100" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="set-soc-manually" step="1" min="0" max="100" data-register="328" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-set-soc-manually">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 0% - 100%
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="battery-maximum-cycles" class="form-label">
-                        Battery Maximum Cycles Count
-                        <i class="ti ti-info-circle text-info ms-1" title="Nombre maximum de cycles"></i>
+                        <span>
+                          Battery Maximum Cycles Count
+                          <i class="ti ti-info-circle text-info ms-1" title="Nombre maximum de cycles"></i>
+                        </span>
+                        <span class="register-number">Reg: 322</span>
                       </label>
-                      <input type="number" class="form-control" id="battery-maximum-cycles" step="1" min="1" max="100000" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="battery-maximum-cycles" step="1" min="1" max="100000" data-register="322" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-battery-maximum-cycles">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Cycles avant dégradation significative
                       </div>
                     </div>
                     <div class="col-12">
                       <label for="set-soh-manually" class="form-label">
-                        Set SOH manually (%)
-                        <i class="ti ti-info-circle text-info ms-1" title="Définir le SOH manuellement"></i>
+                        <span>
+                          Set SOH manually (%)
+                          <i class="ti ti-info-circle text-info ms-1" title="Définir le SOH manuellement"></i>
+                        </span>
+                        <span class="register-number">Reg: 323</span>
                       </label>
-                      <input type="number" class="form-control" id="set-soh-manually" step="1" min="0" max="100" required>
+                      <div class="field-with-current">
+                        <input type="number" class="form-control" id="set-soh-manually" step="1" min="0" max="100" data-register="323" required>
+                        <span class="current-value">
+                          <span class="current-value-label">Actuel:</span>
+                          <span id="current-set-soh-manually">--</span>
+                        </span>
+                      </div>
                       <div class="form-hint text-muted small">
                         Plage: 0% - 100%
                       </div>
