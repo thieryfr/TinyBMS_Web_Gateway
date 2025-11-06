@@ -84,7 +84,7 @@
         </div>
     </div>
 
-    <script src="/assets/js/echarts.simple.min.js"></script>
+    <script src="/assets/js/echarts.common.min.js"></script>
     <script>
         const logDiv = document.getElementById('log');
         const statsDiv = document.getElementById('container-stats');
@@ -144,8 +144,8 @@
                 }
 
                 // Inspecter les petits-enfants
+                log('  Sous-enfants: ' + child.children.length, 'info');
                 if (child.children.length > 0) {
-                    log('  Sous-enfants: ' + child.children.length, 'info');
                     for (let j = 0; j < child.children.length; j++) {
                         const subChild = child.children[j];
                         log('    Sous-enfant ' + j + ': ' + subChild.tagName, 'info');
@@ -154,7 +154,14 @@
                             log('    Canvas width: ' + subChild.width, 'info');
                             log('    Canvas height: ' + subChild.height, 'info');
                         }
+                        if (subChild.tagName === 'SVG') {
+                            log('    SVG trouvé dans sous-enfant !', 'success');
+                            const svgRect = subChild.getBoundingClientRect();
+                            log('    SVG dimensions: ' + svgRect.width + 'x' + svgRect.height, 'info');
+                        }
                     }
+                } else {
+                    log('  ⚠️ DIV est VIDE - pas de canvas/svg créé !', 'warn');
                 }
             }
 
@@ -197,7 +204,7 @@
             try {
                 log('Appel de echarts.init()...', 'info');
                 chart = window.echarts.init(container, null, {
-                    renderer: 'canvas',
+                    renderer: 'svg',
                     width: 600,
                     height: 400
                 });
