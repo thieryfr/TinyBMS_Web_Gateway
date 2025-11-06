@@ -26,13 +26,13 @@ export class BatteryRealtimeCharts {
               {
                 name: 'SOC',
                 type: 'gauge',
-                center: ['30%', '55%'],
+                center: ['30%', '50%'],
                 startAngle: 220,
                 endAngle: -40,
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '75%',
+                radius: '60%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '60%',
@@ -80,10 +80,10 @@ export class BatteryRealtimeCharts {
                 },
                 title: {
                   show: true,
-                  offsetCenter: [0, '-80%'],
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: 'rgba(255,255,255,0.85)',
+                  offsetCenter: [0, '-75%'],
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.9)',
                 },
                 data: [
                   {
@@ -95,13 +95,13 @@ export class BatteryRealtimeCharts {
               {
                 name: 'SOH',
                 type: 'gauge',
-                center: ['70%', '55%'],
+                center: ['70%', '50%'],
                 startAngle: 220,
                 endAngle: -40,
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '75%',
+                radius: '60%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '60%',
@@ -149,10 +149,10 @@ export class BatteryRealtimeCharts {
                 },
                 title: {
                   show: true,
-                  offsetCenter: [0, '-80%'],
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: 'rgba(255,255,255,0.85)',
+                  offsetCenter: [0, '-75%'],
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.9)',
                 },
                 data: [
                   {
@@ -163,7 +163,7 @@ export class BatteryRealtimeCharts {
               },
             ],
           },
-          { renderer: 'svg' }
+          { renderer: 'canvas' }
         )
       : null;
 
