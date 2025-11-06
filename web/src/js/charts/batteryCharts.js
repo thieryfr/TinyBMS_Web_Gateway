@@ -23,7 +23,7 @@ export class BatteryRealtimeCharts {
                 value != null ? `${seriesName}: ${value.toFixed(1)} %` : `${seriesName} indisponible`,
             },
             series: [
-              // SOC Gauge (left)
+              // SOC Needle (primary - with dial)
               {
                 name: 'SOC',
                 type: 'gauge',
@@ -32,16 +32,19 @@ export class BatteryRealtimeCharts {
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                center: ['25%', '50%'],
-                radius: '80%',
+                center: ['50%', '50%'],
+                radius: '100%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
-                  width: 5,
+                  width: 6,
+                  itemStyle: {
+                    color: '#00a896',
+                  },
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 12,
+                    width: 14,
                     color: [
                       [0.5, '#f25f5c'],
                       [0.8, '#ffd166'],
@@ -51,42 +54,35 @@ export class BatteryRealtimeCharts {
                 },
                 axisTick: {
                   distance: 2,
-                  length: 5,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
+                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
                 },
                 splitLine: {
-                  distance: 2,
-                  length: 8,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
+                  length: 10,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
                 },
                 axisLabel: {
                   color: 'rgba(255,255,255,0.7)',
-                  distance: 10,
-                  fontSize: 11,
+                  distance: 12,
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: 600,
-                  offsetCenter: [0, '60%'],
-                  color: '#f2f5f7',
+                  offsetCenter: [0, '45%'],
+                  color: '#00a896',
                   formatter: (value) =>
-                    value != null ? `${value.toFixed(1)}%` : '-- %',
+                    value != null ? `SOC: ${value.toFixed(1)}%` : 'SOC: -- %',
                 },
                 anchor: {
                   show: true,
                   showAbove: true,
-                  size: 8,
+                  size: 10,
                   itemStyle: {
-                    color: '#f2f5f7',
+                    color: '#00a896',
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-80%'],
-                  fontSize: 14,
-                  color: '#f2f5f7',
-                  fontWeight: 'bold',
+                  show: false,
                 },
                 data: [
                   {
@@ -95,7 +91,7 @@ export class BatteryRealtimeCharts {
                   },
                 ],
               },
-              // SOH Gauge (right)
+              // SOH Needle (secondary - needle only, no dial)
               {
                 name: 'SOH',
                 type: 'gauge',
@@ -104,61 +100,47 @@ export class BatteryRealtimeCharts {
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                center: ['75%', '50%'],
-                radius: '80%',
+                center: ['50%', '50%'],
+                radius: '100%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
-                  length: '65%',
+                  length: '55%',
                   width: 5,
-                },
-                axisLine: {
-                  lineStyle: {
-                    width: 12,
-                    color: [
-                      [0.5, '#f25f5c'],
-                      [0.8, '#ffd166'],
-                      [1, '#00a896'],
-                    ],
+                  itemStyle: {
+                    color: '#ffd166',
                   },
                 },
+                axisLine: {
+                  show: false,
+                },
                 axisTick: {
-                  distance: 2,
-                  length: 5,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
+                  show: false,
                 },
                 splitLine: {
-                  distance: 2,
-                  length: 8,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
+                  show: false,
                 },
                 axisLabel: {
-                  color: 'rgba(255,255,255,0.7)',
-                  distance: 10,
-                  fontSize: 11,
+                  show: false,
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: 600,
-                  offsetCenter: [0, '60%'],
-                  color: '#f2f5f7',
+                  offsetCenter: [0, '65%'],
+                  color: '#ffd166',
                   formatter: (value) =>
-                    value != null ? `${value.toFixed(1)}%` : '-- %',
+                    value != null ? `SOH: ${value.toFixed(1)}%` : 'SOH: -- %',
                 },
                 anchor: {
                   show: true,
-                  showAbove: true,
+                  showAbove: false,
                   size: 8,
                   itemStyle: {
-                    color: '#f2f5f7',
+                    color: '#ffd166',
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-80%'],
-                  fontSize: 14,
-                  color: '#f2f5f7',
-                  fontWeight: 'bold',
+                  show: false,
                 },
                 data: [
                   {
