@@ -1,0 +1,20 @@
+<section id="tab-tiny" class="tab-panel" aria-labelledby="tab-tiny-label">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h3 class="card-title mb-0">
+          <i class="ti ti-adjustments-horizontal me-2"></i>
+          Registres de configuration TinyBMS
+        </h3>
+        <p class="card-subtitle text-secondary mb-0 mt-2">
+          Configurez les paramètres avancés du TinyBMS via les commandes UART. Les valeurs sont lues et écrites directement depuis/vers le BMS.
+        </p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="config-registers" role="form"></div>
+    </div>
+  </div>
+
+  <div data-partial="./tinybms-config.html"></div>
+</section>
