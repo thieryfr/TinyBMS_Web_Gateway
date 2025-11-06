@@ -596,8 +596,8 @@ export class BatteryRealtimeCharts {
                   },
                   rich: {
                     value: {
-                      fontSize: 24,
-                      fontWeight: 800,
+                      fontSize: 18,
+                      fontWeight: 700,
                       color: 'auto',
                     },
                     unit: {
