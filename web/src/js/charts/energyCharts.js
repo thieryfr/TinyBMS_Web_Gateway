@@ -18,7 +18,7 @@ export class EnergyCharts {
           energyBarChartElement,
           {
             title: {
-              text: 'Énergie IN/OUT',
+              text: 'Énergie IN/OUT (0x378)',
               left: 'center',
               top: 10,
               textStyle: {

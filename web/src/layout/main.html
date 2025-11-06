@@ -7,9 +7,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
-                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Tension pack</h2>
-                  <p class="display-6 fw-bold text-white mb-1" id="battery-voltage">-- V</p>
-                  <span class="text-secondary" id="battery-minmax">min -- mV • max -- mV</span>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1" data-tooltip="0x356">Tension pack</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-voltage" data-tooltip="0x356">-- V</p>
+                  <span class="text-secondary" id="battery-minmax" data-tooltip="0x373">min -- mV • max -- mV</span>
                 </div>
                 <span class="avatar avatar-lg bg-primary-lt text-primary shadow-sm">
                   <i class="ti ti-bolt fs-2"></i>
@@ -29,9 +29,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
-                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Courant pack</h2>
-                  <p class="display-6 fw-bold text-white mb-1" id="battery-current">-- A</p>
-                  <span class="text-secondary" id="battery-balancing">Équilibrage: --</span>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1" data-tooltip="0x356">Courant pack</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-current" data-tooltip="0x356">-- A</p>
+                  <span class="text-secondary" id="battery-balancing" data-tooltip="0x35A">Équilibrage: --</span>
                 </div>
                 <span class="avatar avatar-lg bg-warning-lt text-warning shadow-sm">
                   <i class="ti ti-current-ac fs-2"></i>
@@ -51,12 +51,12 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
-                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-2">État de charge</h2>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-2" data-tooltip="0x355">État de charge</h2>
                   <div class="d-flex flex-wrap gap-2">
-                    <span class="badge bg-green-lt text-green fw-semibold px-3 py-2">
+                    <span class="badge bg-green-lt text-green fw-semibold px-3 py-2" data-tooltip="0x355">
                       SOC <span id="battery-soc">-- %</span>
                     </span>
-                    <span class="badge bg-blue-lt text-blue fw-semibold px-3 py-2">
+                    <span class="badge bg-blue-lt text-blue fw-semibold px-3 py-2" data-tooltip="0x355">
                       SOH <span id="battery-soh">-- %</span>
                     </span>
                   </div>
@@ -81,9 +81,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
-                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Températures</h2>
-                  <p class="display-6 fw-bold text-white mb-1" id="battery-temperature">-- °C</p>
-                  <span class="text-secondary" id="battery-temp-extra">MOSFET: -- °C</span>
+                  <h2 class="card-title text-uppercase fs-6 text-secondary mb-1" data-tooltip="0x373">Températures</h2>
+                  <p class="display-6 fw-bold text-white mb-1" id="battery-temperature" data-tooltip="0x373">-- °C</p>
+                  <span class="text-secondary" id="battery-temp-extra" data-tooltip="0x356">MOSFET: -- °C</span>
                 </div>
                 <span class="avatar avatar-lg bg-danger-lt text-danger shadow-sm">
                   <i class="ti ti-temperature fs-2"></i>
@@ -149,7 +149,7 @@
           <div class="card h-100">
             <div class="card-header d-flex align-items-center gap-2">
               <span class="status-icon text-danger"><i class="ti ti-alert-triangle"></i></span>
-              <h3 class="card-title mb-0">Alarmes</h3>
+              <h3 class="card-title mb-0" data-tooltip="0x35A">Alarmes</h3>
             </div>
             <div id="battery-alarms" class="list-group list-group-flush" role="list"></div>
           </div>
@@ -158,7 +158,7 @@
           <div class="card h-100">
             <div class="card-header d-flex align-items-center gap-2">
               <span class="status-icon text-warning"><i class="ti ti-alert-circle"></i></span>
-              <h3 class="card-title mb-0">Avertissements</h3>
+              <h3 class="card-title mb-0" data-tooltip="0x35A">Avertissements</h3>
             </div>
             <div id="battery-warnings" class="list-group list-group-flush" role="list"></div>
           </div>
@@ -179,9 +179,9 @@
       <section id="battery-cell-section" class="card cell-section mt-4" aria-labelledby="cell-section-title">
         <div class="card-header cell-section-header d-flex flex-column flex-lg-row gap-3 align-items-lg-center justify-content-between">
           <div>
-            <h3 class="card-title" id="cell-section-title">Équilibrage des cellules</h3>
+            <h3 class="card-title" id="cell-section-title" data-tooltip="0x35A">Équilibrage des cellules</h3>
             <p class="card-subtitle" id="cell-section-description">
-              Visualisez les tensions individuelles des cellules 1 à 16 et leur état d’équilibrage.
+              Visualisez les tensions individuelles des cellules 1 à 16 et leur état d'équilibrage.
             </p>
           </div>
           <div class="text-secondary small" id="battery-cell-summary"></div>

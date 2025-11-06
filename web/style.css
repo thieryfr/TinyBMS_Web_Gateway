@@ -1082,3 +1082,46 @@ main {
         box-shadow: 0 0 0 4px rgba(var(--tblr-warning-rgb), 0);
     }
 }
+
+/* Tooltip styles for register/PGN information */
+[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    padding: 0.4rem 0.75rem;
+    background: rgba(0, 0, 0, 0.9);
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1000;
+    border: 1px solid rgba(0, 168, 150, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+[data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-4px);
+}
+
+/* Tooltip for card titles (charts) */
+.card-title[data-tooltip]::after {
+    bottom: auto;
+    top: 100%;
+    transform: translateX(-50%) translateY(8px);
+}
+
+.card-title[data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(4px);
+}
