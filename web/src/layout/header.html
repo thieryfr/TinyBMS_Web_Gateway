@@ -1,8 +1,44 @@
 <header class="navbar navbar-expand-md navbar-dark app-header">
   <div class="container-xl flex-column flex-md-row">
-    <div class="navbar-brand d-flex flex-column gap-1 align-items-start">
-      <span class="navbar-brand-text fw-bold fs-2">TinyBMS Web Gateway</span>
-      <span class="subtitle">Système de monitoring et configuration ESP32-CAN-X2</span>
+    <div class="navbar-brand d-flex align-items-start">
+      <div class="kpi-panel">
+        <div class="kpi-item">
+          <div class="kpi-icon bg-success-lt">
+            <i class="ti ti-battery-charging"></i>
+          </div>
+          <div class="kpi-content">
+            <div class="kpi-label">SOC / SOH</div>
+            <div class="kpi-value" id="kpi-soc-soh">-- % / -- %</div>
+          </div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-icon bg-primary-lt">
+            <i class="ti ti-bolt"></i>
+          </div>
+          <div class="kpi-content">
+            <div class="kpi-label">Puissance</div>
+            <div class="kpi-value" id="kpi-power">-- W</div>
+          </div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-icon bg-danger-lt">
+            <i class="ti ti-temperature"></i>
+          </div>
+          <div class="kpi-content">
+            <div class="kpi-label">Température</div>
+            <div class="kpi-value" id="kpi-temperature">-- °C</div>
+          </div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-icon bg-info-lt">
+            <i class="ti ti-clock"></i>
+          </div>
+          <div class="kpi-content">
+            <div class="kpi-label">Uptime</div>
+            <div class="kpi-value" id="kpi-uptime">--</div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="navbar-nav ms-md-auto mt-3 mt-md-0">
       <div class="nav-item">
