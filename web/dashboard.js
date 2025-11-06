@@ -652,6 +652,7 @@ async function initialise() {
         currentSparklineElement: document.getElementById('battery-current-sparkline'),
         cellChartElement: document.getElementById('battery-cell-chart'),
         temperatureGaugeElement: document.getElementById('battery-temperature-gauge'),
+        remainingGaugeElement: document.getElementById('battery-remaining-gauge'),
     });
 
     state.energyCharts = new EnergyCharts({
@@ -1009,6 +1010,19 @@ function updateKPI(data) {
     } else {
         set('kpi-cvl', '-- V');
     }
+
+    // Update Time Remaining KPI
+    if (data.estimated_time_left_seconds !== undefined && data.estimated_time_left_seconds > 0) {
+        const hours = Math.floor(data.estimated_time_left_seconds / 3600);
+        const minutes = Math.floor((data.estimated_time_left_seconds % 3600) / 60);
+        if (hours > 0) {
+            set('kpi-time-remaining', `${hours}h ${minutes}m`);
+        } else {
+            set('kpi-time-remaining', `${minutes} min`);
+        }
+    } else {
+        set('kpi-time-remaining', '-- h');
+    }
 }
 
 function updateBatteryDisplay(data) {
@@ -1041,28 +1055,33 @@ function updateBatteryDisplay(data) {
 
     // Update estimated time left
     const timeLeftEl = document.getElementById('battery-time-left');
-    const timeLeftBarEl = document.getElementById('battery-time-left-bar');
-    const timeLeftPercentEl = document.getElementById('battery-time-left-percent');
+    const timeLeftPercentBadgeEl = document.getElementById('battery-time-left-percent-badge');
+    const powerBadgeEl = document.getElementById('battery-power-badge');
 
     if (data.estimated_time_left_seconds !== undefined && data.estimated_time_left_seconds > 0) {
         const hours = Math.floor(data.estimated_time_left_seconds / 3600);
         const minutes = Math.floor((data.estimated_time_left_seconds % 3600) / 60);
         if (timeLeftEl) timeLeftEl.textContent = `${hours} h ${minutes} min`;
 
-        // Calculate progress based on SOC (assuming full charge = 100%, empty = 0%)
+        // Update SOC badge
         const soc = data.state_of_charge_pct || 0;
-        if (timeLeftBarEl) {
-            timeLeftBarEl.style.width = `${soc}%`;
-            timeLeftBarEl.setAttribute('aria-valuenow', soc);
+        if (timeLeftPercentBadgeEl) timeLeftPercentBadgeEl.textContent = `${soc.toFixed(0)}%`;
+
+        // Update Power badge
+        if (powerBadgeEl) {
+            if (Number.isFinite(data.pack_voltage_v) && Number.isFinite(data.pack_current_a)) {
+                const power = data.pack_voltage_v * data.pack_current_a;
+                const sign = power < 0 ? '-' : '+';
+                const powerAbs = Math.abs(power);
+                powerBadgeEl.textContent = `${sign}${powerAbs.toFixed(0)} W`;
+            } else {
+                powerBadgeEl.textContent = '-- W';
+            }
         }
-        if (timeLeftPercentEl) timeLeftPercentEl.textContent = `${soc.toFixed(0)}%`;
     } else {
         if (timeLeftEl) timeLeftEl.textContent = '-- h -- min';
-        if (timeLeftBarEl) {
-            timeLeftBarEl.style.width = '0%';
-            timeLeftBarEl.setAttribute('aria-valuenow', 0);
-        }
-        if (timeLeftPercentEl) timeLeftPercentEl.textContent = '--';
+        if (timeLeftPercentBadgeEl) timeLeftPercentBadgeEl.textContent = '--%';
+        if (powerBadgeEl) powerBadgeEl.textContent = '-- W';
     }
 
     // Update system info
