@@ -1031,6 +1031,32 @@ function updateBatteryDisplay(data) {
     set('energy-in', `${energyInKwh} kWh`);
     set('energy-out', `${energyOutKwh} kWh`);
 
+    // Update estimated time left
+    const timeLeftEl = document.getElementById('battery-time-left');
+    const timeLeftBarEl = document.getElementById('battery-time-left-bar');
+    const timeLeftPercentEl = document.getElementById('battery-time-left-percent');
+
+    if (data.estimated_time_left_seconds !== undefined && data.estimated_time_left_seconds > 0) {
+        const hours = Math.floor(data.estimated_time_left_seconds / 3600);
+        const minutes = Math.floor((data.estimated_time_left_seconds % 3600) / 60);
+        if (timeLeftEl) timeLeftEl.textContent = `${hours} h ${minutes} min`;
+
+        // Calculate progress based on SOC (assuming full charge = 100%, empty = 0%)
+        const soc = data.state_of_charge_pct || 0;
+        if (timeLeftBarEl) {
+            timeLeftBarEl.style.width = `${soc}%`;
+            timeLeftBarEl.setAttribute('aria-valuenow', soc);
+        }
+        if (timeLeftPercentEl) timeLeftPercentEl.textContent = `${soc.toFixed(0)}%`;
+    } else {
+        if (timeLeftEl) timeLeftEl.textContent = '-- h -- min';
+        if (timeLeftBarEl) {
+            timeLeftBarEl.style.width = '0%';
+            timeLeftBarEl.setAttribute('aria-valuenow', 0);
+        }
+        if (timeLeftPercentEl) timeLeftPercentEl.textContent = '--';
+    }
+
     // Update system info
     const sysInfo = document.getElementById('battery-system-info');
     if (sysInfo) {

@@ -16,7 +16,7 @@ extern "C" {
 /**
  * @brief Number of 16-bit register words requested in each TinyBMS poll.
  */
-#define UART_BMS_REGISTER_WORD_COUNT 57
+#define UART_BMS_REGISTER_WORD_COUNT 59
 
 /**
  * @brief Enumerates the logical TinyBMS registers that are polled over UART.
@@ -39,6 +39,7 @@ typedef enum {
     UART_BMS_REGISTER_CELL_VOLTAGE_15,
     UART_BMS_REGISTER_CELL_VOLTAGE_16,
     UART_BMS_REGISTER_LIFETIME_COUNTER,
+    UART_BMS_REGISTER_ESTIMATED_TIME_LEFT,
     UART_BMS_REGISTER_PACK_VOLTAGE,
     UART_BMS_REGISTER_PACK_CURRENT,
     UART_BMS_REGISTER_MIN_CELL_VOLTAGE,
@@ -116,6 +117,7 @@ typedef enum {
     UART_BMS_FIELD_FIRMWARE_FLAGS,
     UART_BMS_FIELD_INTERNAL_FIRMWARE_VERSION,
     UART_BMS_FIELD_UPTIME_SECONDS,
+    UART_BMS_FIELD_ESTIMATED_TIME_LEFT,
 } uart_bms_field_t;
 
 /**
