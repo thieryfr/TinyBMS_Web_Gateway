@@ -581,9 +581,9 @@ export class BatteryRealtimeCharts {
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 20,
-                  fontWeight: 800,
-                  offsetCenter: [0, '0%'],
+                  fontSize: 13,
+                  fontWeight: 600,
+                  offsetCenter: [0, '20%'],
                   color: 'auto',
                   formatter: (value) => {
                     if (value == null) return '{value|--}{unit|h}';
