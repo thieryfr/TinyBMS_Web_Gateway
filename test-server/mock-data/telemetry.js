@@ -13,6 +13,10 @@ class TelemetryGenerator {
     this.cycleCount = 127;
     this.uptimeSeconds = 3600 * 24 * 7; // 1 week uptime
 
+    // Energy counters (CAN ID 0x378)
+    this.energyChargedWh = 125430; // Energy IN (charged) in Wh
+    this.energyDischargedWh = 118650; // Energy OUT (discharged) in Wh
+
     // Cell voltages (16 cells, slightly different)
     this.cellVoltages = Array(16).fill(0).map((_, i) => 3.200 + (Math.random() * 0.050 - 0.025));
 
@@ -105,6 +109,17 @@ class TelemetryGenerator {
     // Overcurrent warning
     if (Math.abs(this.packCurrent) > 50) this.warningBits |= (1 << 2);
 
+    // Update energy counters based on power flow
+    const powerW = this.packVoltage * this.packCurrent;
+    const energyDeltaWh = (powerW * deltaTime) / 3600; // Wh = W * h
+    if (this.packCurrent > 0) {
+      // Charging
+      this.energyChargedWh += Math.abs(energyDeltaWh);
+    } else {
+      // Discharging
+      this.energyDischargedWh += Math.abs(energyDeltaWh);
+    }
+
     // Update uptime
     this.uptimeSeconds += deltaTime;
   }
@@ -138,7 +153,9 @@ class TelemetryGenerator {
       cell_voltage_mv: this.cellVoltages.map(v => Math.round(v * 1000)),
       cell_balancing: Array(16).fill(0).map((_, i) => (this.balancingBits & (1 << i)) ? 1 : 0),
       is_charging: this.isCharging,
-      power_w: parseFloat((this.packVoltage * this.packCurrent).toFixed(1))
+      power_w: parseFloat((this.packVoltage * this.packCurrent).toFixed(1)),
+      energy_charged_wh: Math.round(this.energyChargedWh),
+      energy_discharged_wh: Math.round(this.energyDischargedWh)
     };
   }
 

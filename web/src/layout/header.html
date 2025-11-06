@@ -5,11 +5,23 @@
       <span class="subtitle">Système de monitoring et configuration ESP32-CAN-X2</span>
     </div>
     <div class="navbar-nav ms-md-auto mt-3 mt-md-0">
-      <div class="nav-item text-secondary small">
-        <span class="d-flex align-items-center gap-2">
-          <i class="ti ti-battery"></i>
-          <span>Suivi intelligent des packs Li-ion</span>
-        </span>
+      <div class="nav-item">
+        <div class="d-flex flex-column flex-md-row gap-3 align-items-start align-items-md-center">
+          <div class="d-flex align-items-center gap-2">
+            <i class="ti ti-arrow-down-circle text-success fs-3"></i>
+            <div class="d-flex flex-column">
+              <span class="text-secondary small">Énergie IN</span>
+              <span class="fw-bold text-success" id="energy-in">-- kWh</span>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <i class="ti ti-arrow-up-circle text-warning fs-3"></i>
+            <div class="d-flex flex-column">
+              <span class="text-secondary small">Énergie OUT</span>
+              <span class="fw-bold text-warning" id="energy-out">-- kWh</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

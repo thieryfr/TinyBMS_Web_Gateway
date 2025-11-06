@@ -922,6 +922,12 @@ function updateBatteryDisplay(data) {
     set('battery-temperature', formatValue(data.average_temperature_c, ' °C'));
     set('battery-temp-extra', `MOSFET: ${formatValue(data.mosfet_temperature_c, ' °C')}`);
 
+    // Update energy counters (CAN ID 0x378)
+    const energyInKwh = data.energy_charged_wh ? (data.energy_charged_wh / 1000).toFixed(1) : '--';
+    const energyOutKwh = data.energy_discharged_wh ? (data.energy_discharged_wh / 1000).toFixed(1) : '--';
+    set('energy-in', `${energyInKwh} kWh`);
+    set('energy-out', `${energyOutKwh} kWh`);
+
     // Update system info
     const sysInfo = document.getElementById('battery-system-info');
     if (sysInfo) {
