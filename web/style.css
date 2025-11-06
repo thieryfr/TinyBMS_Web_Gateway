@@ -763,37 +763,63 @@ main {
     display: block;
 }
 
-/* System Status Panel with LED indicators */
+/* System Status Panel with LED indicators - Now with navigation */
 .system-status-panel {
     display: flex;
     flex-wrap: nowrap;
-    gap: 0.5rem;
+    gap: 0.75rem;
     padding: 0;
     align-items: center;
+    justify-content: center;
 }
 
 .status-module {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.6rem;
-    background: rgba(0, 0, 0, 0.25);
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 999px;
     transition: all 0.3s ease;
     white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+    position: relative;
 }
 
 .status-module:hover {
-    background: rgba(0, 0, 0, 0.35);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 168, 150, 0.15);
+    border-color: rgba(0, 168, 150, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 168, 150, 0.2);
+}
+
+.status-module:active {
+    transform: translateY(0);
+}
+
+.status-module.active {
+    background: rgba(0, 168, 150, 0.25);
+    border-color: rgba(0, 168, 150, 0.6);
+    box-shadow: 0 0 0 2px rgba(0, 168, 150, 0.2);
 }
 
 .status-label {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-secondary);
-    letter-spacing: 0.01em;
+    letter-spacing: 0.02em;
+    transition: color 0.3s ease;
+}
+
+.status-module:hover .status-label {
+    color: var(--text-primary);
+}
+
+.status-module.active .status-label {
+    color: var(--accent);
+    font-weight: 700;
 }
 
 .status-led {
@@ -884,22 +910,23 @@ main {
 @media (max-width: 1200px) {
     .system-status-panel {
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: center;
+        gap: 0.6rem;
     }
 }
 
 @media (max-width: 768px) {
     .system-status-panel {
-        gap: 0.4rem;
+        gap: 0.5rem;
         justify-content: center;
     }
 
     .status-module {
-        padding: 0.25rem 0.5rem;
+        padding: 0.4rem 0.75rem;
     }
 
     .status-label {
-        font-size: 0.65rem;
+        font-size: 0.7rem;
     }
 
     .status-led {
