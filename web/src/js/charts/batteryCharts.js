@@ -8,7 +8,7 @@ function sanitizeNumber(value) {
 }
 
 export class BatteryRealtimeCharts {
-  constructor({ gaugeElement, voltageSparklineElement, currentSparklineElement, cellChartElement } = {}) {
+  constructor({ gaugeElement, voltageSparklineElement, currentSparklineElement, cellChartElement, temperatureGaugeElement } = {}) {
     this.sparklineLimit = DEFAULT_SPARKLINE_LIMIT;
     this.voltageSamples = [];
     this.currentSamples = [];
@@ -19,28 +19,27 @@ export class BatteryRealtimeCharts {
           gaugeElement,
           {
             tooltip: {
-              formatter: ({ seriesName, value }) =>
-                value != null ? `${seriesName}: ${value.toFixed(1)} %` : `${seriesName}: -- %`,
+              formatter: ({ value }) =>
+                value != null ? `${value.toFixed(1)} %` : 'SOC indisponible',
             },
             series: [
               {
                 name: 'SOC',
                 type: 'gauge',
-                center: ['30%', '50%'],
                 startAngle: 220,
                 endAngle: -40,
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '60%',
+                radius: '100%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
-                  length: '60%',
-                  width: 5,
+                  length: '65%',
+                  width: 6,
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 12,
+                    width: 14,
                     color: [
                       [0.5, '#f25f5c'],
                       [0.8, '#ffd166'],
@@ -50,22 +49,21 @@ export class BatteryRealtimeCharts {
                 },
                 axisTick: {
                   distance: 2,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
+                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
                 },
                 splitLine: {
-                  length: 8,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
+                  length: 10,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
                 },
                 axisLabel: {
                   color: 'rgba(255,255,255,0.7)',
-                  distance: 10,
-                  fontSize: 10,
+                  distance: 12,
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 18,
+                  fontSize: 22,
                   fontWeight: 600,
-                  offsetCenter: [0, '70%'],
+                  offsetCenter: [0, '60%'],
                   color: '#f2f5f7',
                   formatter: (value) =>
                     value != null ? `${value.toFixed(1)}%` : '-- %',
@@ -73,17 +71,13 @@ export class BatteryRealtimeCharts {
                 anchor: {
                   show: true,
                   showAbove: true,
-                  size: 8,
+                  size: 10,
                   itemStyle: {
                     color: '#f2f5f7',
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-75%'],
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.9)',
+                  show: false,
                 },
                 data: [
                   {
@@ -92,78 +86,9 @@ export class BatteryRealtimeCharts {
                   },
                 ],
               },
-              {
-                name: 'SOH',
-                type: 'gauge',
-                center: ['70%', '50%'],
-                startAngle: 220,
-                endAngle: -40,
-                min: 0,
-                max: 100,
-                splitNumber: 5,
-                radius: '60%',
-                pointer: {
-                  icon: 'path://M12 4L8 12H16L12 4Z',
-                  length: '60%',
-                  width: 5,
-                },
-                axisLine: {
-                  lineStyle: {
-                    width: 12,
-                    color: [
-                      [0.5, '#f25f5c'],
-                      [0.8, '#ffd166'],
-                      [1, '#00a896'],
-                    ],
-                  },
-                },
-                axisTick: {
-                  distance: 2,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
-                },
-                splitLine: {
-                  length: 8,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
-                },
-                axisLabel: {
-                  color: 'rgba(255,255,255,0.7)',
-                  distance: 10,
-                  fontSize: 10,
-                },
-                detail: {
-                  valueAnimation: true,
-                  fontSize: 18,
-                  fontWeight: 600,
-                  offsetCenter: [0, '70%'],
-                  color: '#f2f5f7',
-                  formatter: (value) =>
-                    value != null ? `${value.toFixed(1)}%` : '-- %',
-                },
-                anchor: {
-                  show: true,
-                  showAbove: true,
-                  size: 8,
-                  itemStyle: {
-                    color: '#f2f5f7',
-                  },
-                },
-                title: {
-                  show: true,
-                  offsetCenter: [0, '-75%'],
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.9)',
-                },
-                data: [
-                  {
-                    value: 0,
-                    name: 'SOH',
-                  },
-                ],
-              },
             ],
           },
-          { renderer: 'canvas' }
+          { renderer: 'svg' }
         )
       : null;
 
@@ -363,36 +288,125 @@ export class BatteryRealtimeCharts {
           { renderer: 'canvas' }
         )
       : null;
+
+    this.temperatureGauge = temperatureGaugeElement
+      ? initChart(
+          temperatureGaugeElement,
+          {
+            tooltip: {
+              formatter: ({ value }) =>
+                value != null ? `${value.toFixed(1)} °C` : 'Température indisponible',
+            },
+            series: [
+              {
+                name: 'Température',
+                type: 'gauge',
+                startAngle: 220,
+                endAngle: -40,
+                min: -20,
+                max: 80,
+                splitNumber: 5,
+                radius: '100%',
+                pointer: {
+                  icon: 'path://M12 4L8 12H16L12 4Z',
+                  length: '65%',
+                  width: 6,
+                },
+                axisLine: {
+                  lineStyle: {
+                    width: 14,
+                    color: [
+                      [0.3, '#00a896'],
+                      [0.6, '#ffd166'],
+                      [1, '#f25f5c'],
+                    ],
+                  },
+                },
+                axisTick: {
+                  distance: 2,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
+                },
+                splitLine: {
+                  length: 10,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
+                },
+                axisLabel: {
+                  color: 'rgba(255,255,255,0.7)',
+                  distance: 12,
+                  formatter: '{value}°',
+                },
+                detail: {
+                  valueAnimation: true,
+                  fontSize: 22,
+                  fontWeight: 600,
+                  offsetCenter: [0, '60%'],
+                  color: '#f2f5f7',
+                  formatter: (value) =>
+                    value != null ? `${value.toFixed(1)}°C` : '-- °C',
+                },
+                anchor: {
+                  show: true,
+                  showAbove: true,
+                  size: 10,
+                  itemStyle: {
+                    color: '#f2f5f7',
+                  },
+                },
+                title: {
+                  show: false,
+                },
+                data: [
+                  {
+                    value: 0,
+                    name: 'Température',
+                  },
+                ],
+              },
+            ],
+          },
+          { renderer: 'svg' }
+        )
+      : null;
   }
 
-  update({ voltage, current, soc, soh, voltagesMv, balancingStates } = {}) {
-    this.updateGauge(soc, soh);
+  update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature } = {}) {
+    this.updateGauge(soc);
     this.updateSparkline({ voltage, current });
     this.updateCellChart(voltagesMv);
+    this.updateTemperatureGauge(temperature);
   }
 
-  updateGauge(rawSoc, rawSoh) {
+  updateGauge(rawSoc) {
     if (!this.gauge) {
       return;
     }
-    const socValue = sanitizeNumber(rawSoc);
-    const sohValue = sanitizeNumber(rawSoh);
-
+    const value = sanitizeNumber(rawSoc);
     this.gauge.chart.setOption({
       series: [
         {
           data: [
             {
-              value: socValue == null ? null : Math.max(0, Math.min(100, socValue)),
+              value: value == null ? null : Math.max(0, Math.min(100, value)),
               name: 'SOC',
             },
           ],
         },
+      ],
+    });
+  }
+
+  updateTemperatureGauge(rawTemperature) {
+    if (!this.temperatureGauge) {
+      return;
+    }
+    const value = sanitizeNumber(rawTemperature);
+    this.temperatureGauge.chart.setOption({
+      series: [
         {
           data: [
             {
-              value: sohValue == null ? null : Math.max(0, Math.min(100, sohValue)),
-              name: 'SOH',
+              value: value,
+              name: 'Température',
             },
           ],
         },
