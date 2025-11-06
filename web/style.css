@@ -347,9 +347,9 @@ main {
 }
 
 .chart-gauge {
-    width: 150px;
-    min-width: 150px;
-    height: 150px;
+    width: 320px;
+    min-width: 320px;
+    height: 180px;
 }
 
 .chart-sparkline {
@@ -397,9 +397,9 @@ main {
     }
 
     .chart-gauge {
-        width: 120px;
-        min-width: 120px;
-        height: 120px;
+        width: 280px;
+        min-width: 280px;
+        height: 160px;
     }
 
     .echart-container {
