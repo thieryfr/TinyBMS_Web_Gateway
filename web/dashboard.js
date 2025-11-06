@@ -6,7 +6,7 @@ import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
-import tinyBMSConfig from '/src/components/configuration/tinybms-config.js';
+import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
