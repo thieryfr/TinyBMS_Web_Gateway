@@ -4,292 +4,161 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test ECharts</title>
-    <link rel="stylesheet" href="/assets/css/tabler.min.css">
     <style>
         body {
-            padding: 40px;
-            background: #1e1e2e;
-            color: #fff;
-            font-family: system-ui;
-        }
-        .status {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: 600;
-        }
-        .success { background: #2d5f2e; }
-        .error { background: #5f2d2d; }
-        .warning { background: #5f4d2d; }
-        .info { background: #2d3e5f; }
-
-        #chart-container {
-            width: 100%;
-            height: 400px;
-            background: #2a2a3e;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-
-        .debug-section {
-            background: #2a2a3e;
+            background: #1e293b;
+            color: white;
+            font-family: Arial, sans-serif;
             padding: 20px;
-            border-radius: 8px;
+        }
+        #gauge-container {
+            width: 600px;
+            height: 400px;
+            background: #334155;
             margin: 20px 0;
+            border: 2px solid #475569;
         }
-
-        .debug-section h3 {
-            margin-top: 0;
-            color: #00a896;
-        }
-
-        .code {
-            background: #1e1e2e;
+        .log {
+            background: #0f172a;
             padding: 10px;
+            margin: 10px 0;
             border-radius: 4px;
             font-family: monospace;
-            overflow-x: auto;
-            white-space: pre-wrap;
+            font-size: 14px;
         }
-
-        .test-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .test-list li {
-            padding: 8px;
-            margin: 5px 0;
-            border-radius: 4px;
-        }
-
-        .test-pass { background: #2d5f2e; }
-        .test-fail { background: #5f2d2d; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
     </style>
 </head>
 <body>
-    <h1>🧪 Test de chargement ECharts</h1>
+    <h1>Test de chargement ECharts</h1>
 
-    <div id="status" class="status info">Test en cours...</div>
+    <div class="log" id="log"></div>
 
-    <div class="debug-section">
-        <h3>Tests de base</h3>
-        <ul id="test-results" class="test-list"></ul>
-    </div>
+    <h2>Jauge de test</h2>
+    <div id="gauge-container"></div>
 
-    <div class="debug-section">
-        <h3>Graphique de test</h3>
-        <div id="chart-container"></div>
-    </div>
+    <button onclick="updateGauge(50)" style="padding: 10px 20px; margin: 5px;">Set 50%</button>
+    <button onclick="updateGauge(75)" style="padding: 10px 20px; margin: 5px;">Set 75%</button>
+    <button onclick="updateGauge(100)" style="padding: 10px 20px; margin: 5px;">Set 100%</button>
 
-    <div class="debug-section">
-        <h3>Informations de debug</h3>
-        <div id="debug-info" class="code"></div>
-    </div>
-
-    <div class="debug-section">
-        <h3>Console d'erreurs</h3>
-        <div id="console-log" class="code"></div>
-    </div>
-
-    <!-- Load ECharts -->
     <script src="/assets/js/echarts.simple.min.js"></script>
-
     <script>
-        const statusDiv = document.getElementById('status');
-        const testResultsDiv = document.getElementById('test-results');
-        const debugInfoDiv = document.getElementById('debug-info');
-        const consoleLogDiv = document.getElementById('console-log');
+        const logDiv = document.getElementById('log');
 
-        let tests = [];
-        let debugInfo = [];
-        let consoleLog = [];
-
-        // Capture console logs
-        const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
-
-        console.log = function(...args) {
-            consoleLog.push('[LOG] ' + args.join(' '));
-            originalLog.apply(console, args);
-            updateConsole();
-        };
-
-        console.error = function(...args) {
-            consoleLog.push('[ERROR] ' + args.join(' '));
-            originalError.apply(console, args);
-            updateConsole();
-        };
-
-        console.warn = function(...args) {
-            consoleLog.push('[WARN] ' + args.join(' '));
-            originalWarn.apply(console, args);
-            updateConsole();
-        };
-
-        function addTest(name, passed, details) {
-            tests.push({ name, passed, details });
-            updateTests();
+        function log(message, isError = false) {
+            const time = new Date().toLocaleTimeString();
+            const className = isError ? 'error' : 'success';
+            logDiv.innerHTML += '<div class="' + className + '">[' + time + '] ' + message + '</div>';
+            console.log(message);
         }
 
-        function addDebugInfo(info) {
-            debugInfo.push(info);
-            updateDebugInfo();
-        }
+        log('Page chargée');
 
-        function updateTests() {
-            testResultsDiv.innerHTML = tests.map(test =>
-                `<li class="${test.passed ? 'test-pass' : 'test-fail'}">
-                    ${test.passed ? '✅' : '❌'} ${test.name}
-                    ${test.details ? '<br><small>' + test.details + '</small>' : ''}
-                </li>`
-            ).join('');
-        }
+        setTimeout(function() {
+            log('Vérification de window.echarts...');
 
-        function updateDebugInfo() {
-            debugInfoDiv.textContent = debugInfo.join('\n');
-        }
-
-        function updateConsole() {
-            consoleLogDiv.textContent = consoleLog.join('\n');
-        }
-
-        function runTests() {
-            console.log('=== Début des tests ECharts ===');
-
-            // Test 1: Vérifier si echarts existe
-            if (typeof echarts !== 'undefined') {
-                addTest('Variable echarts existe', true, 'typeof echarts = ' + typeof echarts);
-                addDebugInfo('✓ window.echarts est défini');
-            } else {
-                addTest('Variable echarts existe', false, 'echarts is undefined');
-                addDebugInfo('✗ window.echarts est undefined');
-                statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ ERREUR: ECharts n\'est pas chargé!';
+            if (typeof window.echarts === 'undefined') {
+                log('❌ window.echarts est undefined', true);
                 return;
             }
 
-            // Test 2: Vérifier la version
+            log('✅ window.echarts est disponible');
+
             try {
-                const version = echarts.version || 'version inconnue';
-                addTest('Version ECharts détectée', true, 'Version: ' + version);
-                addDebugInfo('Version ECharts: ' + version);
-            } catch (e) {
-                addTest('Version ECharts détectée', false, e.message);
-                addDebugInfo('Erreur version: ' + e.message);
-            }
+                const container = document.getElementById('gauge-container');
+                log('Création du graphique...');
 
-            // Test 3: Vérifier echarts.init
-            if (typeof echarts.init === 'function') {
-                addTest('Fonction echarts.init disponible', true);
-                addDebugInfo('✓ echarts.init est une fonction');
-            } else {
-                addTest('Fonction echarts.init disponible', false);
-                addDebugInfo('✗ echarts.init n\'est pas une fonction');
-            }
+                const chart = window.echarts.init(container);
+                log('✅ Graphique initialisé');
 
-            // Test 4: Tester la création d'un graphique
-            try {
-                const container = document.getElementById('chart-container');
-                const chart = echarts.init(container);
-
-                addTest('Initialisation d\'un graphique', true, 'Chart instance créée');
-                addDebugInfo('✓ Chart instance: ' + (chart ? 'OK' : 'FAIL'));
-
-                // Test 5: Configurer le graphique
                 const option = {
-                    title: {
-                        text: 'Test ECharts - Graphique de démonstration',
-                        textStyle: { color: '#fff' }
-                    },
-                    tooltip: {},
-                    xAxis: {
-                        type: 'category',
-                        data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                        axisLabel: { color: '#fff' },
-                        axisLine: { lineStyle: { color: '#666' } }
-                    },
-                    yAxis: {
-                        type: 'value',
-                        axisLabel: { color: '#fff' },
-                        axisLine: { lineStyle: { color: '#666' } },
-                        splitLine: { lineStyle: { color: '#333' } }
-                    },
                     series: [{
-                        name: 'Voltage',
-                        type: 'line',
-                        data: [48.2, 50.5, 52.1, 51.8, 53.2, 52.9, 54.0],
-                        smooth: true,
-                        lineStyle: { color: '#00a896', width: 3 },
-                        itemStyle: { color: '#00a896' },
-                        areaStyle: {
-                            color: {
-                                type: 'linear',
-                                x: 0, y: 0, x2: 0, y2: 1,
-                                colorStops: [
-                                    { offset: 0, color: 'rgba(0, 168, 150, 0.3)' },
-                                    { offset: 1, color: 'rgba(0, 168, 150, 0.05)' }
+                        type: 'gauge',
+                        startAngle: 180,
+                        endAngle: 0,
+                        min: 0,
+                        max: 100,
+                        splitNumber: 8,
+                        axisLine: {
+                            lineStyle: {
+                                width: 20,
+                                color: [
+                                    [0.5, '#ef4444'],
+                                    [0.8, '#f59e0b'],
+                                    [1, '#10b981']
                                 ]
                             }
-                        }
-                    }],
-                    backgroundColor: '#2a2a3e'
+                        },
+                        pointer: {
+                            itemStyle: {
+                                color: 'auto'
+                            }
+                        },
+                        axisTick: {
+                            distance: -30,
+                            length: 8,
+                            lineStyle: {
+                                color: '#fff',
+                                width: 2
+                            }
+                        },
+                        splitLine: {
+                            distance: -30,
+                            length: 30,
+                            lineStyle: {
+                                color: '#fff',
+                                width: 4
+                            }
+                        },
+                        axisLabel: {
+                            color: 'auto',
+                            distance: 40,
+                            fontSize: 16
+                        },
+                        detail: {
+                            valueAnimation: true,
+                            formatter: '{value}%',
+                            color: 'auto',
+                            fontSize: 40
+                        },
+                        data: [{
+                            value: 25,
+                            name: 'Test'
+                        }]
+                    }]
                 };
 
                 chart.setOption(option);
-                addTest('Configuration du graphique', true, 'Option setOption() OK');
-                addDebugInfo('✓ Graphique configuré avec succès');
+                log('✅ Options appliquées');
 
-                // Test 6: Vérifier que le graphique est rendu
-                setTimeout(() => {
-                    const canvas = container.querySelector('canvas');
-                    if (canvas) {
-                        addTest('Rendu du graphique (canvas)', true, 'Canvas créé: ' + canvas.width + 'x' + canvas.height);
-                        addDebugInfo('✓ Canvas dimensions: ' + canvas.width + 'x' + canvas.height);
-                        statusDiv.className = 'status success';
-                        statusDiv.textContent = '✅ ECharts fonctionne parfaitement!';
-                    } else {
-                        addTest('Rendu du graphique (canvas)', false, 'Canvas non trouvé');
-                        addDebugInfo('✗ Canvas non créé');
-                        statusDiv.className = 'status warning';
-                        statusDiv.textContent = '⚠️ ECharts chargé mais canvas non créé';
-                    }
-                }, 500);
+                window.testChart = chart;
+
+                setTimeout(function() {
+                    chart.setOption({
+                        series: [{
+                            data: [{ value: 75 }]
+                        }]
+                    });
+                    log('✅ Mise à jour testée (75%)');
+                }, 1000);
 
             } catch (e) {
-                addTest('Création du graphique', false, e.message);
-                addDebugInfo('✗ Erreur: ' + e.message);
-                addDebugInfo('Stack: ' + e.stack);
-                statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ ERREUR lors de la création du graphique';
-                console.error('Erreur ECharts:', e);
+                log('❌ Erreur: ' + e.message, true);
             }
+        }, 200);
 
-            // Test 7: Lister les propriétés disponibles
-            if (typeof echarts !== 'undefined') {
-                const props = Object.keys(echarts).slice(0, 20);
-                addDebugInfo('\nPropriétés ECharts disponibles (20 premières):');
-                addDebugInfo(props.join(', '));
+        function updateGauge(value) {
+            if (window.testChart) {
+                window.testChart.setOption({
+                    series: [{
+                        data: [{ value: value }]
+                    }]
+                });
+                log('Valeur mise à jour: ' + value + '%');
+            } else {
+                log('❌ Chart non disponible', true);
             }
-
-            // Test 8: Informations sur le fichier chargé
-            const scripts = document.querySelectorAll('script[src*="echarts"]');
-            addDebugInfo('\nScripts ECharts trouvés: ' + scripts.length);
-            scripts.forEach((script, i) => {
-                addDebugInfo(`Script ${i+1}: ${script.src}`);
-            });
-
-            console.log('=== Fin des tests ===');
-        }
-
-        // Attendre que le DOM et ECharts soient prêts
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(runTests, 100);
-            });
-        } else {
-            setTimeout(runTests, 100);
         }
     </script>
 </body>
