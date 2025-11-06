@@ -969,14 +969,17 @@ function updateKPI(data) {
         set('kpi-power', '-- W');
     }
 
-    // Update Temperature
-    set('kpi-temperature', formatValue(data.average_temperature_c, ' °C'));
+    // Update Cycles
+    const cycles = data.cycle_count || 0;
+    set('kpi-cycles', cycles.toString());
 
-    // Update Uptime
-    if (Number.isFinite(data.uptime_seconds)) {
-        set('kpi-uptime', formatDuration(data.uptime_seconds * 1000));
+    // Update CVL (Charge Voltage Limit) from registers or default
+    const cvl_register = state.registers.get(315); // Register 315: overvoltage_cutoff_mv
+    if (cvl_register && cvl_register.value) {
+        const cvl_v = (cvl_register.value * 16) / 1000; // Convert mV to V for 16 cells
+        set('kpi-cvl', `${cvl_v.toFixed(1)} V`);
     } else {
-        set('kpi-uptime', '--');
+        set('kpi-cvl', '-- V');
     }
 }
 
