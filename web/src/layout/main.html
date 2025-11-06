@@ -49,8 +49,8 @@
         <div class="col-sm-6 col-xl-3">
           <article class="card card-stats h-100">
             <div class="card-body">
-              <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
-                <div class="w-100">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
                   <h2 class="card-title text-uppercase fs-6 text-secondary mb-2">État de charge</h2>
                   <div class="d-flex flex-wrap gap-2">
                     <span class="badge bg-green-lt text-green fw-semibold px-3 py-2">
@@ -61,6 +61,11 @@
                     </span>
                   </div>
                 </div>
+                <span class="avatar avatar-lg bg-success-lt text-success shadow-sm">
+                  <i class="ti ti-battery-charging fs-2"></i>
+                </span>
+              </div>
+              <div class="d-flex justify-content-center mt-3">
                 <div
                   class="chart-gauge"
                   id="battery-soc-gauge"
@@ -74,12 +79,17 @@
         <div class="col-sm-6 col-xl-3">
           <article class="card card-stats h-100">
             <div class="card-body">
-              <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
-                <div class="w-100">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
                   <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Températures</h2>
                   <p class="display-6 fw-bold text-white mb-1" id="battery-temperature">-- °C</p>
                   <span class="text-secondary" id="battery-temp-extra">MOSFET: -- °C</span>
                 </div>
+                <span class="avatar avatar-lg bg-danger-lt text-danger shadow-sm">
+                  <i class="ti ti-temperature fs-2"></i>
+                </span>
+              </div>
+              <div class="d-flex justify-content-center mt-3">
                 <div
                   class="chart-gauge"
                   id="battery-temperature-gauge"
