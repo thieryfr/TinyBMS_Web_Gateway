@@ -766,20 +766,22 @@ main {
 /* System Status Panel with LED indicators */
 .system-status-panel {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding: 0.5rem 0;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 0;
+    align-items: center;
 }
 
 .status-module {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.75rem;
+    gap: 0.35rem;
+    padding: 0.3rem 0.6rem;
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 999px;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
 .status-module:hover {
@@ -788,20 +790,21 @@ main {
 }
 
 .status-label {
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-secondary);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 .status-led {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     display: inline-block;
     position: relative;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
     transition: all 0.3s ease;
+    flex-shrink: 0;
 }
 
 /* LED States */
@@ -878,21 +881,29 @@ main {
 }
 
 /* Responsive adjustments for status panel */
+@media (max-width: 1200px) {
+    .system-status-panel {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+}
+
 @media (max-width: 768px) {
     .system-status-panel {
-        gap: 0.5rem;
+        gap: 0.4rem;
+        justify-content: center;
     }
 
     .status-module {
-        padding: 0.3rem 0.6rem;
+        padding: 0.25rem 0.5rem;
     }
 
     .status-label {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
     }
 
     .status-led {
-        width: 8px;
-        height: 8px;
+        width: 7px;
+        height: 7px;
     }
 }
