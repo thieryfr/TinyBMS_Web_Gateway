@@ -1,0 +1,770 @@
+<div class="card mt-4">
+  <div class="card-header">
+    <div>
+      <h3 class="card-title mb-0">
+        <i class="ti ti-settings-cog me-2"></i>
+        Configuration TinyBMS - Battery Insider
+      </h3>
+      <p class="card-subtitle text-secondary mb-0 mt-2">
+        Interface de configuration complète inspirée de Battery Insider. Configurez les paramètres cellules, sécurité et périphériques.
+      </p>
+    </div>
+  </div>
+  <div class="card-body">
+    <!-- Sub-navigation tabs -->
+    <ul class="nav nav-tabs nav-fill mb-4" id="tinybms-config-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="cell-settings-tab" data-bs-toggle="tab" data-bs-target="#cell-settings" type="button" role="tab" aria-controls="cell-settings" aria-selected="true">
+          <i class="ti ti-battery-4 me-2"></i>
+          Cell Settings
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="safety-tab" data-bs-toggle="tab" data-bs-target="#safety" type="button" role="tab" aria-controls="safety" aria-selected="false">
+          <i class="ti ti-shield-check me-2"></i>
+          Safety
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="peripherals-tab" data-bs-toggle="tab" data-bs-target="#peripherals" type="button" role="tab" aria-controls="peripherals" aria-selected="false">
+          <i class="ti ti-plug-connected me-2"></i>
+          Peripherals
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance" type="button" role="tab" aria-controls="maintenance" aria-selected="false">
+          <i class="ti ti-tool me-2"></i>
+          Maintenance
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab content -->
+    <div class="tab-content" id="tinybms-config-content">
+      <!-- Cell Settings Tab -->
+      <div class="tab-pane fade show active" id="cell-settings" role="tabpanel" aria-labelledby="cell-settings-tab">
+        <form id="tinybms-cell-settings-form">
+          <div class="row g-4">
+            <!-- Cell Charging Characteristics -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-battery-charging me-2"></i>
+                Cell Charging Characteristics
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="fully-charged-voltage" class="form-label">
+                        Fully Charged Voltage (V)
+                        <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme pleine charge"></i>
+                      </label>
+                      <input type="number" class="form-control" id="fully-charged-voltage" step="0.001" min="2.5" max="4.5" required>
+                      <div class="form-hint text-muted small">
+                        Min: (Fully Discharged + 0.01V) • Max: (Over-Voltage Cutoff - 0.01V)
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="charge-finished-current" class="form-label">
+                        Charge Finished Current (A)
+                        <i class="ti ti-info-circle text-info ms-1" title="Courant de fin de charge"></i>
+                      </label>
+                      <input type="number" class="form-control" id="charge-finished-current" step="0.1" min="0.1" max="150" required>
+                      <div class="form-hint text-muted small">
+                        Dépend du type de PCB et du capteur de courant
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cell Discharging Characteristics -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-battery-off me-2"></i>
+                Cell Discharging Characteristics
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="fully-discharged-voltage" class="form-label">
+                        Fully Discharged Voltage (V)
+                        <i class="ti ti-info-circle text-info ms-1" title="Voltage considérée comme déchargée"></i>
+                      </label>
+                      <input type="number" class="form-control" id="fully-discharged-voltage" step="0.001" min="2.0" max="4.0" required>
+                      <div class="form-hint text-muted small">
+                        Min: (Under-Voltage Cutoff + 0.01V) • Max: (Fully Charged - 0.01V)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Balancing Settings -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-scale me-2"></i>
+                Balancing
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="early-balancing-threshold" class="form-label">
+                        Early Balancing Threshold (V)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de démarrage de l'équilibrage"></i>
+                      </label>
+                      <input type="number" class="form-control" id="early-balancing-threshold" step="0.001" min="1.0" max="4.5" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 1.0V - 4.5V
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="allowed-disbalance" class="form-label">
+                        Allowed Disbalance (mV)
+                        <i class="ti ti-info-circle text-info ms-1" title="Déséquilibre maximum autorisé"></i>
+                      </label>
+                      <input type="number" class="form-control" id="allowed-disbalance" step="1" min="15" max="100" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 15mV - 100mV
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="number-of-series-cells" class="form-label">
+                        Number of Series Cells
+                        <i class="ti ti-info-circle text-info ms-1" title="Nombre de cellules en série"></i>
+                      </label>
+                      <input type="number" class="form-control" id="number-of-series-cells" step="1" min="4" max="16" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 4 - 16 cellules
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- State of Charge / Health -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-gauge me-2"></i>
+                State Of Charge / Health
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="battery-capacity" class="form-label">
+                        Battery Capacity (Ah)
+                        <i class="ti ti-info-circle text-info ms-1" title="Capacité de la batterie"></i>
+                      </label>
+                      <input type="number" class="form-control" id="battery-capacity" step="0.1" min="0.1" max="655" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 0.1Ah - 655Ah
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="set-soc-manually" class="form-label">
+                        Set SOC manually (%)
+                        <i class="ti ti-info-circle text-info ms-1" title="Définir le SOC manuellement"></i>
+                      </label>
+                      <input type="number" class="form-control" id="set-soc-manually" step="1" min="0" max="100" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 0% - 100%
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="battery-maximum-cycles" class="form-label">
+                        Battery Maximum Cycles Count
+                        <i class="ti ti-info-circle text-info ms-1" title="Nombre maximum de cycles"></i>
+                      </label>
+                      <input type="number" class="form-control" id="battery-maximum-cycles" step="1" min="1" max="100000" required>
+                      <div class="form-hint text-muted small">
+                        Cycles avant dégradation significative
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="set-soh-manually" class="form-label">
+                        Set SOH manually (%)
+                        <i class="ti ti-info-circle text-info ms-1" title="Définir le SOH manuellement"></i>
+                      </label>
+                      <input type="number" class="form-control" id="set-soh-manually" step="1" min="0" max="100" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 0% - 100%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="col-12">
+              <div class="d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary" id="cell-settings-reset">
+                  <i class="ti ti-reload me-1"></i>
+                  Réinitialiser
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  <i class="ti ti-device-floppy me-1"></i>
+                  Upload To BMS
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Safety Tab -->
+      <div class="tab-pane fade" id="safety" role="tabpanel" aria-labelledby="safety-tab">
+        <form id="tinybms-safety-form">
+          <div class="row g-4">
+            <!-- Critical Events -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-alert-triangle me-2"></i>
+                Critical Events
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="over-voltage-cutoff" class="form-label">
+                        Over-Voltage Cutoff (V)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surtension"></i>
+                      </label>
+                      <input type="number" class="form-control" id="over-voltage-cutoff" step="0.001" min="3.0" max="4.5" required>
+                      <div class="form-hint text-muted small">
+                        Min: (Fully Charged + 0.01V) • Max: 4.5V
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="under-voltage-cutoff" class="form-label">
+                        Under-Voltage Cutoff (V)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure sous-tension"></i>
+                      </label>
+                      <input type="number" class="form-control" id="under-voltage-cutoff" step="0.001" min="0.8" max="3.5" required>
+                      <div class="form-hint text-muted small">
+                        Min: 0.8V • Max: (Fully Discharged - 0.01V)
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="discharge-over-current-cutoff" class="form-label">
+                        Discharge Over-Current Cutoff (A)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité décharge"></i>
+                      </label>
+                      <input type="number" class="form-control" id="discharge-over-current-cutoff" step="1" min="1" max="300" required>
+                      <div class="form-hint text-muted small">
+                        Dépend du type de PCB, capteur et switch
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="discharge-over-current-timeout" class="form-label">
+                        Discharge Over-Current Cutoff timeout (s)
+                        <i class="ti ti-info-circle text-info ms-1" title="Durée avant coupure"></i>
+                      </label>
+                      <input type="number" class="form-control" id="discharge-over-current-timeout" step="1" min="0" max="60" required>
+                      <div class="form-hint text-muted small">
+                        Temps max avant déconnexion de la charge
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="discharge-peak-current-cutoff" class="form-label">
+                        Discharge Peak-Current Cutoff (A)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure pic de courant"></i>
+                      </label>
+                      <input type="number" class="form-control" id="discharge-peak-current-cutoff" step="1" min="1" max="500" required>
+                      <div class="form-hint text-muted small">
+                        Doit être > Discharge Over-Current Cutoff
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="charge-over-current-cutoff" class="form-label">
+                        Charge Over-Current Cutoff (A)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surintensité charge"></i>
+                      </label>
+                      <input type="number" class="form-control" id="charge-over-current-cutoff" step="1" min="1" max="300" required>
+                      <div class="form-hint text-muted small">
+                        Dépend du type de PCB, capteur et switch
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="over-heat-cutoff" class="form-label">
+                        Over-Heat Cutoff (°C)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure surchauffe"></i>
+                      </label>
+                      <input type="number" class="form-control" id="over-heat-cutoff" step="1" min="20" max="90" required>
+                      <div class="form-hint text-muted small">
+                        Plage: 20°C - 90°C
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="low-temp-charger-cutoff" class="form-label">
+                        Low Temperature Charger Cutoff (°C)
+                        <i class="ti ti-info-circle text-info ms-1" title="Seuil de coupure basse température"></i>
+                      </label>
+                      <input type="number" class="form-control" id="low-temp-charger-cutoff" step="1" min="-40" max="10" required>
+                      <div class="form-hint text-muted small">
+                        Plage: -40°C - 10°C
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="automatic-recovery" class="form-label">
+                        Automatic Recovery (s)
+                        <i class="ti ti-info-circle text-info ms-1" title="Récupération automatique"></i>
+                      </label>
+                      <input type="number" class="form-control" id="automatic-recovery" step="1" min="0" max="30" required>
+                      <div class="form-hint text-muted small">
+                        0 = désactivé • 1-30s = délai de récupération
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Options -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-settings me-2"></i>
+                Options
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="invert-current-sensor" role="switch">
+                        <label class="form-check-label" for="invert-current-sensor">
+                          Invert External Current Sensor Direction
+                          <i class="ti ti-info-circle text-info ms-1" title="Inverser la direction du capteur"></i>
+                        </label>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Inverse les lectures de courant
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="disable-switch-diagnostics" role="switch">
+                        <label class="form-check-label" for="disable-switch-diagnostics">
+                          Disable Load/Charger Switch Diagnostics
+                          <i class="ti ti-info-circle text-info ms-1" title="Désactiver diagnostics"></i>
+                        </label>
+                      </div>
+                      <div class="form-hint text-muted small">
+                        Désactive les diagnostics des switches
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="col-12">
+              <div class="d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary" id="safety-reset">
+                  <i class="ti ti-reload me-1"></i>
+                  Réinitialiser
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  <i class="ti ti-device-floppy me-1"></i>
+                  Upload To BMS
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Peripherals Tab -->
+      <div class="tab-pane fade" id="peripherals" role="tabpanel" aria-labelledby="peripherals-tab">
+        <form id="tinybms-peripherals-form">
+          <div class="row g-4">
+            <!-- Mode Settings -->
+            <div class="col-lg-4">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-layout me-2"></i>
+                Mode
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="bms-mode" class="form-label">BMS Operation Mode</label>
+                      <select class="form-select" id="bms-mode" required>
+                        <option value="dual-port">Dual Port</option>
+                        <option value="single-port">Single Port</option>
+                      </select>
+                      <div class="form-hint text-muted small">
+                        Dual: switches séparés • Single: switch commun
+                      </div>
+                    </div>
+                    <div class="col-12" id="single-port-switch-type-group" style="display: none;">
+                      <label for="single-port-switch-type" class="form-label">Single Port Switch Type</label>
+                      <select class="form-select" id="single-port-switch-type">
+                        <option value="internal-fet">Internal FET</option>
+                        <option value="aido1">AIDO1 (External)</option>
+                        <option value="dido1">DIDO1 (External)</option>
+                        <option value="aiho1">AIHO1 (External)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Load Settings -->
+            <div class="col-lg-4" id="load-settings-group">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-plug me-2"></i>
+                Load
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="load-switch-type" class="form-label">Switch Type</label>
+                      <select class="form-select" id="load-switch-type" required>
+                        <option value="discharge-fet">Discharge FET</option>
+                        <option value="aido1">AIDO1 (External)</option>
+                        <option value="dido1">DIDO1 (External)</option>
+                        <option value="aiho1">AIHO1 (External)</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="ignition" class="form-label">Ignition</label>
+                      <select class="form-select" id="ignition" required>
+                        <option value="disabled">Disabled</option>
+                        <option value="aido1">AIDO1</option>
+                        <option value="dido1">DIDO1</option>
+                        <option value="aiho1">AIHO1</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="precharge" class="form-label">Precharge</label>
+                      <select class="form-select" id="precharge" required>
+                        <option value="disabled">Disabled</option>
+                        <option value="discharge-fet">Discharge FET</option>
+                        <option value="aido1">AIDO1</option>
+                        <option value="dido1">DIDO1</option>
+                        <option value="aiho1">AIHO1</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="precharge-duration" class="form-label">Precharge Duration</label>
+                      <select class="form-select" id="precharge-duration" required>
+                        <option value="0.1">0.1 s</option>
+                        <option value="0.2">0.2 s</option>
+                        <option value="0.5">0.5 s</option>
+                        <option value="1.0" selected>1.0 s</option>
+                        <option value="2.0">2.0 s</option>
+                        <option value="3.0">3.0 s</option>
+                        <option value="4.0">4.0 s</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Charger Settings -->
+            <div class="col-lg-4">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-battery-charging me-2"></i>
+                Charger
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="charger-type" class="form-label">Charger Type</label>
+                      <select class="form-select" id="charger-type" required>
+                        <option value="generic-cc-cv" selected>Generic CC/CV</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="charger-detection" class="form-label">Detection</label>
+                      <select class="form-select" id="charger-detection" required>
+                        <option value="internal" selected>Internal</option>
+                        <option value="aido1">AIDO1 (External)</option>
+                        <option value="dido1">DIDO1 (External)</option>
+                        <option value="aiho1">AIHO1 (External)</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="charger-startup-delay" class="form-label">Charger Startup Delay (s)</label>
+                      <input type="number" class="form-control" id="charger-startup-delay" step="1" min="0" max="60" value="20" required>
+                      <div class="form-hint text-muted small">
+                        Délai avant coupure si pas de courant détecté
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="charger-disable-delay" class="form-label">Charger Disable Delay (s)</label>
+                      <input type="number" class="form-control" id="charger-disable-delay" step="1" min="0" max="60" value="5" required>
+                      <div class="form-hint text-muted small">
+                        Délai avant désactivation après déconnexion
+                      </div>
+                    </div>
+                    <div class="col-12" id="charger-switch-type-group">
+                      <label for="charger-switch-type" class="form-label">Switch Type</label>
+                      <select class="form-select" id="charger-switch-type" required>
+                        <option value="charge-fet" selected>Charge FET</option>
+                        <option value="aido1">AIDO1 (External)</option>
+                        <option value="dido1">DIDO1 (External)</option>
+                        <option value="aiho1">AIHO1 (External)</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="enable-charger-restart-level" role="switch">
+                        <label class="form-check-label" for="enable-charger-restart-level">
+                          Enable Charger Restart Level
+                        </label>
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="charge-restart-level" class="form-label">Charge Restart Level (%)</label>
+                      <input type="number" class="form-control" id="charge-restart-level" step="1" min="60" max="95" value="90" required>
+                      <div class="form-hint text-muted small">
+                        SOC minimum pour redémarrage automatique
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Display Settings -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-dashboard me-2"></i>
+                Display
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="speed-sensor-input" class="form-label">Speed Sensor Input</label>
+                      <select class="form-select" id="speed-sensor-input" required>
+                        <option value="disabled" selected>Disabled</option>
+                        <option value="dido1">DIDO1</option>
+                        <option value="dido2">DIDO2</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="distance-unit" class="form-label">Distance Unit</label>
+                      <select class="form-select" id="distance-unit" required>
+                        <option value="meters">Meters</option>
+                        <option value="kilometers" selected>Kilometers</option>
+                        <option value="feet">Feet</option>
+                        <option value="miles">Miles</option>
+                        <option value="yards">Yards</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="pulses-per-unit" class="form-label">Pulses Per Unit</label>
+                      <input type="number" class="form-control" id="pulses-per-unit" step="1" min="1" max="100000" value="1000" required>
+                    </div>
+                    <div class="col-12">
+                      <label for="protocol" class="form-label">Broadcast Protocol</label>
+                      <select class="form-select" id="protocol" required>
+                        <option value="cav3">CA V3 (Ebike Analyzer)</option>
+                        <option value="ascii">ASCII</option>
+                        <option value="soc-bar">SOC BAR</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="broadcast" class="form-label">Broadcast Interval</label>
+                      <select class="form-select" id="broadcast" required>
+                        <option value="disabled" selected>Disabled</option>
+                        <option value="0.1">0.1 s</option>
+                        <option value="0.2">0.2 s</option>
+                        <option value="0.5">0.5 s</option>
+                        <option value="1.0">1.0 s</option>
+                        <option value="2.0">2.0 s</option>
+                        <option value="5.0">5.0 s</option>
+                        <option value="10.0">10.0 s</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Temperature Settings -->
+            <div class="col-lg-6">
+              <h4 class="text-secondary text-uppercase fs-6 mb-3">
+                <i class="ti ti-temperature me-2"></i>
+                Temperature
+              </h4>
+              <div class="card bg-dark border border-secondary">
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="temperature-sensor-type" class="form-label">Temperature Sensor Type</label>
+                      <select class="form-select" id="temperature-sensor-type" required>
+                        <option value="dual-10k-ntc" selected>Dual 10K NTC Sensor</option>
+                        <option value="multipoint-active">Multipoint Active Sensor</option>
+                      </select>
+                      <div class="form-hint text-muted small">
+                        Dual 10K NTC: 10K @ 25°C, Beta 3977K
+                      </div>
+                    </div>
+                    <div class="col-12">
+                      <label for="external-current-sensor" class="form-label">External Current Sensor</label>
+                      <select class="form-select" id="external-current-sensor" required>
+                        <option value="none" selected>None (Internal HALL)</option>
+                        <option value="dhab-s133-75a">DHAB S/133 (75A/750A)</option>
+                        <option value="dhab-s124-200a">DHAB S/124 (200A)</option>
+                        <option value="lem-hass-200s">LEM HASS 200-S</option>
+                        <option value="lem-hass-300s">LEM HASS 300-S</option>
+                        <option value="lem-hass-400s">LEM HASS 400-S</option>
+                      </select>
+                      <div class="form-hint text-muted small">
+                        Nécessite BMS 150A haute puissance
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="col-12">
+              <div class="d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary" id="peripherals-reset">
+                  <i class="ti ti-reload me-1"></i>
+                  Réinitialiser
+                </button>
+                <button type="submit" class="btn btn-primary">
+                  <i class="ti ti-device-floppy me-1"></i>
+                  Upload To BMS
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Maintenance Tab -->
+      <div class="tab-pane fade" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
+        <div class="row g-4">
+          <!-- BMS Configuration -->
+          <div class="col-lg-6">
+            <h4 class="text-secondary text-uppercase fs-6 mb-3">
+              <i class="ti ti-file-settings me-2"></i>
+              BMS Configuration
+            </h4>
+            <div class="card bg-dark border border-secondary">
+              <div class="card-body">
+                <div class="d-flex flex-column gap-3">
+                  <button type="button" class="btn btn-outline-primary" id="load-config-from-file">
+                    <i class="ti ti-file-upload me-2"></i>
+                    Load Configuration From File
+                  </button>
+                  <button type="button" class="btn btn-outline-primary" id="save-config-to-file">
+                    <i class="ti ti-file-download me-2"></i>
+                    Save Configuration To File
+                  </button>
+                  <button type="button" class="btn btn-primary" id="upload-config-to-bms">
+                    <i class="ti ti-upload me-2"></i>
+                    Upload Configuration To BMS
+                  </button>
+                  <div class="alert alert-info mb-0" role="status">
+                    <i class="ti ti-info-circle me-2"></i>
+                    <span id="config-status-text">No Action</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Firmware Update -->
+          <div class="col-lg-6">
+            <h4 class="text-secondary text-uppercase fs-6 mb-3">
+              <i class="ti ti-refresh-alert me-2"></i>
+              Firmware Update
+            </h4>
+            <div class="card bg-dark border border-secondary">
+              <div class="card-body">
+                <div class="d-flex flex-column gap-3">
+                  <button type="button" class="btn btn-warning" id="update-bms-firmware">
+                    <i class="ti ti-cloud-upload me-2"></i>
+                    Update BMS Firmware
+                  </button>
+                  <div class="progress" style="height: 24px; display: none;" id="firmware-progress-container">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="firmware-progress" style="width: 0%">0%</div>
+                  </div>
+                  <div class="alert alert-secondary mb-0" role="status">
+                    <i class="ti ti-circle-check me-2"></i>
+                    Status: <span id="firmware-status-text">Idle</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BMS Restart -->
+          <div class="col-lg-6">
+            <h4 class="text-secondary text-uppercase fs-6 mb-3">
+              <i class="ti ti-rotate-clockwise me-2"></i>
+              Maintenance
+            </h4>
+            <div class="card bg-danger-lt border border-danger">
+              <div class="card-body">
+                <div class="alert alert-warning" role="alert">
+                  <h4 class="alert-title">
+                    <i class="ti ti-alert-triangle me-2"></i>
+                    Required BMS restart:
+                  </h4>
+                  <ul class="mb-0">
+                    <li>After an external current sensor was connected or disconnected</li>
+                    <li>To recover from incorrect BMS state (e.g. Under-Voltage fault after initial connection)</li>
+                    <li>After BMS firmware malfunction occurred</li>
+                  </ul>
+                </div>
+                <button type="button" class="btn btn-danger w-100" id="restart-bms">
+                  <i class="ti ti-power me-2"></i>
+                  Restart BMS
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Versions -->
+          <div class="col-lg-6">
+            <h4 class="text-secondary text-uppercase fs-6 mb-3">
+              <i class="ti ti-info-square me-2"></i>
+              Versions
+            </h4>
+            <div class="card bg-dark border border-secondary">
+              <div class="card-body">
+                <dl class="row g-2 mb-0">
+                  <dt class="col-6 text-secondary">Battery Insider Version</dt>
+                  <dd class="col-6 mb-0 text-end fw-semibold" id="battery-insider-version">v2.5.3.1</dd>
+
+                  <dt class="col-6 text-secondary">Firmware Version</dt>
+                  <dd class="col-6 mb-0 text-end fw-semibold" id="firmware-version">--</dd>
+
+                  <dt class="col-6 text-secondary">Hardware Version</dt>
+                  <dd class="col-6 mb-0 text-end fw-semibold" id="hardware-version">--</dd>
+
+                  <dt class="col-6 text-secondary">Product Version</dt>
+                  <dd class="col-6 mb-0 text-end fw-semibold" id="product-version">--</dd>
+
+                  <dt class="col-6 text-secondary">Hardware S/N</dt>
+                  <dd class="col-6 mb-0 text-end fw-semibold text-wrap" id="hardware-serial">--</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
