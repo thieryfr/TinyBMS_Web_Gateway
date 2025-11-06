@@ -5,6 +5,7 @@ import { UartCharts } from '/src/js/charts/uartCharts.js';
 import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
+import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
@@ -32,6 +33,7 @@ const state = {
         lastConfig: null,
         messageChart: null,
     },
+    configRegisters: null,
     batteryCharts: null,
     energyCharts: null,
     systemStatus: null,
@@ -805,9 +807,18 @@ function updateArchiveControls() {
     // Stub for now - archive controls update would go here
 }
 
-function setupConfigTab() {
+async function setupConfigTab() {
     console.log('[Setup] Config tab initialized');
-    // Stub for now - config tab setup would go here
+
+    // Initialize TinyBMS configuration registers manager
+    const registersContainer = document.getElementById('config-registers');
+    if (registersContainer) {
+        state.configRegisters = new ConfigRegistersManager();
+        await state.configRegisters.init('config-registers');
+        console.log('[Setup] TinyBMS registers configuration loaded');
+    } else {
+        console.warn('[Setup] Config registers container not found');
+    }
 }
 
 // === WEB SOCKETS ===

@@ -1012,3 +1012,73 @@ main {
         height: 7px;
     }
 }
+
+/* Configuration Registers Styles */
+.config-registers-toolbar {
+    background: var(--tblr-bg-surface-secondary);
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+.config-registers-status .alert {
+    margin-bottom: 0;
+}
+
+.form-control.is-dirty,
+.form-select.is-dirty {
+    border-color: var(--tblr-warning);
+    background-color: rgba(var(--tblr-warning-rgb), 0.05);
+}
+
+.form-control.is-dirty:focus,
+.form-select.is-dirty:focus {
+    border-color: var(--tblr-warning);
+    box-shadow: 0 0 0 0.25rem rgba(var(--tblr-warning-rgb), 0.25);
+}
+
+.config-registers-accordion .accordion-button {
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 1rem 1.25rem;
+}
+
+.config-registers-accordion .accordion-button i {
+    font-size: 1.25rem;
+}
+
+.config-registers-accordion .accordion-body {
+    padding: 1.5rem;
+}
+
+.config-registers-accordion .form-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    color: var(--tblr-body-color);
+}
+
+.config-registers-accordion .form-hint {
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.config-registers-accordion .badge {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+    font-weight: 600;
+}
+
+/* Configuration register field animation */
+.form-control.is-dirty,
+.form-select.is-dirty {
+    animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(var(--tblr-warning-rgb), 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(var(--tblr-warning-rgb), 0);
+    }
+}
