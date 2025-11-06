@@ -19,10 +19,11 @@ export class BatteryRealtimeCharts {
           gaugeElement,
           {
             tooltip: {
-              formatter: ({ value }) =>
-                value != null ? `${value.toFixed(1)} %` : 'SOC indisponible',
+              formatter: ({ seriesName, value }) =>
+                value != null ? `${seriesName}: ${value.toFixed(1)} %` : `${seriesName} indisponible`,
             },
             series: [
+              // SOC Gauge (left)
               {
                 name: 'SOC',
                 type: 'gauge',
@@ -31,15 +32,16 @@ export class BatteryRealtimeCharts {
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '100%',
+                center: ['25%', '50%'],
+                radius: '80%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
-                  width: 6,
+                  width: 5,
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 14,
+                    width: 12,
                     color: [
                       [0.5, '#f25f5c'],
                       [0.8, '#ffd166'],
@@ -49,19 +51,22 @@ export class BatteryRealtimeCharts {
                 },
                 axisTick: {
                   distance: 2,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
+                  length: 5,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
                 },
                 splitLine: {
-                  length: 10,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
+                  distance: 2,
+                  length: 8,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
                 },
                 axisLabel: {
                   color: 'rgba(255,255,255,0.7)',
-                  distance: 12,
+                  distance: 10,
+                  fontSize: 11,
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: 600,
                   offsetCenter: [0, '60%'],
                   color: '#f2f5f7',
@@ -71,18 +76,94 @@ export class BatteryRealtimeCharts {
                 anchor: {
                   show: true,
                   showAbove: true,
-                  size: 10,
+                  size: 8,
                   itemStyle: {
                     color: '#f2f5f7',
                   },
                 },
                 title: {
-                  show: false,
+                  show: true,
+                  offsetCenter: [0, '-80%'],
+                  fontSize: 14,
+                  color: '#f2f5f7',
+                  fontWeight: 'bold',
                 },
                 data: [
                   {
                     value: 0,
                     name: 'SOC',
+                  },
+                ],
+              },
+              // SOH Gauge (right)
+              {
+                name: 'SOH',
+                type: 'gauge',
+                startAngle: 220,
+                endAngle: -40,
+                min: 0,
+                max: 100,
+                splitNumber: 5,
+                center: ['75%', '50%'],
+                radius: '80%',
+                pointer: {
+                  icon: 'path://M12 4L8 12H16L12 4Z',
+                  length: '65%',
+                  width: 5,
+                },
+                axisLine: {
+                  lineStyle: {
+                    width: 12,
+                    color: [
+                      [0.5, '#f25f5c'],
+                      [0.8, '#ffd166'],
+                      [1, '#00a896'],
+                    ],
+                  },
+                },
+                axisTick: {
+                  distance: 2,
+                  length: 5,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
+                },
+                splitLine: {
+                  distance: 2,
+                  length: 8,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
+                },
+                axisLabel: {
+                  color: 'rgba(255,255,255,0.7)',
+                  distance: 10,
+                  fontSize: 11,
+                },
+                detail: {
+                  valueAnimation: true,
+                  fontSize: 18,
+                  fontWeight: 600,
+                  offsetCenter: [0, '60%'],
+                  color: '#f2f5f7',
+                  formatter: (value) =>
+                    value != null ? `${value.toFixed(1)}%` : '-- %',
+                },
+                anchor: {
+                  show: true,
+                  showAbove: true,
+                  size: 8,
+                  itemStyle: {
+                    color: '#f2f5f7',
+                  },
+                },
+                title: {
+                  show: true,
+                  offsetCenter: [0, '-80%'],
+                  fontSize: 14,
+                  color: '#f2f5f7',
+                  fontWeight: 'bold',
+                },
+                data: [
+                  {
+                    value: 0,
+                    name: 'SOH',
                   },
                 ],
               },
@@ -370,24 +451,35 @@ export class BatteryRealtimeCharts {
   }
 
   update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature } = {}) {
-    this.updateGauge(soc);
+    this.updateGauge(soc, soh);
     this.updateSparkline({ voltage, current });
     this.updateCellChart(voltagesMv);
     this.updateTemperatureGauge(temperature);
   }
 
-  updateGauge(rawSoc) {
+  updateGauge(rawSoc, rawSoh) {
     if (!this.gauge) {
       return;
     }
-    const value = sanitizeNumber(rawSoc);
+    const socValue = sanitizeNumber(rawSoc);
+    const sohValue = sanitizeNumber(rawSoh);
     this.gauge.chart.setOption({
       series: [
+        // Update SOC (first series)
         {
           data: [
             {
-              value: value == null ? null : Math.max(0, Math.min(100, value)),
+              value: socValue == null ? null : Math.max(0, Math.min(100, socValue)),
               name: 'SOC',
+            },
+          ],
+        },
+        // Update SOH (second series)
+        {
+          data: [
+            {
+              value: sohValue == null ? null : Math.max(0, Math.min(100, sohValue)),
+              name: 'SOH',
             },
           ],
         },
