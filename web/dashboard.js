@@ -1,5 +1,6 @@
 // dashboard.js
 import { BatteryRealtimeCharts } from '/src/js/charts/batteryCharts.js';
+import { EnergyCharts } from '/src/js/charts/energyCharts.js';
 import { UartCharts } from '/src/js/charts/uartCharts.js';
 import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
@@ -31,6 +32,7 @@ const state = {
         messageChart: null,
     },
     batteryCharts: null,
+    energyCharts: null,
     uartRealtime: {
         frames: { raw: [], decoded: [] },
         timeline: { raw: null, decoded: null },
@@ -642,6 +644,10 @@ async function initialise() {
         temperatureGaugeElement: document.getElementById('battery-temperature-gauge'),
     });
 
+    state.energyCharts = new EnergyCharts({
+        energyBarChartElement: document.getElementById('energy-bar-chart'),
+    });
+
     state.uartRealtime.timeline.raw = document.getElementById('uart-timeline-raw');
     state.uartRealtime.timeline.decoded = document.getElementById('uart-timeline-decoded');
     state.uartRealtime.charts = new UartCharts({ distributionElement: document.getElementById('uart-frames-chart') });
@@ -839,6 +845,14 @@ function handleTelemetryMessage(data) {
             voltagesMv: data.cell_voltage_mv,
             balancingStates: data.cell_balancing,
             temperature: data.average_temperature_c,
+        });
+    }
+
+    // Update energy chart
+    if (state.energyCharts) {
+        state.energyCharts.update({
+            energyChargedWh: data.energy_charged_wh,
+            energyDischargedWh: data.energy_discharged_wh,
         });
     }
 }
