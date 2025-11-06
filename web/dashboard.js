@@ -919,16 +919,24 @@ function handleEventMessage(data) {
 }
 
 function handleUartMessage(data) {
-    state.uartRealtime.frames.raw.push(data);
-    if (state.uartRealtime.frames.raw.length > MAX_STORED_FRAMES) {
-        state.uartRealtime.frames.raw.shift();
+    // Distinguish between raw and decoded frames based on the 'type' field
+    const isDecoded = data.type === 'uart_decoded';
+    const frameArray = isDecoded ? state.uartRealtime.frames.decoded : state.uartRealtime.frames.raw;
+    const timeline = isDecoded ? state.uartRealtime.timeline.decoded : state.uartRealtime.timeline.raw;
+
+    // Add frame to appropriate array
+    frameArray.push(data);
+    if (frameArray.length > MAX_STORED_FRAMES) {
+        frameArray.shift();
     }
 
-    if (state.uartRealtime.timeline.raw) {
-        addTimelineItem(state.uartRealtime.timeline.raw, data, 'raw');
+    // Add item to appropriate timeline
+    if (timeline) {
+        addTimelineItem(timeline, data, isDecoded ? 'decoded' : 'raw');
     }
 
-    if (state.uartRealtime.charts) {
+    // Update charts (only raw frames are used in charts)
+    if (state.uartRealtime.charts && !isDecoded) {
         state.uartRealtime.charts.update({ rawFrames: state.uartRealtime.frames.raw });
     }
 }
