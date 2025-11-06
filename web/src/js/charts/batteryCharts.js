@@ -24,13 +24,17 @@ export class BatteryRealtimeCharts {
     this.cellVoltages = [];
 
     // Dynamic axis limits from BMS registers
+    // Use tighter ranges for better visibility of variations
+    const nominal_voltage_v = ((DEFAULT_OVERVOLTAGE_MV + DEFAULT_UNDERVOLTAGE_MV) / 2 * NUM_CELLS) / 1000;
+    const voltage_margin = nominal_voltage_v * 0.1; // ±10% around nominal
+
     this.voltageLimits = {
-      min: (DEFAULT_UNDERVOLTAGE_MV * 0.9 * NUM_CELLS) / 1000, // Convert mV to V
-      max: (DEFAULT_OVERVOLTAGE_MV * 1.1 * NUM_CELLS) / 1000,
+      min: nominal_voltage_v - voltage_margin,
+      max: nominal_voltage_v + voltage_margin,
     };
     this.currentLimits = {
-      min: -DEFAULT_CHARGE_OVERCURRENT_A, // Negative for charging
-      max: DEFAULT_PEAK_DISCHARGE_A * 1.1,
+      min: -DEFAULT_CHARGE_OVERCURRENT_A * 0.3, // 30% of charge current
+      max: DEFAULT_PEAK_DISCHARGE_A * 0.3, // 30% of peak discharge
     };
 
     this.gauge = gaugeElement
@@ -526,17 +530,24 @@ export class BatteryRealtimeCharts {
     const peak_discharge_a = registers.peak_discharge_current_a || DEFAULT_PEAK_DISCHARGE_A;
     const charge_overcurrent_a = registers.charge_overcurrent_a || DEFAULT_CHARGE_OVERCURRENT_A;
 
-    // Calculate new limits
-    // Voltage: overvoltage +10% and undervoltage -10%, multiplied by 16 cells, converted to V
+    // Calculate nominal operating voltage (middle of under/over voltage range)
+    const nominal_voltage_mv = (overvoltage_mv + undervoltage_mv) / 2;
+    const nominal_pack_voltage_v = (nominal_voltage_mv * NUM_CELLS) / 1000;
+
+    // Calculate new limits with much tighter ranges for better visibility
+    // Voltage: ±10% around nominal voltage for normal operating range
+    const voltage_margin = nominal_pack_voltage_v * 0.1; // 10% margin
     const newVoltageLimits = {
-      min: (undervoltage_mv * 0.9 * NUM_CELLS) / 1000,
-      max: (overvoltage_mv * 1.1 * NUM_CELLS) / 1000,
+      min: nominal_pack_voltage_v - voltage_margin,
+      max: nominal_pack_voltage_v + voltage_margin,
     };
 
-    // Current: peak discharge +10% for max, charge overcurrent (negative) for min
+    // Current: Use ±30% of max currents for normal operating range
+    const max_discharge = peak_discharge_a * 0.3; // 30% of peak discharge
+    const max_charge = charge_overcurrent_a * 0.3; // 30% of charge current
     const newCurrentLimits = {
-      min: -charge_overcurrent_a,
-      max: peak_discharge_a * 1.1,
+      min: -max_charge,
+      max: max_discharge,
     };
 
     // Update limits if they changed
