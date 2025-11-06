@@ -26,65 +26,32 @@
     </div>
   </div>
   <div class="container-xl mt-3">
-    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
-      <ul class="nav nav-tabs tabs" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button active" data-tab="battery" role="tab">
-            Temps réel – Batterie
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button" data-tab="uart" role="tab">
-            Temps réel – UART
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button" data-tab="can" role="tab">
-            Temps réel – CAN Bus
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button" data-tab="history" role="tab">
-            Historique
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button" data-tab="config" role="tab">
-            Configuration
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button type="button" class="nav-link tab-button" data-tab="mqtt" role="tab">
-            MQTT
-          </button>
-        </li>
-      </ul>
-
-      <div class="system-status-panel">
-        <div class="status-module" data-module="wifi">
+    <div class="d-flex justify-content-center">
+      <div class="system-status-panel" role="tablist">
+        <button type="button" class="status-module active" data-module="webserver" data-tab="battery" role="tab" aria-label="Batterie">
           <span class="status-led status-led-unknown"></span>
-          <span class="status-label">WiFi</span>
-        </div>
-        <div class="status-module" data-module="storage">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Storage</span>
-        </div>
-        <div class="status-module" data-module="uart">
+          <span class="status-label">Batterie</span>
+        </button>
+        <button type="button" class="status-module" data-module="uart" data-tab="uart" role="tab" aria-label="UART">
           <span class="status-led status-led-unknown"></span>
           <span class="status-label">UART</span>
-        </div>
-        <div class="status-module" data-module="can">
+        </button>
+        <button type="button" class="status-module" data-module="can" data-tab="can" role="tab" aria-label="CAN Bus">
           <span class="status-led status-led-unknown"></span>
           <span class="status-label">CAN</span>
-        </div>
-        <div class="status-module" data-module="mqtt">
+        </button>
+        <button type="button" class="status-module" data-module="storage" data-tab="history" role="tab" aria-label="Historique">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">History</span>
+        </button>
+        <button type="button" class="status-module" data-module="wifi" data-tab="config" role="tab" aria-label="Configuration">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">Config</span>
+        </button>
+        <button type="button" class="status-module" data-module="mqtt" data-tab="mqtt" role="tab" aria-label="MQTT">
           <span class="status-led status-led-unknown"></span>
           <span class="status-label">MQTT</span>
-        </div>
-        <div class="status-module" data-module="webserver">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Web</span>
-        </div>
+        </button>
       </div>
     </div>
   </div>

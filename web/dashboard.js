@@ -1074,19 +1074,20 @@ function updateAlarmsWarnings(alarms, warnings) {
 // === TAB NAVIGATION ===
 
 function setupTabs() {
-    const tabButtons = document.querySelectorAll('.tab-button');
+    // Use status modules as navigation buttons
+    const statusModules = document.querySelectorAll('.status-module[data-tab]');
     const tabPanels = document.querySelectorAll('.tab-panel');
 
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabId = button.getAttribute('data-tab');
+    statusModules.forEach(module => {
+        module.addEventListener('click', () => {
+            const tabId = module.getAttribute('data-tab');
 
-            // Remove active class from all buttons and panels
-            tabButtons.forEach(btn => btn.classList.remove('active'));
+            // Remove active class from all modules and panels
+            statusModules.forEach(mod => mod.classList.remove('active'));
             tabPanels.forEach(panel => panel.classList.remove('active'));
 
-            // Add active class to clicked button and corresponding panel
-            button.classList.add('active');
+            // Add active class to clicked module and corresponding panel
+            module.classList.add('active');
             const panel = document.getElementById(`tab-${tabId}`);
             if (panel) {
                 panel.classList.add('active');
