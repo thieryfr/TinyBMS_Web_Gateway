@@ -1,6 +1,8 @@
 import { initChart } from './base.js';
 
 const DEFAULT_SPARKLINE_LIMIT = 60;
+const UNDER_VOLTAGE_CUTOFF = 2800; // mV
+const OVER_VOLTAGE_CUTOFF = 3800; // mV
 
 function sanitizeNumber(value) {
   const number = Number(value);
@@ -324,8 +326,8 @@ export class BatteryRealtimeCharts {
               splitLine: {
                 lineStyle: { color: 'rgba(255,255,255,0.1)' },
               },
-              min: 2800,
-              max: 3800,
+              min: UNDER_VOLTAGE_CUTOFF * 0.9,  // 10% below under-voltage
+              max: OVER_VOLTAGE_CUTOFF * 1.1,   // 10% above over-voltage
             },
             series: [
               {
@@ -342,6 +344,44 @@ export class BatteryRealtimeCharts {
                   formatter: (params) => {
                     return '';
                   },
+                },
+                markLine: {
+                  silent: true,
+                  symbol: 'none',
+                  data: [
+                    {
+                      name: 'Under-voltage',
+                      yAxis: UNDER_VOLTAGE_CUTOFF,
+                      lineStyle: {
+                        color: '#5da5da',
+                        type: 'dashed',
+                        width: 2,
+                      },
+                      label: {
+                        show: true,
+                        position: 'insideEndTop',
+                        formatter: 'Under-voltage: {c} mV',
+                        color: '#5da5da',
+                        fontSize: 10,
+                      },
+                    },
+                    {
+                      name: 'Over-voltage',
+                      yAxis: OVER_VOLTAGE_CUTOFF,
+                      lineStyle: {
+                        color: '#f25f5c',
+                        type: 'dashed',
+                        width: 2,
+                      },
+                      label: {
+                        show: true,
+                        position: 'insideEndBottom',
+                        formatter: 'Over-voltage: {c} mV',
+                        color: '#f25f5c',
+                        fontSize: 10,
+                      },
+                    },
+                  ],
                 },
                 data: [],
               },
