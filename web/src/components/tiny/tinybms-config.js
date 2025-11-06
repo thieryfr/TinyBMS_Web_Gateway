@@ -143,6 +143,17 @@ export class TinyBMSConfigManager {
             restartBtn.addEventListener('click', () => this.restartBMS());
         }
 
+        // Configuration tracking buttons
+        const refreshCurrentValuesBtn = document.getElementById('refresh-current-values');
+        if (refreshCurrentValuesBtn) {
+            refreshCurrentValuesBtn.addEventListener('click', () => this.refreshCurrentValues());
+        }
+
+        const compareConfigBtn = document.getElementById('compare-config');
+        if (compareConfigBtn) {
+            compareConfigBtn.addEventListener('click', () => this.compareConfiguration());
+        }
+
         console.log('Event listeners attached');
     }
 
@@ -167,6 +178,9 @@ export class TinyBMSConfigManager {
 
             // Display current values in spans
             this.displayCurrentValues();
+
+            // Update tracking info
+            this.updateConfigTrackingInfo();
 
             console.log(`Loaded ${registers.length} TinyBMS registers`);
         } catch (error) {
@@ -251,7 +265,6 @@ export class TinyBMSConfigManager {
         this.setFieldValue('over-voltage-cutoff', 4.20);
         this.setFieldValue('under-voltage-cutoff', 2.90);
         this.setFieldValue('discharge-over-current-cutoff', 60);
-        this.setFieldValue('discharge-over-current-timeout', 0);
         this.setFieldValue('discharge-peak-current-cutoff', 100);
         this.setFieldValue('charge-over-current-cutoff', 20);
         this.setFieldValue('over-heat-cutoff', 60);
@@ -551,9 +564,9 @@ export class TinyBMSConfigManager {
         });
 
         const safetyFields = ['over-voltage-cutoff', 'under-voltage-cutoff', 'discharge-over-current-cutoff',
-            'discharge-over-current-timeout', 'discharge-peak-current-cutoff', 'charge-over-current-cutoff',
+            'discharge-peak-current-cutoff', 'charge-over-current-cutoff',
             'over-heat-cutoff', 'low-temp-charger-cutoff', 'automatic-recovery',
-            'invert-current-sensor', 'disable-switch-diagnostics'];
+            'invert-current-sensor'];
 
         safetyFields.forEach(field => {
             config.safetySettings[field] = this.getFieldValue(field);
@@ -749,6 +762,106 @@ export class TinyBMSConfigManager {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 150);
         }, 5000);
+    }
+
+    /**
+     * Refresh current values from BMS
+     */
+    async refreshCurrentValues() {
+        try {
+            this.showNotification('Rafraîchissement des valeurs...', 'info');
+
+            const statusBadge = document.getElementById('config-sync-status');
+            if (statusBadge) {
+                statusBadge.textContent = 'Synchronisation...';
+                statusBadge.className = 'badge bg-warning';
+            }
+
+            await this.loadRegisters();
+            await this.loadConfiguration();
+
+            // Update tracking info
+            this.updateConfigTrackingInfo();
+
+            this.showNotification('✓ Valeurs rafraîchies avec succès', 'success');
+
+            if (statusBadge) {
+                statusBadge.textContent = 'Synchronisé';
+                statusBadge.className = 'badge bg-success';
+            }
+        } catch (error) {
+            console.error('Error refreshing values:', error);
+            this.showNotification(`✗ Erreur: ${error.message}`, 'danger');
+
+            const statusBadge = document.getElementById('config-sync-status');
+            if (statusBadge) {
+                statusBadge.textContent = 'Erreur';
+                statusBadge.className = 'badge bg-danger';
+            }
+        }
+    }
+
+    /**
+     * Compare current form values with BMS values
+     */
+    compareConfiguration() {
+        const differences = [];
+
+        Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
+            const currentValue = this.registers.get(registerNum);
+            const formValue = this.getFieldValue(fieldId);
+
+            if (currentValue !== undefined && formValue !== null && formValue !== undefined) {
+                // Compare values (with tolerance for floating point)
+                if (typeof formValue === 'number' && typeof currentValue === 'number') {
+                    if (Math.abs(formValue - currentValue) > 0.001) {
+                        differences.push({
+                            field: fieldId,
+                            register: registerNum,
+                            bmsValue: currentValue,
+                            formValue: formValue
+                        });
+                    }
+                } else if (formValue != currentValue) {
+                    differences.push({
+                        field: fieldId,
+                        register: registerNum,
+                        bmsValue: currentValue,
+                        formValue: formValue
+                    });
+                }
+            }
+        });
+
+        if (differences.length === 0) {
+            this.showNotification('✓ Configuration identique au BMS', 'success');
+        } else {
+            const message = `${differences.length} différence(s) détectée(s) entre le formulaire et le BMS`;
+            this.showNotification(message, 'warning');
+            console.table(differences);
+        }
+    }
+
+    /**
+     * Update configuration tracking information
+     */
+    updateConfigTrackingInfo() {
+        const lastUpdateEl = document.getElementById('config-last-update');
+        if (lastUpdateEl) {
+            const now = new Date();
+            lastUpdateEl.textContent = now.toLocaleTimeString('fr-FR');
+        }
+
+        const registersCountEl = document.getElementById('config-registers-count');
+        if (registersCountEl) {
+            registersCountEl.textContent = this.registers.size;
+        }
+
+        const statusBadge = document.getElementById('config-sync-status');
+        if (statusBadge) {
+            statusBadge.textContent = 'Synchronisé';
+            statusBadge.className = 'badge bg-success';
+        }
     }
 }
 
