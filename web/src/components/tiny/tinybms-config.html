@@ -586,57 +586,6 @@
       <div class="tab-pane fade" id="peripherals" role="tabpanel" aria-labelledby="peripherals-tab">
         <form id="tinybms-peripherals-form">
           <div class="row g-4">
-            <!-- Mode Settings -->
-            <div class="col-lg-4">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-layout me-2"></i>
-                Mode
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label for="bms-mode" class="form-label">
-                        <span>BMS Operation Mode</span>
-                        <span class="register-number">Reg: 340</span>
-                      </label>
-                      <div class="field-with-current">
-                        <select class="form-select" id="bms-mode" data-register="340" required>
-                          <option value="dual-port">Dual Port</option>
-                          <option value="single-port">Single Port</option>
-                        </select>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-bms-mode">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Dual: switches séparés • Single: switch commun
-                      </div>
-                    </div>
-                    <div class="col-12" id="single-port-switch-type-group" style="display: none;">
-                      <label for="single-port-switch-type" class="form-label">
-                        <span>Single Port Switch Type</span>
-                        <span class="register-number">Reg: 341</span>
-                      </label>
-                      <div class="field-with-current">
-                        <select class="form-select" id="single-port-switch-type" data-register="341">
-                          <option value="internal-fet">Internal FET</option>
-                          <option value="aido1">AIDO1 (External)</option>
-                          <option value="dido1">DIDO1 (External)</option>
-                          <option value="aiho1">AIHO1 (External)</option>
-                        </select>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-single-port-switch-type">--</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Load Settings -->
             <div class="col-lg-4" id="load-settings-group">
               <h4 class="text-secondary text-uppercase fs-6 mb-3">
@@ -854,99 +803,151 @@
               </div>
             </div>
 
-            <!-- Display Settings -->
-            <div class="col-lg-6">
+            <!-- Mode, Display & Temperature Settings (Combined) -->
+            <div class="col-12">
               <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-dashboard me-2"></i>
-                Display
+                <i class="ti ti-settings me-2"></i>
+                Mode, Display & Temperature
               </h4>
               <div class="card bg-dark border border-secondary">
                 <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label for="protocol" class="form-label">
-                        <span>Broadcast Protocol</span>
-                        <span class="register-number">Reg: 343</span>
-                      </label>
-                      <div class="field-with-current">
-                        <select class="form-select" id="protocol" data-register="343" required>
-                          <option value="cav3">CA V3 (Ebike Analyzer)</option>
-                          <option value="ascii">ASCII</option>
-                          <option value="soc-bar">SOC BAR</option>
-                        </select>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-protocol">--</span>
-                        </span>
+                  <div class="row g-4">
+                    <!-- Mode Section -->
+                    <div class="col-lg-4">
+                      <h5 class="text-white fs-6 mb-3">
+                        <i class="ti ti-layout me-2"></i>
+                        Mode
+                      </h5>
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label for="bms-mode" class="form-label">
+                            <span>BMS Operation Mode</span>
+                            <span class="register-number">Reg: 340</span>
+                          </label>
+                          <div class="field-with-current">
+                            <select class="form-select" id="bms-mode" data-register="340" required>
+                              <option value="dual-port">Dual Port</option>
+                              <option value="single-port">Single Port</option>
+                            </select>
+                            <span class="current-value">
+                              <span class="current-value-label">Actuel:</span>
+                              <span id="current-bms-mode">--</span>
+                            </span>
+                          </div>
+                          <div class="form-hint text-muted small">
+                            Dual: switches séparés • Single: switch commun
+                          </div>
+                        </div>
+                        <div class="col-12" id="single-port-switch-type-group" style="display: none;">
+                          <label for="single-port-switch-type" class="form-label">
+                            <span>Single Port Switch Type</span>
+                            <span class="register-number">Reg: 341</span>
+                          </label>
+                          <div class="field-with-current">
+                            <select class="form-select" id="single-port-switch-type" data-register="341">
+                              <option value="internal-fet">Internal FET</option>
+                              <option value="aido1">AIDO1 (External)</option>
+                              <option value="dido1">DIDO1 (External)</option>
+                              <option value="aiho1">AIHO1 (External)</option>
+                            </select>
+                            <span class="current-value">
+                              <span class="current-value-label">Actuel:</span>
+                              <span id="current-single-port-switch-type">--</span>
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="broadcast" class="form-label">
-                        <span>Broadcast Interval</span>
-                        <span class="register-number">Reg: 342</span>
-                      </label>
-                      <div class="field-with-current">
-                        <select class="form-select" id="broadcast" data-register="342" required>
-                          <option value="disabled" selected>Disabled</option>
-                          <option value="0.1">0.1 s</option>
-                          <option value="0.2">0.2 s</option>
-                          <option value="0.5">0.5 s</option>
-                          <option value="1.0">1.0 s</option>
-                          <option value="2.0">2.0 s</option>
-                          <option value="5.0">5.0 s</option>
-                          <option value="10.0">10.0 s</option>
-                        </select>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-broadcast">--</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Temperature Settings -->
-            <div class="col-lg-6">
-              <h4 class="text-secondary text-uppercase fs-6 mb-3">
-                <i class="ti ti-temperature me-2"></i>
-                Temperature
-              </h4>
-              <div class="card bg-dark border border-secondary">
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label for="temperature-sensor-type" class="form-label">
-                        <span>Temperature Sensor Type</span>
-                        <span class="register-number">Reg: 339</span>
-                      </label>
-                      <div class="field-with-current">
-                        <select class="form-select" id="temperature-sensor-type" data-register="339" required>
-                          <option value="dual-10k-ntc" selected>Dual 10K NTC Sensor</option>
-                          <option value="multipoint-active">Multipoint Active Sensor</option>
-                        </select>
-                        <span class="current-value">
-                          <span class="current-value-label">Actuel:</span>
-                          <span id="current-temperature-sensor-type">--</span>
-                        </span>
-                      </div>
-                      <div class="form-hint text-muted small">
-                        Dual 10K NTC: 10K @ 25°C, Beta 3977K
+                    <!-- Display Section -->
+                    <div class="col-lg-4">
+                      <h5 class="text-white fs-6 mb-3">
+                        <i class="ti ti-dashboard me-2"></i>
+                        Display
+                      </h5>
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label for="protocol" class="form-label">
+                            <span>Broadcast Protocol</span>
+                            <span class="register-number">Reg: 343</span>
+                          </label>
+                          <div class="field-with-current">
+                            <select class="form-select" id="protocol" data-register="343" required>
+                              <option value="cav3">CA V3 (Ebike Analyzer)</option>
+                              <option value="ascii">ASCII</option>
+                              <option value="soc-bar">SOC BAR</option>
+                            </select>
+                            <span class="current-value">
+                              <span class="current-value-label">Actuel:</span>
+                              <span id="current-protocol">--</span>
+                            </span>
+                          </div>
+                        </div>
+                        <div class="col-12">
+                          <label for="broadcast" class="form-label">
+                            <span>Broadcast Interval</span>
+                            <span class="register-number">Reg: 342</span>
+                          </label>
+                          <div class="field-with-current">
+                            <select class="form-select" id="broadcast" data-register="342" required>
+                              <option value="disabled" selected>Disabled</option>
+                              <option value="0.1">0.1 s</option>
+                              <option value="0.2">0.2 s</option>
+                              <option value="0.5">0.5 s</option>
+                              <option value="1.0">1.0 s</option>
+                              <option value="2.0">2.0 s</option>
+                              <option value="5.0">5.0 s</option>
+                              <option value="10.0">10.0 s</option>
+                            </select>
+                            <span class="current-value">
+                              <span class="current-value-label">Actuel:</span>
+                              <span id="current-broadcast">--</span>
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div class="col-12">
-                      <label for="external-current-sensor" class="form-label">External Current Sensor</label>
-                      <select class="form-select" id="external-current-sensor" required>
-                        <option value="none" selected>None (Internal HALL)</option>
-                        <option value="dhab-s133-75a">DHAB S/133 (75A/750A)</option>
-                        <option value="dhab-s124-200a">DHAB S/124 (200A)</option>
-                        <option value="lem-hass-200s">LEM HASS 200-S</option>
-                        <option value="lem-hass-300s">LEM HASS 300-S</option>
-                        <option value="lem-hass-400s">LEM HASS 400-S</option>
-                      </select>
-                      <div class="form-hint text-muted small">
-                        Nécessite BMS 150A haute puissance
+
+                    <!-- Temperature Section -->
+                    <div class="col-lg-4">
+                      <h5 class="text-white fs-6 mb-3">
+                        <i class="ti ti-temperature me-2"></i>
+                        Temperature
+                      </h5>
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label for="temperature-sensor-type" class="form-label">
+                            <span>Temperature Sensor Type</span>
+                            <span class="register-number">Reg: 339</span>
+                          </label>
+                          <div class="field-with-current">
+                            <select class="form-select" id="temperature-sensor-type" data-register="339" required>
+                              <option value="dual-10k-ntc" selected>Dual 10K NTC Sensor</option>
+                              <option value="multipoint-active">Multipoint Active Sensor</option>
+                            </select>
+                            <span class="current-value">
+                              <span class="current-value-label">Actuel:</span>
+                              <span id="current-temperature-sensor-type">--</span>
+                            </span>
+                          </div>
+                          <div class="form-hint text-muted small">
+                            Dual 10K NTC: 10K @ 25°C, Beta 3977K
+                          </div>
+                        </div>
+                        <div class="col-12">
+                          <label for="external-current-sensor" class="form-label">External Current Sensor</label>
+                          <select class="form-select" id="external-current-sensor" required>
+                            <option value="none" selected>None (Internal HALL)</option>
+                            <option value="dhab-s133-75a">DHAB S/133 (75A/750A)</option>
+                            <option value="dhab-s124-200a">DHAB S/124 (200A)</option>
+                            <option value="lem-hass-200s">LEM HASS 200-S</option>
+                            <option value="lem-hass-300s">LEM HASS 300-S</option>
+                            <option value="lem-hass-400s">LEM HASS 400-S</option>
+                          </select>
+                          <div class="form-hint text-muted small">
+                            Nécessite BMS 150A haute puissance
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
