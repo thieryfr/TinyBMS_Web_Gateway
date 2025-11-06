@@ -33,7 +33,7 @@ export class BatteryRealtimeCharts {
                 max: 100,
                 splitNumber: 5,
                 center: ['50%', '60%'],
-                radius: '75%',
+                radius: '95%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
@@ -107,7 +107,7 @@ export class BatteryRealtimeCharts {
                 max: 100,
                 splitNumber: 5,
                 center: ['50%', '60%'],
-                radius: '75%',
+                radius: '95%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '50%',
@@ -380,7 +380,7 @@ export class BatteryRealtimeCharts {
                 max: 80,
                 splitNumber: 5,
                 center: ['50%', '60%'],
-                radius: '75%',
+                radius: '95%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
