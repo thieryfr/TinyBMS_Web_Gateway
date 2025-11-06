@@ -149,12 +149,12 @@
                     for (let j = 0; j < child.children.length; j++) {
                         const subChild = child.children[j];
                         log('    Sous-enfant ' + j + ': ' + subChild.tagName, 'info');
-                        if (subChild.tagName === 'CANVAS') {
+                        if (subChild.tagName.toUpperCase() === 'CANVAS') {
                             log('    Canvas trouvé dans sous-enfant !', 'success');
                             log('    Canvas width: ' + subChild.width, 'info');
                             log('    Canvas height: ' + subChild.height, 'info');
                         }
-                        if (subChild.tagName === 'SVG') {
+                        if (subChild.tagName.toUpperCase() === 'SVG') {
                             log('    SVG trouvé dans sous-enfant !', 'success');
                             const svgRect = subChild.getBoundingClientRect();
                             log('    SVG dimensions: ' + svgRect.width + 'x' + svgRect.height, 'info');
