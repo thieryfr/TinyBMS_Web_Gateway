@@ -6,6 +6,7 @@ import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
+import tinyBMSConfig from '/src/components/configuration/tinybms-config.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
@@ -818,6 +819,14 @@ async function setupConfigTab() {
         console.log('[Setup] TinyBMS registers configuration loaded');
     } else {
         console.warn('[Setup] Config registers container not found');
+    }
+
+    // Initialize TinyBMS Battery Insider configuration module
+    try {
+        await tinyBMSConfig.init();
+        console.log('[Setup] TinyBMS Battery Insider configuration loaded');
+    } catch (error) {
+        console.warn('[Setup] TinyBMS Battery Insider configuration not available:', error);
     }
 }
 
