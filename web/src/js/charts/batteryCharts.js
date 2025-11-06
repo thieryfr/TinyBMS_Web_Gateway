@@ -84,11 +84,7 @@ export class BatteryRealtimeCharts {
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-90%'],
-                  fontSize: 11,
-                  color: '#00a896',
-                  fontWeight: 'bold',
+                  show: false,
                 },
                 data: [
                   {
@@ -146,11 +142,7 @@ export class BatteryRealtimeCharts {
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-75%'],
-                  fontSize: 11,
-                  color: '#ffd166',
-                  fontWeight: 'bold',
+                  show: false,
                 },
                 data: [
                   {
@@ -429,11 +421,7 @@ export class BatteryRealtimeCharts {
                   },
                 },
                 title: {
-                  show: true,
-                  offsetCenter: [0, '-90%'],
-                  fontSize: 11,
-                  color: '#f2f5f7',
-                  fontWeight: 'bold',
+                  show: false,
                 },
                 data: [
                   {
