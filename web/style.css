@@ -762,3 +762,137 @@ main {
     height: auto;
     display: block;
 }
+
+/* System Status Panel with LED indicators */
+.system-status-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.status-module {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    transition: all 0.3s ease;
+}
+
+.status-module:hover {
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.status-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+}
+
+.status-led {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    position: relative;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+    transition: all 0.3s ease;
+}
+
+/* LED States */
+.status-led-ok {
+    background-color: #00ff00;
+    box-shadow: 0 0 12px #00ff00, 0 0 4px #00ff00 inset;
+    animation: pulse-green 2s ease-in-out infinite;
+}
+
+.status-led-error {
+    background-color: #ff0000;
+    box-shadow: 0 0 12px #ff0000, 0 0 4px #ff0000 inset;
+    animation: pulse-red 1s ease-in-out infinite;
+}
+
+.status-led-warning {
+    background-color: #ffa500;
+    box-shadow: 0 0 12px #ffa500, 0 0 4px #ffa500 inset;
+    animation: pulse-orange 1.5s ease-in-out infinite;
+}
+
+.status-led-unknown {
+    background-color: #666666;
+    box-shadow: 0 0 6px rgba(102, 102, 102, 0.5);
+}
+
+.status-led-connecting {
+    background-color: #00bfff;
+    box-shadow: 0 0 12px #00bfff, 0 0 4px #00bfff inset;
+    animation: blink 0.8s ease-in-out infinite;
+}
+
+/* LED Animations */
+@keyframes pulse-green {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 12px #00ff00, 0 0 4px #00ff00 inset;
+    }
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 0 6px #00ff00, 0 0 2px #00ff00 inset;
+    }
+}
+
+@keyframes pulse-red {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 16px #ff0000, 0 0 6px #ff0000 inset;
+    }
+    50% {
+        opacity: 0.5;
+        box-shadow: 0 0 8px #ff0000, 0 0 3px #ff0000 inset;
+    }
+}
+
+@keyframes pulse-orange {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 14px #ffa500, 0 0 5px #ffa500 inset;
+    }
+    50% {
+        opacity: 0.6;
+        box-shadow: 0 0 7px #ffa500, 0 0 2px #ffa500 inset;
+    }
+}
+
+@keyframes blink {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.2;
+    }
+}
+
+/* Responsive adjustments for status panel */
+@media (max-width: 768px) {
+    .system-status-panel {
+        gap: 0.5rem;
+    }
+
+    .status-module {
+        padding: 0.3rem 0.6rem;
+    }
+
+    .status-label {
+        font-size: 0.75rem;
+    }
+
+    .status-led {
+        width: 8px;
+        height: 8px;
+    }
+}
