@@ -606,30 +606,98 @@ export class TinyBMSConfigManager {
      * Upload complete configuration to BMS
      */
     async uploadConfigToBMS() {
-        if (!confirm('Voulez-vous vraiment envoyer toute la configuration au BMS ? Le BMS va redémarrer.')) {
+        if (!confirm('Voulez-vous vraiment envoyer toute la configuration au BMS ?')) {
             return;
         }
 
         try {
             this.showNotification('Envoi de la configuration complète au BMS...', 'info');
 
-            const response = await fetch('/api/tinybms/config/upload', {
+            // Collect all field IDs from all sections
+            const allFieldIds = [
+                // Cell Settings
+                'fully-charged-voltage',
+                'fully-discharged-voltage',
+                'early-balancing-threshold',
+                'charge-finished-current',
+                'battery-capacity',
+                'number-of-series-cells',
+                'allowed-disbalance',
+                'battery-maximum-cycles',
+                'set-soh-manually',
+                'set-soc-manually',
+                // Safety Settings
+                'discharge-peak-current-cutoff',
+                'over-voltage-cutoff',
+                'under-voltage-cutoff',
+                'discharge-over-current-cutoff',
+                'charge-over-current-cutoff',
+                'over-heat-cutoff',
+                'low-temp-charger-cutoff',
+                'automatic-recovery',
+                'invert-current-sensor',
+                // Peripherals Settings
+                'charger-startup-delay',
+                'charger-disable-delay',
+                'charge-restart-level',
+                'charger-type',
+                'load-switch-type',
+                'charger-switch-type',
+                'ignition',
+                'charger-detection',
+                'precharge',
+                'precharge-duration',
+                'temperature-sensor-type',
+                'bms-mode',
+                'single-port-switch-type',
+                'broadcast',
+                'protocol',
+            ];
+
+            // Collect register changes
+            const registerChanges = {};
+            let changedCount = 0;
+
+            allFieldIds.forEach(fieldId => {
+                const registerNum = this.registerMap[fieldId];
+                if (registerNum !== undefined) {
+                    const value = this.getFieldValue(fieldId);
+                    if (value !== null && value !== undefined) {
+                        // Use register number as key
+                        registerChanges[registerNum] = value;
+                        changedCount++;
+                    }
+                }
+            });
+
+            console.log('Sending complete configuration:', registerChanges);
+
+            const response = await fetch('/api/registers', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                body: JSON.stringify(registerChanges),
             });
 
             if (!response.ok) {
-                throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`Erreur ${response.status}: ${errorText}`);
             }
 
-            this.showNotification('✓ Configuration complète envoyée. Le BMS va redémarrer.', 'success');
+            const result = await response.json();
+            this.showNotification(`✓ Configuration complète envoyée avec succès (${changedCount} registres)`, 'success');
 
             const statusEl = document.getElementById('config-status-text');
             if (statusEl) {
-                statusEl.textContent = 'Configuration uploaded to BMS';
+                statusEl.textContent = `Configuration uploaded to BMS (${changedCount} registers)`;
             }
+
+            // Reload registers and display updated values
+            setTimeout(async () => {
+                await this.loadRegisters();
+                await this.loadConfiguration();
+            }, 1000);
 
         } catch (error) {
             console.error('Error uploading configuration:', error);
