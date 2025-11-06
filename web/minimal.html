@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/assets/css/tabler.min.css" />
     <link rel="stylesheet" href="/assets/css/tabler-icons.min.css" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/assets/js/echarts.simple.min.js"></script>
 </head>
 <body class="theme-dark">
     <div class="page">
@@ -154,8 +155,9 @@
         </main>
     </div>
 
-    <script type="module">
-        import * as echarts from '/assets/js/echarts.esm.js';
+    <script>
+        // Get echarts from global scope
+        const echarts = window.echarts;
 
         // Simple logging
         const consoleDiv = document.getElementById('console');
@@ -173,6 +175,12 @@
 
         function initGauges() {
             try {
+                if (!echarts) {
+                    log('✗ ECharts non disponible');
+                    return;
+                }
+                log('Initialisation des jauges...');
+
                 // SOC Gauge
                 const socElement = document.getElementById('test-soc-gauge');
                 if (socElement) {
@@ -443,9 +451,12 @@
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
             log('DOM ready');
-            initGauges();
-            testAPI();
-            setTimeout(connectWS, 1000);
+            // Wait a bit for echarts to load
+            setTimeout(() => {
+                initGauges();
+                testAPI();
+                setTimeout(connectWS, 1000);
+            }, 100);
         });
     </script>
 </body>
