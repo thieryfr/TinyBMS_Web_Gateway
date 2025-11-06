@@ -26,13 +26,13 @@ export class BatteryRealtimeCharts {
               {
                 name: 'SOC',
                 type: 'gauge',
-                center: ['25%', '50%'],
+                center: ['30%', '55%'],
                 startAngle: 220,
                 endAngle: -40,
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '80%',
+                radius: '75%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '60%',
@@ -95,13 +95,13 @@ export class BatteryRealtimeCharts {
               {
                 name: 'SOH',
                 type: 'gauge',
-                center: ['75%', '50%'],
+                center: ['70%', '55%'],
                 startAngle: 220,
                 endAngle: -40,
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                radius: '80%',
+                radius: '75%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '60%',
