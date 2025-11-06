@@ -32,19 +32,19 @@ export class BatteryRealtimeCharts {
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                center: ['50%', '50%'],
-                radius: '100%',
+                center: ['50%', '60%'],
+                radius: '75%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
-                  width: 6,
+                  width: 5,
                   itemStyle: {
                     color: '#00a896',
                   },
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 14,
+                    width: 10,
                     color: [
                       [0.5, '#f25f5c'],
                       [0.8, '#ffd166'],
@@ -54,35 +54,41 @@ export class BatteryRealtimeCharts {
                 },
                 axisTick: {
                   distance: 2,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
+                  length: 5,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
                 },
                 splitLine: {
-                  length: 10,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
+                  length: 8,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
                 },
                 axisLabel: {
                   color: 'rgba(255,255,255,0.7)',
-                  distance: 12,
+                  distance: 10,
+                  fontSize: 10,
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 16,
+                  fontSize: 12,
                   fontWeight: 600,
-                  offsetCenter: [0, '45%'],
+                  offsetCenter: [0, '50%'],
                   color: '#00a896',
                   formatter: (value) =>
-                    value != null ? `SOC: ${value.toFixed(1)}%` : 'SOC: -- %',
+                    value != null ? `${value.toFixed(1)}%` : '-- %',
                 },
                 anchor: {
                   show: true,
                   showAbove: true,
-                  size: 10,
+                  size: 8,
                   itemStyle: {
                     color: '#00a896',
                   },
                 },
                 title: {
-                  show: false,
+                  show: true,
+                  offsetCenter: [0, '-90%'],
+                  fontSize: 11,
+                  color: '#00a896',
+                  fontWeight: 'bold',
                 },
                 data: [
                   {
@@ -100,12 +106,12 @@ export class BatteryRealtimeCharts {
                 min: 0,
                 max: 100,
                 splitNumber: 5,
-                center: ['50%', '50%'],
-                radius: '100%',
+                center: ['50%', '60%'],
+                radius: '75%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
-                  length: '55%',
-                  width: 5,
+                  length: '50%',
+                  width: 4,
                   itemStyle: {
                     color: '#ffd166',
                   },
@@ -124,23 +130,27 @@ export class BatteryRealtimeCharts {
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 16,
+                  fontSize: 12,
                   fontWeight: 600,
-                  offsetCenter: [0, '65%'],
+                  offsetCenter: [0, '70%'],
                   color: '#ffd166',
                   formatter: (value) =>
-                    value != null ? `SOH: ${value.toFixed(1)}%` : 'SOH: -- %',
+                    value != null ? `${value.toFixed(1)}%` : '-- %',
                 },
                 anchor: {
                   show: true,
                   showAbove: false,
-                  size: 8,
+                  size: 6,
                   itemStyle: {
                     color: '#ffd166',
                   },
                 },
                 title: {
-                  show: false,
+                  show: true,
+                  offsetCenter: [0, '-75%'],
+                  fontSize: 11,
+                  color: '#ffd166',
+                  fontWeight: 'bold',
                 },
                 data: [
                   {
@@ -369,15 +379,16 @@ export class BatteryRealtimeCharts {
                 min: -20,
                 max: 80,
                 splitNumber: 5,
-                radius: '100%',
+                center: ['50%', '60%'],
+                radius: '75%',
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
-                  width: 6,
+                  width: 5,
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 14,
+                    width: 10,
                     color: [
                       [0.3, '#00a896'],
                       [0.6, '#ffd166'],
@@ -387,20 +398,22 @@ export class BatteryRealtimeCharts {
                 },
                 axisTick: {
                   distance: 2,
-                  lineStyle: { color: 'rgba(255,255,255,0.35)' },
+                  length: 5,
+                  lineStyle: { color: 'rgba(255,255,255,0.35)', width: 1 },
                 },
                 splitLine: {
-                  length: 10,
-                  lineStyle: { color: 'rgba(255,255,255,0.45)' },
+                  length: 8,
+                  lineStyle: { color: 'rgba(255,255,255,0.45)', width: 2 },
                 },
                 axisLabel: {
                   color: 'rgba(255,255,255,0.7)',
-                  distance: 12,
+                  distance: 10,
+                  fontSize: 10,
                   formatter: '{value}°',
                 },
                 detail: {
                   valueAnimation: true,
-                  fontSize: 22,
+                  fontSize: 14,
                   fontWeight: 600,
                   offsetCenter: [0, '60%'],
                   color: '#f2f5f7',
@@ -410,13 +423,17 @@ export class BatteryRealtimeCharts {
                 anchor: {
                   show: true,
                   showAbove: true,
-                  size: 10,
+                  size: 8,
                   itemStyle: {
                     color: '#f2f5f7',
                   },
                 },
                 title: {
-                  show: false,
+                  show: true,
+                  offsetCenter: [0, '-90%'],
+                  fontSize: 11,
+                  color: '#f2f5f7',
+                  fontWeight: 'bold',
                 },
                 data: [
                   {
