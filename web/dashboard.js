@@ -639,6 +639,7 @@ async function initialise() {
         voltageSparklineElement: document.getElementById('battery-voltage-sparkline'),
         currentSparklineElement: document.getElementById('battery-current-sparkline'),
         cellChartElement: document.getElementById('battery-cell-chart'),
+        temperatureGaugeElement: document.getElementById('battery-temperature-gauge'),
     });
 
     state.uartRealtime.timeline.raw = document.getElementById('uart-timeline-raw');
@@ -837,6 +838,7 @@ function handleTelemetryMessage(data) {
             soh: data.state_of_health_pct,
             voltagesMv: data.cell_voltage_mv,
             balancingStates: data.cell_balancing,
+            temperature: data.average_temperature_c,
         });
     }
 }

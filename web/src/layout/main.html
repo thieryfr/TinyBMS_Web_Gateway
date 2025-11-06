@@ -74,15 +74,18 @@
         <div class="col-sm-6 col-xl-3">
           <article class="card card-stats h-100">
             <div class="card-body">
-              <div class="d-flex justify-content-between align-items-start">
-                <div>
+              <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
+                <div class="w-100">
                   <h2 class="card-title text-uppercase fs-6 text-secondary mb-1">Températures</h2>
                   <p class="display-6 fw-bold text-white mb-1" id="battery-temperature">-- °C</p>
                   <span class="text-secondary" id="battery-temp-extra">MOSFET: -- °C</span>
                 </div>
-                <span class="avatar avatar-lg bg-orange-lt text-orange shadow-sm">
-                  <i class="ti ti-temperature fs-2"></i>
-                </span>
+                <div
+                  class="chart-gauge"
+                  id="battery-temperature-gauge"
+                  role="img"
+                  aria-label="Jauge de température de la batterie"
+                ></div>
               </div>
             </div>
           </article>
