@@ -332,10 +332,6 @@ export class BatteryRealtimeCharts {
                 name: 'Tension',
                 type: 'bar',
                 emphasis: { focus: 'series' },
-                itemStyle: {
-                  color: '#00a896',
-                  borderRadius: [5, 5, 0, 0],
-                },
                 barWidth: '60%',
                 label: {
                   show: true,
@@ -569,12 +565,33 @@ export class BatteryRealtimeCharts {
     const maxVoltage = Math.max(...resolvedVoltages, 0);
     const minVoltage = Math.min(...resolvedVoltages.filter(v => v > 0), Infinity);
 
+    // Find indices of min and max voltage cells
+    const maxIndex = resolvedVoltages.indexOf(maxVoltage);
+    const minIndex = resolvedVoltages.indexOf(minVoltage);
+
     // Calculate in-balance (difference from average in mV)
     const validVoltages = resolvedVoltages.filter(v => v > 0);
     const avgVoltage = validVoltages.length > 0
       ? validVoltages.reduce((sum, v) => sum + v, 0) / validVoltages.length
       : 0;
     const inBalanceMv = resolvedVoltages.map((value) => value > 0 ? (value - avgVoltage) : 0);
+
+    // Create data array with color coding for min/max cells
+    const chartData = resolvedVoltages.map((value, index) => {
+      let color = '#00a896'; // Default green color
+      if (index === maxIndex && value > 0) {
+        color = '#f25f5c'; // Red for max voltage
+      } else if (index === minIndex && value > 0) {
+        color = '#5da5da'; // Blue for min voltage
+      }
+      return {
+        value: value,
+        itemStyle: {
+          color: color,
+          borderRadius: [5, 5, 0, 0],
+        },
+      };
+    });
 
     const tooltipFormatter = (params = []) => {
       if (!params.length) {
@@ -585,12 +602,20 @@ export class BatteryRealtimeCharts {
       const diffMax = maxVoltage - voltageValue;
       const inBalance = inBalanceMv[index];
       const inBalanceSign = inBalance >= 0 ? '+' : '';
+
+      let status = '';
+      if (index === maxIndex && voltageValue > 0) {
+        status = '<br/><span style="color:#f25f5c">⬆ Cellule MAX</span>';
+      } else if (index === minIndex && voltageValue > 0) {
+        status = '<br/><span style="color:#5da5da">⬇ Cellule MIN</span>';
+      }
+
       return [
         `Cellule ${index + 1}`,
         `Tension: ${voltageValue.toFixed(0)} mV (${(voltageValue / 1000).toFixed(3)} V)`,
         `Écart max: ${diffMax.toFixed(1)} mV`,
         `In-balance: ${inBalanceSign}${inBalance.toFixed(1)} mV`,
-      ].join('<br/>');
+      ].join('<br/>') + status;
     };
 
     this.cellChart.chart.setOption({
@@ -599,7 +624,7 @@ export class BatteryRealtimeCharts {
       xAxis: { data: categories },
       series: [
         {
-          data: resolvedVoltages,
+          data: chartData,
           label: {
             formatter: (params) => {
               const index = params.dataIndex;
