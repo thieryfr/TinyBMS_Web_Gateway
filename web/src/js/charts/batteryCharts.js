@@ -519,18 +519,22 @@ export class BatteryRealtimeCharts {
           remainingGaugeElement,
           {
             tooltip: {
-              formatter: ({ value }) =>
-                value != null ? `${value.toFixed(1)}%` : 'Charge restante indisponible',
+              formatter: ({ value }) => {
+                if (value == null) return 'Temps restant indisponible';
+                const hours = Math.floor(value);
+                const minutes = Math.round((value - hours) * 60);
+                return `${hours}h ${minutes}min restant`;
+              },
             },
             series: [
               {
-                name: 'Charge Restante',
+                name: 'Temps Restant',
                 type: 'gauge',
                 startAngle: 180,
                 endAngle: 0,
                 min: 0,
-                max: 100,
-                splitNumber: 10,
+                max: 48,
+                splitNumber: 8,
                 center: ['50%', '70%'],
                 radius: '95%',
                 pointer: {
@@ -545,10 +549,10 @@ export class BatteryRealtimeCharts {
                   lineStyle: {
                     width: 16,
                     color: [
-                      [0.2, '#ef4444'],
-                      [0.5, '#f59e0b'],
-                      [0.8, '#10b981'],
-                      [1, '#00d4aa'],
+                      [0.125, '#ef4444'],  // 0-6h: rouge (critique)
+                      [0.25, '#f59e0b'],   // 6-12h: orange (attention)
+                      [0.5, '#10b981'],    // 12-24h: vert (bon)
+                      [1, '#00d4aa'],      // 24-48h: cyan (excellent)
                     ],
                   },
                 },
@@ -567,7 +571,13 @@ export class BatteryRealtimeCharts {
                   distance: 20,
                   fontSize: 11,
                   fontWeight: 600,
-                  formatter: '{value}%',
+                  formatter: (value) => {
+                    // Afficher les labels importants
+                    if (value === 0 || value === 6 || value === 12 || value === 24 || value === 48) {
+                      return value + 'h';
+                    }
+                    return '';
+                  },
                 },
                 detail: {
                   valueAnimation: true,
@@ -575,8 +585,15 @@ export class BatteryRealtimeCharts {
                   fontWeight: 800,
                   offsetCenter: [0, '0%'],
                   color: 'auto',
-                  formatter: (value) =>
-                    value != null ? `{value|${value.toFixed(0)}}{unit|%}` : '{value|--}{unit|%}',
+                  formatter: (value) => {
+                    if (value == null) return '{value|--}{unit|h}';
+                    const hours = Math.floor(value);
+                    const minutes = Math.round((value - hours) * 60);
+                    if (hours === 0) {
+                      return `{value|${minutes}}{unit|min}`;
+                    }
+                    return `{value|${hours}}{unit|h ${minutes}m}`;
+                  },
                   rich: {
                     value: {
                       fontSize: 32,
@@ -584,7 +601,7 @@ export class BatteryRealtimeCharts {
                       color: 'auto',
                     },
                     unit: {
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: 600,
                       color: 'rgba(255,255,255,0.6)',
                       padding: [0, 0, 0, 4],
@@ -607,7 +624,7 @@ export class BatteryRealtimeCharts {
                 data: [
                   {
                     value: 0,
-                    name: 'Charge',
+                    name: 'Temps',
                   },
                 ],
               },
@@ -687,13 +704,13 @@ export class BatteryRealtimeCharts {
     }
   }
 
-  update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature, registers } = {}) {
+  update({ voltage, current, soc, soh, voltagesMv, balancingStates, temperature, registers, estimatedTimeLeftSeconds } = {}) {
     this.updateAxisLimits(registers);
     this.updateGauge(soc, soh);
     this.updateSparkline({ voltage, current });
     this.updateCellChart(voltagesMv);
     this.updateTemperatureGauge(temperature);
-    this.updateRemainingGauge(soc);
+    this.updateRemainingGauge(estimatedTimeLeftSeconds);
   }
 
   updateGauge(rawSoc, rawSoh) {
@@ -745,18 +762,24 @@ export class BatteryRealtimeCharts {
     });
   }
 
-  updateRemainingGauge(rawSoc) {
+  updateRemainingGauge(estimatedTimeLeftSeconds) {
     if (!this.remainingGauge) {
       return;
     }
-    const value = sanitizeNumber(rawSoc);
+    // Convertir les secondes en heures (décimal)
+    const seconds = sanitizeNumber(estimatedTimeLeftSeconds);
+    const hours = seconds != null && seconds > 0 ? seconds / 3600 : null;
+
+    // Limiter à 48h max pour l'affichage
+    const displayValue = hours != null ? Math.min(hours, 48) : null;
+
     this.remainingGauge.chart.setOption({
       series: [
         {
           data: [
             {
-              value: value == null ? null : Math.max(0, Math.min(100, value)),
-              name: 'Charge',
+              value: displayValue,
+              name: 'Temps',
             },
           ],
         },
