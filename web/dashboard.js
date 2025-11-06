@@ -889,6 +889,7 @@ function handleTelemetryMessage(data) {
             balancingStates: data.cell_balancing,
             temperature: data.average_temperature_c,
             registers: registerValues,
+            estimatedTimeLeftSeconds: data.estimated_time_left_seconds,
         });
     }
 
