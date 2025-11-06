@@ -8,9 +8,10 @@ function sanitizeNumber(value) {
 }
 
 export class BatteryRealtimeCharts {
-  constructor({ gaugeElement, sparklineElement, cellChartElement } = {}) {
+  constructor({ gaugeElement, voltageSparklineElement, currentSparklineElement, cellChartElement } = {}) {
     this.sparklineLimit = DEFAULT_SPARKLINE_LIMIT;
-    this.sparklineSamples = [];
+    this.voltageSamples = [];
+    this.currentSamples = [];
     this.cellVoltages = [];
 
     this.gauge = gaugeElement
@@ -91,9 +92,9 @@ export class BatteryRealtimeCharts {
         )
       : null;
 
-    this.sparkline = sparklineElement
+    this.voltageSparkline = voltageSparklineElement
       ? initChart(
-          sparklineElement,
+          voltageSparklineElement,
           {
             grid: {
               left: 4,
@@ -104,21 +105,17 @@ export class BatteryRealtimeCharts {
             },
             tooltip: {
               trigger: 'axis',
-              axisPointer: { type: 'cross' },
+              axisPointer: { type: 'line' },
               valueFormatter: (value) =>
-                value != null ? value.toFixed(2) : '--',
+                value != null ? `${value.toFixed(2)} V` : '--',
               formatter: (params) => {
                 if (!params || params.length === 0) {
                   return 'Pas de données';
                 }
-                const lines = params.map((item) => {
-                  const label = item.seriesName;
-                  const unit = item.seriesName === 'Courant' ? 'A' : 'V';
-                  const val = Number.isFinite(item.data) ? item.data.toFixed(2) : '--';
-                  return `${label}: ${val} ${unit}`;
-                });
-                const timeLabel = params[0]?.axisValueLabel || '';
-                return [timeLabel, ...lines].join('<br/>');
+                const item = params[0];
+                const val = Number.isFinite(item.data) ? item.data.toFixed(2) : '--';
+                const timeLabel = item.axisValueLabel || '';
+                return `${timeLabel}<br/>Tension: ${val} V`;
               },
             },
             legend: {
@@ -135,20 +132,12 @@ export class BatteryRealtimeCharts {
               axisLabel: { show: false },
               data: [],
             },
-            yAxis: [
-              {
-                type: 'value',
-                show: false,
-                min: (value) => value.min,
-                max: (value) => value.max,
-              },
-              {
-                type: 'value',
-                show: false,
-                min: (value) => value.min,
-                max: (value) => value.max,
-              },
-            ],
+            yAxis: {
+              type: 'value',
+              show: false,
+              min: (value) => value.min,
+              max: (value) => value.max,
+            },
             series: [
               {
                 name: 'Tension',
@@ -157,8 +146,60 @@ export class BatteryRealtimeCharts {
                 symbol: 'none',
                 lineStyle: { width: 2 },
                 data: [],
-                yAxisIndex: 0,
               },
+            ],
+          },
+          { renderer: 'canvas' }
+        )
+      : null;
+
+    this.currentSparkline = currentSparklineElement
+      ? initChart(
+          currentSparklineElement,
+          {
+            grid: {
+              left: 4,
+              right: 4,
+              top: 12,
+              bottom: 8,
+              containLabel: false,
+            },
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'line' },
+              valueFormatter: (value) =>
+                value != null ? `${value.toFixed(2)} A` : '--',
+              formatter: (params) => {
+                if (!params || params.length === 0) {
+                  return 'Pas de données';
+                }
+                const item = params[0];
+                const val = Number.isFinite(item.data) ? item.data.toFixed(2) : '--';
+                const timeLabel = item.axisValueLabel || '';
+                return `${timeLabel}<br/>Courant: ${val} A`;
+              },
+            },
+            legend: {
+              top: 0,
+              textStyle: { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
+              itemWidth: 12,
+              itemHeight: 12,
+            },
+            xAxis: {
+              type: 'category',
+              boundaryGap: false,
+              axisLine: { show: false },
+              axisTick: { show: false },
+              axisLabel: { show: false },
+              data: [],
+            },
+            yAxis: {
+              type: 'value',
+              show: false,
+              min: (value) => value.min,
+              max: (value) => value.max,
+            },
+            series: [
               {
                 name: 'Courant',
                 type: 'line',
@@ -166,7 +207,6 @@ export class BatteryRealtimeCharts {
                 symbol: 'none',
                 lineStyle: { width: 2 },
                 data: [],
-                yAxisIndex: 1,
               },
             ],
           },
@@ -276,36 +316,42 @@ export class BatteryRealtimeCharts {
   }
 
   updateSparkline({ voltage, current }) {
-    if (!this.sparkline) {
-      return;
-    }
-
     const voltageValue = sanitizeNumber(voltage);
     const currentValue = sanitizeNumber(current);
     const timestamp = new Date();
     const label = timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    this.sparklineSamples.push({
-      label,
-      voltage: voltageValue,
-      current: currentValue,
-    });
+    // Update voltage sparkline
+    if (this.voltageSparkline) {
+      this.voltageSamples.push({ label, value: voltageValue });
+      if (this.voltageSamples.length > this.sparklineLimit) {
+        this.voltageSamples.splice(0, this.voltageSamples.length - this.sparklineLimit);
+      }
 
-    if (this.sparklineSamples.length > this.sparklineLimit) {
-      this.sparklineSamples.splice(0, this.sparklineSamples.length - this.sparklineLimit);
+      const labels = this.voltageSamples.map((sample) => sample.label);
+      const values = this.voltageSamples.map((sample) => sample.value);
+
+      this.voltageSparkline.chart.setOption({
+        xAxis: { data: labels },
+        series: [{ data: values }],
+      });
     }
 
-    const labels = this.sparklineSamples.map((sample) => sample.label);
-    const voltages = this.sparklineSamples.map((sample) => sample.voltage);
-    const currents = this.sparklineSamples.map((sample) => sample.current);
+    // Update current sparkline
+    if (this.currentSparkline) {
+      this.currentSamples.push({ label, value: currentValue });
+      if (this.currentSamples.length > this.sparklineLimit) {
+        this.currentSamples.splice(0, this.currentSamples.length - this.sparklineLimit);
+      }
 
-    this.sparkline.chart.setOption({
-      xAxis: { data: labels },
-      series: [
-        { data: voltages },
-        { data: currents },
-      ],
-    });
+      const labels = this.currentSamples.map((sample) => sample.label);
+      const values = this.currentSamples.map((sample) => sample.value);
+
+      this.currentSparkline.chart.setOption({
+        xAxis: { data: labels },
+        series: [{ data: values }],
+      });
+    }
   }
 
   updateCellChart(voltagesMv) {

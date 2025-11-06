@@ -636,7 +636,8 @@ async function initialise() {
 
     state.batteryCharts = new BatteryRealtimeCharts({
         gaugeElement: document.getElementById('battery-soc-gauge'),
-        sparklineElement: document.getElementById('battery-pack-sparkline'),
+        voltageSparklineElement: document.getElementById('battery-voltage-sparkline'),
+        currentSparklineElement: document.getElementById('battery-current-sparkline'),
         cellChartElement: document.getElementById('battery-cell-chart'),
     });
 
