@@ -105,13 +105,62 @@
             const container = document.getElementById('gauge-container');
             const rect = container.getBoundingClientRect();
             const computed = window.getComputedStyle(container);
-            
+
             statsDiv.innerHTML = '<strong>📐 Dimensions du conteneur:</strong><br>' +
                 'Width: ' + rect.width + 'px (computed: ' + computed.width + ')<br>' +
                 'Height: ' + rect.height + 'px (computed: ' + computed.height + ')<br>' +
                 'Display: ' + computed.display + '<br>' +
                 'Visibility: ' + computed.visibility + '<br>' +
                 'Opacity: ' + computed.opacity;
+        }
+
+        function inspectDOM() {
+            const container = document.getElementById('gauge-container');
+            log('Inspection du conteneur...', 'info');
+            log('Enfants directs: ' + container.children.length, 'info');
+
+            for (let i = 0; i < container.children.length; i++) {
+                const child = container.children[i];
+                log('Enfant ' + i + ': ' + child.tagName, 'info');
+                log('  Classes: ' + child.className, 'info');
+                log('  Style: ' + child.getAttribute('style'), 'info');
+
+                const childRect = child.getBoundingClientRect();
+                log('  Dimensions: ' + childRect.width + 'x' + childRect.height, 'info');
+
+                if (child.tagName === 'CANVAS') {
+                    log('  Canvas trouvé !', 'success');
+                    log('  Canvas width: ' + child.width, 'info');
+                    log('  Canvas height: ' + child.height, 'info');
+
+                    const ctx = child.getContext('2d');
+                    if (ctx) {
+                        log('  Context 2D disponible', 'success');
+
+                        // Vérifier si le canvas a du contenu
+                        const imageData = ctx.getImageData(0, 0, 1, 1);
+                        log('  Pixels test: ' + JSON.stringify(Array.from(imageData.data)), 'info');
+                    }
+                }
+
+                // Inspecter les petits-enfants
+                if (child.children.length > 0) {
+                    log('  Sous-enfants: ' + child.children.length, 'info');
+                    for (let j = 0; j < child.children.length; j++) {
+                        const subChild = child.children[j];
+                        log('    Sous-enfant ' + j + ': ' + subChild.tagName, 'info');
+                        if (subChild.tagName === 'CANVAS') {
+                            log('    Canvas trouvé dans sous-enfant !', 'success');
+                            log('    Canvas width: ' + subChild.width, 'info');
+                            log('    Canvas height: ' + subChild.height, 'info');
+                        }
+                    }
+                }
+            }
+
+            if (container.children.length === 0) {
+                log('PROBLÈME: Aucun enfant dans le conteneur !', 'error');
+            }
         }
 
         log('🚀 Démarrage de la page', 'info');
@@ -228,6 +277,12 @@
                 log('Application des options avec setOption()...', 'info');
                 chart.setOption(option);
                 log('Options appliquées', 'success');
+
+                // Inspecter le DOM
+                log('═══ INSPECTION DU DOM ═══', 'info');
+                setTimeout(function() {
+                    inspectDOM();
+                }, 200);
 
                 // Test update après 500ms
                 log('Programmation d\'une mise à jour test...', 'info');
