@@ -295,8 +295,7 @@ export class BatteryRealtimeCharts {
               },
             },
             legend: {
-              bottom: 0,
-              textStyle: { color: 'rgba(255,255,255,0.65)' },
+              show: false,
             },
             tooltip: {
               trigger: 'axis',
@@ -306,7 +305,7 @@ export class BatteryRealtimeCharts {
               left: 60,
               right: 24,
               top: 40,
-              bottom: 60,
+              bottom: 40,
             },
             xAxis: {
               type: 'category',
@@ -318,37 +317,23 @@ export class BatteryRealtimeCharts {
             yAxis: {
               type: 'value',
               axisLabel: {
-                formatter: '{value}%',
+                formatter: '{value} mV',
                 color: 'rgba(255,255,255,0.75)',
               },
               axisLine: { lineStyle: { color: 'rgba(255,255,255,0.25)' } },
               splitLine: {
                 lineStyle: { color: 'rgba(255,255,255,0.1)' },
               },
-              max: 100,
+              min: 2800,
+              max: 3800,
             },
             series: [
               {
                 name: 'Tension',
                 type: 'bar',
-                stack: 'cells',
-                percentage: true,
                 emphasis: { focus: 'series' },
                 itemStyle: {
                   color: '#00a896',
-                  borderRadius: 0,
-                },
-                barWidth: '60%',
-                data: [],
-              },
-              {
-                name: 'Écart',
-                type: 'bar',
-                stack: 'cells',
-                percentage: true,
-                emphasis: { focus: 'series' },
-                itemStyle: {
-                  color: 'rgba(255,255,255,0.12)',
                   borderRadius: [5, 5, 0, 0],
                 },
                 barWidth: '60%',
@@ -565,7 +550,7 @@ export class BatteryRealtimeCharts {
 
     const voltages = voltagesMv.map((value) => {
       const number = Number(value);
-      return Number.isFinite(number) ? number / 1000 : null;
+      return Number.isFinite(number) ? number : null;
     });
 
     if (voltages.every((value) => value == null)) {
@@ -579,17 +564,17 @@ export class BatteryRealtimeCharts {
     }
 
     const resolvedVoltages = voltages.map((value) => (value == null ? 0 : value));
-    this.cellVoltages = resolvedVoltages;
+    this.cellVoltages = resolvedVoltages.map(v => v / 1000); // Keep in V for compatibility
     const categories = resolvedVoltages.map((_, index) => `Cellule ${index + 1}`);
     const maxVoltage = Math.max(...resolvedVoltages, 0);
-    const differenceSeries = resolvedVoltages.map((value) => Math.max(maxVoltage - value, 0));
+    const minVoltage = Math.min(...resolvedVoltages.filter(v => v > 0), Infinity);
 
     // Calculate in-balance (difference from average in mV)
     const validVoltages = resolvedVoltages.filter(v => v > 0);
     const avgVoltage = validVoltages.length > 0
       ? validVoltages.reduce((sum, v) => sum + v, 0) / validVoltages.length
       : 0;
-    const inBalanceMv = resolvedVoltages.map((value) => value > 0 ? (value - avgVoltage) * 1000 : 0);
+    const inBalanceMv = resolvedVoltages.map((value) => value > 0 ? (value - avgVoltage) : 0);
 
     const tooltipFormatter = (params = []) => {
       if (!params.length) {
@@ -597,16 +582,14 @@ export class BatteryRealtimeCharts {
       }
       const index = params[0]?.dataIndex ?? 0;
       const voltageValue = resolvedVoltages[index];
-      const diff = differenceSeries[index];
+      const diffMax = maxVoltage - voltageValue;
       const inBalance = inBalanceMv[index];
-      const percent = params[0]?.value != null ? Number(params[0].value).toFixed(1) : '--';
       const inBalanceSign = inBalance >= 0 ? '+' : '';
       return [
         `Cellule ${index + 1}`,
-        `Tension: ${voltageValue.toFixed(3)} V`,
-        `Écart max: ${diff.toFixed(3)} V`,
+        `Tension: ${voltageValue.toFixed(0)} mV (${(voltageValue / 1000).toFixed(3)} V)`,
+        `Écart max: ${diffMax.toFixed(1)} mV`,
         `In-balance: ${inBalanceSign}${inBalance.toFixed(1)} mV`,
-        `Part: ${percent}%`,
       ].join('<br/>');
     };
 
@@ -615,9 +598,8 @@ export class BatteryRealtimeCharts {
       tooltip: { formatter: tooltipFormatter },
       xAxis: { data: categories },
       series: [
-        { data: resolvedVoltages },
         {
-          data: differenceSeries,
+          data: resolvedVoltages,
           label: {
             formatter: (params) => {
               const index = params.dataIndex;
