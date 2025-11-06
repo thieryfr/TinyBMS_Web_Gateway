@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Jauge Détaillé</title>
+    <style>
+        body {
+            background: #1e293b;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        #gauge-container {
+            width: 600px;
+            height: 400px;
+            background: #334155;
+            margin: 20px 0;
+            border: 2px solid #10b981;
+            box-sizing: border-box;
+        }
+        .log {
+            background: #0f172a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            padding: 2px 0;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+        .warn { color: #f59e0b; }
+        h1 { color: #10b981; }
+        h2 { color: #3b82f6; margin-top: 30px; }
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #059669;
+        }
+        .stats {
+            background: #0f172a;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 Test Jauge ECharts - Mode Debug</h1>
+
+        <div class="log" id="log"></div>
+
+        <h2>📊 Jauge de Test</h2>
+        <div class="stats" id="container-stats"></div>
+        <div id="gauge-container"></div>
+
+        <div>
+            <button onclick="updateGauge(25)">25%</button>
+            <button onclick="updateGauge(50)">50%</button>
+            <button onclick="updateGauge(75)">75%</button>
+            <button onclick="updateGauge(100)">100%</button>
+            <button onclick="reinitChart()">🔄 Réinitialiser</button>
+        </div>
+    </div>
+
+    <script src="/assets/js/echarts.simple.min.js"></script>
+    <script>
+        const logDiv = document.getElementById('log');
+        const statsDiv = document.getElementById('container-stats');
+        let chart = null;
+        let logCount = 0;
+
+        function log(message, type = 'info') {
+            logCount++;
+            const time = new Date().toLocaleTimeString();
+            const ms = new Date().getMilliseconds().toString().padStart(3, '0');
+            const className = type;
+            const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
+            logDiv.innerHTML = '<div class="log-entry ' + className + '">' + icon + ' [' + time + '.' + ms + '] ' + message + '</div>' + logDiv.innerHTML;
+            console.log('[' + logCount + '] ' + message);
+        }
+
+        function updateStats() {
+            const container = document.getElementById('gauge-container');
+            const rect = container.getBoundingClientRect();
+            const computed = window.getComputedStyle(container);
+            
+            statsDiv.innerHTML = '<strong>📐 Dimensions du conteneur:</strong><br>' +
+                'Width: ' + rect.width + 'px (computed: ' + computed.width + ')<br>' +
+                'Height: ' + rect.height + 'px (computed: ' + computed.height + ')<br>' +
+                'Display: ' + computed.display + '<br>' +
+                'Visibility: ' + computed.visibility + '<br>' +
+                'Opacity: ' + computed.opacity;
+        }
+
+        log('🚀 Démarrage de la page', 'info');
+        updateStats();
+
+        function initializeGauge() {
+            log('═══════════════════════════════', 'info');
+            log('Début de l\'initialisation', 'info');
+            
+            // Check echarts
+            log('Vérification de window.echarts...', 'info');
+            if (typeof window.echarts === 'undefined') {
+                log('window.echarts est undefined !', 'error');
+                return;
+            }
+            log('window.echarts disponible (v' + window.echarts.version + ')', 'success');
+
+            // Check container
+            log('Récupération du conteneur...', 'info');
+            const container = document.getElementById('gauge-container');
+            if (!container) {
+                log('Conteneur introuvable !', 'error');
+                return;
+            }
+            log('Conteneur trouvé', 'success');
+
+            // Check dimensions
+            const rect = container.getBoundingClientRect();
+            log('Dimensions: ' + rect.width + 'x' + rect.height, 'info');
+            if (rect.width === 0 || rect.height === 0) {
+                log('ATTENTION: Conteneur a une dimension 0 !', 'warn');
+            }
+
+            try {
+                log('Appel de echarts.init()...', 'info');
+                chart = window.echarts.init(container, null, {
+                    renderer: 'canvas',
+                    width: 600,
+                    height: 400
+                });
+                log('Chart créé avec succès', 'success');
+                log('Type de chart: ' + typeof chart, 'info');
+                log('Chart.id: ' + chart.id, 'info');
+
+                log('Préparation des options...', 'info');
+                const option = {
+                    backgroundColor: 'transparent',
+                    series: [{
+                        type: 'gauge',
+                        startAngle: 200,
+                        endAngle: -20,
+                        min: 0,
+                        max: 100,
+                        splitNumber: 10,
+                        radius: '70%',
+                        center: ['50%', '50%'],
+                        axisLine: {
+                            lineStyle: {
+                                width: 30,
+                                color: [
+                                    [0.3, '#ef4444'],
+                                    [0.7, '#f59e0b'],
+                                    [1, '#10b981']
+                                ]
+                            }
+                        },
+                        pointer: {
+                            itemStyle: {
+                                color: '#ffffff'
+                            },
+                            width: 8,
+                            length: '60%'
+                        },
+                        axisTick: {
+                            distance: -35,
+                            length: 8,
+                            lineStyle: {
+                                color: '#fff',
+                                width: 2
+                            }
+                        },
+                        splitLine: {
+                            distance: -40,
+                            length: 20,
+                            lineStyle: {
+                                color: '#fff',
+                                width: 3
+                            }
+                        },
+                        axisLabel: {
+                            color: '#ffffff',
+                            distance: 50,
+                            fontSize: 18,
+                            fontWeight: 'bold'
+                        },
+                        title: {
+                            show: false
+                        },
+                        detail: {
+                            valueAnimation: true,
+                            formatter: '{value}%',
+                            color: '#ffffff',
+                            fontSize: 50,
+                            fontWeight: 'bold',
+                            offsetCenter: [0, '80%']
+                        },
+                        data: [{
+                            value: 0,
+                            name: 'Test'
+                        }]
+                    }]
+                };
+
+                log('Application des options avec setOption()...', 'info');
+                chart.setOption(option);
+                log('Options appliquées', 'success');
+
+                // Test update après 500ms
+                log('Programmation d\'une mise à jour test...', 'info');
+                setTimeout(function() {
+                    log('Mise à jour vers 65%...', 'info');
+                    try {
+                        chart.setOption({
+                            series: [{
+                                data: [{ value: 65 }]
+                            }]
+                        });
+                        log('Valeur mise à jour à 65%', 'success');
+                    } catch (e) {
+                        log('Erreur lors de la mise à jour: ' + e.message, 'error');
+                    }
+                }, 500);
+
+                log('═══════════════════════════════', 'success');
+                log('Initialisation terminée avec succès', 'success');
+
+            } catch (e) {
+                log('ERREUR lors de l\'initialisation: ' + e.message, 'error');
+                log('Stack: ' + e.stack, 'error');
+            }
+        }
+
+        function updateGauge(value) {
+            if (!chart) {
+                log('Impossible de mettre à jour: chart est null', 'error');
+                return;
+            }
+
+            log('Mise à jour vers ' + value + '%...', 'info');
+            try {
+                chart.setOption({
+                    series: [{
+                        data: [{ value: value }]
+                    }]
+                });
+                log('Valeur mise à jour à ' + value + '%', 'success');
+            } catch (e) {
+                log('Erreur: ' + e.message, 'error');
+            }
+        }
+
+        function reinitChart() {
+            log('Réinitialisation...', 'warn');
+            if (chart) {
+                chart.dispose();
+                chart = null;
+                log('Chart disposé', 'info');
+            }
+            setTimeout(function() {
+                initializeGauge();
+            }, 100);
+        }
+
+        // Attendre que tout soit chargé
+        window.addEventListener('load', function() {
+            log('Événement window.load déclenché', 'info');
+            setTimeout(function() {
+                initializeGauge();
+            }, 300);
+        });
+
+        // Mettre à jour les stats périodiquement
+        setInterval(updateStats, 2000);
+    </script>
+</body>
+</html>
