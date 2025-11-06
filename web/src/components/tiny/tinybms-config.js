@@ -12,6 +12,45 @@ export class TinyBMSConfigManager {
             peripheralsSettings: {},
         };
         this.originalConfig = null;
+        this.registers = new Map(); // Map of register number -> value
+
+        // Register mapping: field-id -> register number
+        this.registerMap = {
+            'fully-charged-voltage': 300,
+            'fully-discharged-voltage': 301,
+            'early-balancing-threshold': 303,
+            'charge-finished-current': 304,
+            'discharge-peak-current-cutoff': 305,
+            'battery-capacity': 306,
+            'number-of-series-cells': 307,
+            'allowed-disbalance': 308,
+            'charger-startup-delay': 310,
+            'charger-disable-delay': 311,
+            'over-voltage-cutoff': 315,
+            'under-voltage-cutoff': 316,
+            'discharge-over-current-cutoff': 317,
+            'charge-over-current-cutoff': 318,
+            'over-heat-cutoff': 319,
+            'low-temp-charger-cutoff': 320,
+            'charge-restart-level': 321,
+            'battery-maximum-cycles': 322,
+            'set-soh-manually': 323,
+            'set-soc-manually': 328,
+            'invert-current-sensor': 329,
+            'charger-type': 330,
+            'load-switch-type': 331,
+            'automatic-recovery': 332,
+            'charger-switch-type': 333,
+            'ignition': 334,
+            'charger-detection': 335,
+            'precharge': 337,
+            'precharge-duration': 338,
+            'temperature-sensor-type': 339,
+            'bms-mode': 340,
+            'single-port-switch-type': 341,
+            'broadcast': 342,
+            'protocol': 343,
+        };
     }
 
     /**
@@ -31,6 +70,7 @@ export class TinyBMSConfigManager {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         this.attachEventListeners();
+        await this.loadRegisters();
         await this.loadConfiguration();
     }
 
@@ -107,20 +147,81 @@ export class TinyBMSConfigManager {
     }
 
     /**
+     * Load registers from the backend API
+     */
+    async loadRegisters() {
+        try {
+            const response = await fetch('/api/registers');
+            if (!response.ok) {
+                console.warn('Failed to load registers from /api/registers, will try legacy method');
+                return;
+            }
+
+            const data = await response.json();
+            const registers = data.registers || [];
+
+            // Store register values in map
+            registers.forEach(reg => {
+                this.registers.set(reg.address, reg.current_user_value);
+            });
+
+            // Display current values in spans
+            this.displayCurrentValues();
+
+            console.log(`Loaded ${registers.length} TinyBMS registers`);
+        } catch (error) {
+            console.error('Error loading registers:', error);
+        }
+    }
+
+    /**
+     * Display current register values in the UI
+     */
+    displayCurrentValues() {
+        Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
+            const value = this.registers.get(registerNum);
+            if (value !== undefined) {
+                const currentSpan = document.getElementById(`current-${fieldId}`);
+                if (currentSpan) {
+                    // Format value based on field type
+                    const field = document.getElementById(fieldId);
+                    if (field) {
+                        if (field.tagName === 'SELECT') {
+                            // For select fields, show the selected option text
+                            const option = Array.from(field.options).find(opt => opt.value == value);
+                            currentSpan.textContent = option ? option.text : value;
+                        } else if (field.type === 'checkbox') {
+                            currentSpan.textContent = value ? 'Oui' : 'Non';
+                        } else if (field.type === 'number') {
+                            // Format numeric values
+                            const step = parseFloat(field.step) || 1;
+                            const decimals = step < 1 ? 3 : step < 0.1 ? 2 : 0;
+                            currentSpan.textContent = parseFloat(value).toFixed(decimals);
+                        } else {
+                            currentSpan.textContent = value;
+                        }
+                    } else {
+                        currentSpan.textContent = value;
+                    }
+                }
+            }
+        });
+    }
+
+    /**
      * Load configuration from BMS
      */
     async loadConfiguration() {
         try {
-            const response = await fetch('/api/tinybms/config');
-            if (!response.ok) {
-                throw new Error(`Failed to load configuration: ${response.statusText}`);
-            }
+            // Use register values to populate form
+            Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
+                const value = this.registers.get(registerNum);
+                if (value !== undefined) {
+                    this.setFieldValue(fieldId, value);
+                }
+            });
 
-            const config = await response.json();
-            this.originalConfig = JSON.parse(JSON.stringify(config)); // Deep copy
-            this.populateFormFields(config);
-
-            console.log('Configuration loaded successfully');
+            console.log('Configuration loaded successfully from registers');
         } catch (error) {
             console.error('Error loading configuration:', error);
             this.showNotification('Erreur lors du chargement de la configuration', 'danger');
@@ -262,20 +363,20 @@ export class TinyBMSConfigManager {
     async handleCellSettingsSubmit(event) {
         event.preventDefault();
 
-        const data = {
-            fullyChargedVoltage: this.getFieldValue('fully-charged-voltage'),
-            chargeFinishedCurrent: this.getFieldValue('charge-finished-current'),
-            fullyDischargedVoltage: this.getFieldValue('fully-discharged-voltage'),
-            earlyBalancingThreshold: this.getFieldValue('early-balancing-threshold'),
-            allowedDisbalance: this.getFieldValue('allowed-disbalance'),
-            numberOfSeriesCells: this.getFieldValue('number-of-series-cells'),
-            batteryCapacity: this.getFieldValue('battery-capacity'),
-            setSocManually: this.getFieldValue('set-soc-manually'),
-            batteryMaximumCycles: this.getFieldValue('battery-maximum-cycles'),
-            setSohManually: this.getFieldValue('set-soh-manually'),
-        };
+        const fieldIds = [
+            'fully-charged-voltage',
+            'charge-finished-current',
+            'fully-discharged-voltage',
+            'early-balancing-threshold',
+            'allowed-disbalance',
+            'number-of-series-cells',
+            'battery-capacity',
+            'set-soc-manually',
+            'battery-maximum-cycles',
+            'set-soh-manually',
+        ];
 
-        await this.uploadSettings('cell-settings', data);
+        await this.uploadRegisters('Cell Settings', fieldIds);
     }
 
     /**
@@ -284,21 +385,19 @@ export class TinyBMSConfigManager {
     async handleSafetySubmit(event) {
         event.preventDefault();
 
-        const data = {
-            overVoltageCutoff: this.getFieldValue('over-voltage-cutoff'),
-            underVoltageCutoff: this.getFieldValue('under-voltage-cutoff'),
-            dischargeOverCurrentCutoff: this.getFieldValue('discharge-over-current-cutoff'),
-            dischargeOverCurrentTimeout: this.getFieldValue('discharge-over-current-timeout'),
-            dischargePeakCurrentCutoff: this.getFieldValue('discharge-peak-current-cutoff'),
-            chargeOverCurrentCutoff: this.getFieldValue('charge-over-current-cutoff'),
-            overHeatCutoff: this.getFieldValue('over-heat-cutoff'),
-            lowTempChargerCutoff: this.getFieldValue('low-temp-charger-cutoff'),
-            automaticRecovery: this.getFieldValue('automatic-recovery'),
-            invertCurrentSensor: this.getFieldValue('invert-current-sensor'),
-            disableSwitchDiagnostics: this.getFieldValue('disable-switch-diagnostics'),
-        };
+        const fieldIds = [
+            'over-voltage-cutoff',
+            'under-voltage-cutoff',
+            'discharge-over-current-cutoff',
+            'discharge-peak-current-cutoff',
+            'charge-over-current-cutoff',
+            'over-heat-cutoff',
+            'low-temp-charger-cutoff',
+            'automatic-recovery',
+            'invert-current-sensor',
+        ];
 
-        await this.uploadSettings('safety', data);
+        await this.uploadRegisters('Safety', fieldIds);
     }
 
     /**
@@ -307,56 +406,71 @@ export class TinyBMSConfigManager {
     async handlePeripheralsSubmit(event) {
         event.preventDefault();
 
-        const data = {
-            bmsMode: this.getFieldValue('bms-mode'),
-            singlePortSwitchType: this.getFieldValue('single-port-switch-type'),
-            loadSwitchType: this.getFieldValue('load-switch-type'),
-            ignition: this.getFieldValue('ignition'),
-            precharge: this.getFieldValue('precharge'),
-            prechargeDuration: this.getFieldValue('precharge-duration'),
-            chargerType: this.getFieldValue('charger-type'),
-            chargerDetection: this.getFieldValue('charger-detection'),
-            chargerStartupDelay: this.getFieldValue('charger-startup-delay'),
-            chargerDisableDelay: this.getFieldValue('charger-disable-delay'),
-            chargerSwitchType: this.getFieldValue('charger-switch-type'),
-            enableChargerRestartLevel: this.getFieldValue('enable-charger-restart-level'),
-            chargeRestartLevel: this.getFieldValue('charge-restart-level'),
-            speedSensorInput: this.getFieldValue('speed-sensor-input'),
-            distanceUnit: this.getFieldValue('distance-unit'),
-            pulsesPerUnit: this.getFieldValue('pulses-per-unit'),
-            protocol: this.getFieldValue('protocol'),
-            broadcast: this.getFieldValue('broadcast'),
-            temperatureSensorType: this.getFieldValue('temperature-sensor-type'),
-            externalCurrentSensor: this.getFieldValue('external-current-sensor'),
-        };
+        const fieldIds = [
+            'bms-mode',
+            'single-port-switch-type',
+            'load-switch-type',
+            'ignition',
+            'precharge',
+            'precharge-duration',
+            'charger-type',
+            'charger-detection',
+            'charger-startup-delay',
+            'charger-disable-delay',
+            'charger-switch-type',
+            'charge-restart-level',
+            'protocol',
+            'broadcast',
+            'temperature-sensor-type',
+        ];
 
-        await this.uploadSettings('peripherals', data);
+        await this.uploadRegisters('Peripherals', fieldIds);
     }
 
     /**
-     * Upload settings to BMS
+     * Upload registers to BMS via /api/registers
      */
-    async uploadSettings(category, data) {
+    async uploadRegisters(category, fieldIds) {
         try {
             this.showNotification(`Envoi des paramètres ${category} au BMS...`, 'info');
 
-            const response = await fetch(`/api/tinybms/config/${category}`, {
+            // Collect register changes
+            const registerChanges = {};
+
+            fieldIds.forEach(fieldId => {
+                const registerNum = this.registerMap[fieldId];
+                if (registerNum !== undefined) {
+                    const value = this.getFieldValue(fieldId);
+                    if (value !== null && value !== undefined) {
+                        // Use register number as key
+                        registerChanges[registerNum] = value;
+                    }
+                }
+            });
+
+            console.log('Sending register changes:', registerChanges);
+
+            const response = await fetch('/api/registers', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(data),
+                body: JSON.stringify(registerChanges),
             });
 
             if (!response.ok) {
-                throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`Erreur ${response.status}: ${errorText}`);
             }
 
             const result = await response.json();
-            this.showNotification(`✓ Configuration ${category} enregistrée avec succès`, 'success');
+            this.showNotification(`✓ Configuration ${category} enregistrée avec succès (${Object.keys(registerChanges).length} registres)`, 'success');
 
-            // Reload configuration from BMS
-            setTimeout(() => this.loadConfiguration(), 1000);
+            // Reload registers and display updated values
+            setTimeout(async () => {
+                await this.loadRegisters();
+                await this.loadConfiguration();
+            }, 1000);
 
         } catch (error) {
             console.error(`Error uploading ${category} settings:`, error);
