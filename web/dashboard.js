@@ -849,6 +849,14 @@ function handleTelemetryMessage(data) {
     state.telemetry = data;
     updateBatteryDisplay(data);
 
+    // Extract register values for dynamic axes
+    const registerValues = {
+        overvoltage_cutoff_mv: state.registers.get(315)?.value,
+        undervoltage_cutoff_mv: state.registers.get(316)?.value,
+        peak_discharge_current_a: state.registers.get(305)?.value,
+        charge_overcurrent_a: state.registers.get(318)?.value,
+    };
+
     // Map telemetry data to chart format
     if (state.batteryCharts) {
         state.batteryCharts.update({
@@ -859,6 +867,7 @@ function handleTelemetryMessage(data) {
             voltagesMv: data.cell_voltage_mv,
             balancingStates: data.cell_balancing,
             temperature: data.average_temperature_c,
+            registers: registerValues,
         });
     }
 
