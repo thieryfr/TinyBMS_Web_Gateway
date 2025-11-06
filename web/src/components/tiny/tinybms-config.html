@@ -99,6 +99,54 @@
       </li>
     </ul>
 
+    <!-- Suivi de la configuration -->
+    <div class="mt-4 pt-4 border-top">
+      <h4 class="text-secondary text-uppercase fs-6 mb-3">
+        <i class="ti ti-activity me-2"></i>
+        Suivi de la Configuration
+      </h4>
+      <div class="card bg-dark border border-secondary">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="alert alert-info mb-3" role="alert">
+                <i class="ti ti-info-circle me-2"></i>
+                Les valeurs actuelles sont affichées à côté de chaque champ de configuration. Elles sont mises à jour automatiquement depuis le BMS.
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <h5 class="text-white mb-3">État de la Configuration</h5>
+              <dl class="row g-2 mb-0">
+                <dt class="col-6 text-secondary">Dernière mise à jour</dt>
+                <dd class="col-6 mb-0 text-end fw-semibold" id="config-last-update">--</dd>
+
+                <dt class="col-6 text-secondary">Nombre de registres chargés</dt>
+                <dd class="col-6 mb-0 text-end fw-semibold" id="config-registers-count">--</dd>
+
+                <dt class="col-6 text-secondary">Statut de synchronisation</dt>
+                <dd class="col-6 mb-0 text-end">
+                  <span class="badge bg-secondary" id="config-sync-status">En attente</span>
+                </dd>
+              </dl>
+            </div>
+            <div class="col-lg-6">
+              <h5 class="text-white mb-3">Actions Rapides</h5>
+              <div class="d-flex flex-column gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refresh-current-values">
+                  <i class="ti ti-refresh me-1"></i>
+                  Rafraîchir les Valeurs Actuelles
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-info" id="compare-config">
+                  <i class="ti ti-arrows-diff me-1"></i>
+                  Comparer Configuration Actuelle vs BMS
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tab content -->
     <div class="tab-content" id="tinybms-config-content">
       <!-- Cell Settings Tab -->
@@ -1080,54 +1128,6 @@
                   <dt class="col-6 text-secondary">Hardware S/N</dt>
                   <dd class="col-6 mb-0 text-end fw-semibold text-wrap" id="hardware-serial">--</dd>
                 </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Suivi de la configuration -->
-    <div class="mt-4 pt-4 border-top">
-      <h4 class="text-secondary text-uppercase fs-6 mb-3">
-        <i class="ti ti-activity me-2"></i>
-        Suivi de la Configuration
-      </h4>
-      <div class="card bg-dark border border-secondary">
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-12">
-              <div class="alert alert-info mb-3" role="alert">
-                <i class="ti ti-info-circle me-2"></i>
-                Les valeurs actuelles sont affichées à côté de chaque champ de configuration. Elles sont mises à jour automatiquement depuis le BMS.
-              </div>
-            </div>
-            <div class="col-lg-6">
-              <h5 class="text-white mb-3">État de la Configuration</h5>
-              <dl class="row g-2 mb-0">
-                <dt class="col-6 text-secondary">Dernière mise à jour</dt>
-                <dd class="col-6 mb-0 text-end fw-semibold" id="config-last-update">--</dd>
-
-                <dt class="col-6 text-secondary">Nombre de registres chargés</dt>
-                <dd class="col-6 mb-0 text-end fw-semibold" id="config-registers-count">--</dd>
-
-                <dt class="col-6 text-secondary">Statut de synchronisation</dt>
-                <dd class="col-6 mb-0 text-end">
-                  <span class="badge bg-secondary" id="config-sync-status">En attente</span>
-                </dd>
-              </dl>
-            </div>
-            <div class="col-lg-6">
-              <h5 class="text-white mb-3">Actions Rapides</h5>
-              <div class="d-flex flex-column gap-2">
-                <button type="button" class="btn btn-sm btn-outline-primary" id="refresh-current-values">
-                  <i class="ti ti-refresh me-1"></i>
-                  Rafraîchir les Valeurs Actuelles
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-info" id="compare-config">
-                  <i class="ti ti-arrows-diff me-1"></i>
-                  Comparer Configuration Actuelle vs BMS
-                </button>
               </div>
             </div>
           </div>

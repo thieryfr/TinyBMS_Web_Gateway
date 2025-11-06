@@ -453,6 +453,9 @@ void UartResponseParser::decodeRegisters(const uint8_t* frame,
                         case UART_BMS_FIELD_UPTIME_SECONDS:
                             legacy_out->uptime_seconds = raw;
                             break;
+                        case UART_BMS_FIELD_ESTIMATED_TIME_LEFT:
+                            legacy_out->estimated_time_left_seconds = raw;
+                            break;
                         default:
                             break;
                     }

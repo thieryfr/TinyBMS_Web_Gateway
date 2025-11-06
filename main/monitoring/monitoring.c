@@ -156,10 +156,11 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
                                 buffer_size,
                                 &offset,
                                 "],\"alarm_bits\":%u,\"warning_bits\":%u,"
-                                "\"uptime_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ",\"registers\":[",
+                                "\"uptime_seconds\":%" PRIu32 ",\"estimated_time_left_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ",\"registers\":[",
                                 (unsigned)snapshot->alarm_bits,
                                 (unsigned)snapshot->warning_bits,
                                 snapshot->uptime_seconds,
+                                snapshot->estimated_time_left_seconds,
                                 snapshot->cycle_count)) {
         return ESP_ERR_INVALID_SIZE;
     }

@@ -50,6 +50,7 @@ typedef struct {
     uint16_t alarm_bits;
     uint16_t warning_bits;
     uint32_t uptime_seconds;
+    uint32_t estimated_time_left_seconds;
     uint32_t cycle_count;
     float auxiliary_temperature_c;
     float pack_temperature_min_c;
