@@ -158,6 +158,29 @@
                             log('    SVG trouvé dans sous-enfant !', 'success');
                             const svgRect = subChild.getBoundingClientRect();
                             log('    SVG dimensions: ' + svgRect.width + 'x' + svgRect.height, 'info');
+                            log('    SVG viewBox: ' + subChild.getAttribute('viewBox'), 'info');
+                            log('    SVG width attr: ' + subChild.getAttribute('width'), 'info');
+                            log('    SVG height attr: ' + subChild.getAttribute('height'), 'info');
+                            log('    SVG style: ' + subChild.getAttribute('style'), 'info');
+                            log('    SVG enfants: ' + subChild.children.length, 'info');
+                            
+                            if (subChild.children.length === 0) {
+                                log('    ⚠️ SVG est VIDE !', 'warn');
+                            } else {
+                                log('    Premier enfant SVG: ' + subChild.children[0].tagName, 'info');
+                                // Afficher les 5 premiers éléments SVG
+                                for (let k = 0; k < Math.min(5, subChild.children.length); k++) {
+                                    const svgChild = subChild.children[k];
+                                    log('      SVG[' + k + ']: ' + svgChild.tagName + ' (' + svgChild.getAttribute('class') + ')', 'info');
+                                }
+                            }
+                            
+                            // Tester le innerHTML
+                            const innerLength = (subChild.innerHTML || '').length;
+                            log('    SVG innerHTML length: ' + innerLength + ' chars', 'info');
+                            if (innerLength < 100) {
+                                log('    SVG innerHTML: ' + subChild.innerHTML, 'warn');
+                            }
                         }
                     }
                 } else {
