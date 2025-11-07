@@ -41,7 +41,7 @@ export class EnergyCharts {
                 let html = `<div style="font-weight: 600; margin-bottom: 8px;">${timeLabel}</div>`;
 
                 params.forEach((param) => {
-                  const value = Math.abs(param.value);
+                  const value = param.value;
                   const color = param.seriesName === 'IN' ? '#00a896' : '#ff9800';
                   const arrow = param.seriesName === 'IN' ? '↓' : '↑';
                   html += `<div style="display: flex; align-items: center; margin-bottom: 4px;">
@@ -95,7 +95,7 @@ export class EnergyCharts {
                 color: 'rgba(255,255,255,0.65)',
                 fontSize: 11,
                 formatter: (value) => {
-                  return value >= 0 ? `+${value} Wh` : `${value} Wh`;
+                  return `${value} Wh`;
                 },
               },
               axisLine: {
@@ -111,8 +111,9 @@ export class EnergyCharts {
               {
                 name: 'IN',
                 type: 'bar',
-                stack: 'energy',
                 data: [],
+                barGap: '10%',
+                barCategoryGap: '40%',
                 itemStyle: {
                   color: '#00a896',
                   borderRadius: [5, 5, 0, 0],
@@ -124,11 +125,10 @@ export class EnergyCharts {
               {
                 name: 'OUT',
                 type: 'bar',
-                stack: 'energy',
                 data: [],
                 itemStyle: {
                   color: '#ff9800',
-                  borderRadius: [0, 0, 5, 5],
+                  borderRadius: [5, 5, 0, 0],
                 },
                 emphasis: {
                   focus: 'series',
@@ -174,11 +174,11 @@ export class EnergyCharts {
       second: '2-digit'
     });
 
-    // Add new sample (IN is positive, OUT is negative)
+    // Add new sample (both IN and OUT as positive values for side-by-side comparison)
     this.energySamples.push({
       label,
-      energyIn: Math.max(0, deltaIn),  // Positive values
-      energyOut: -Math.max(0, deltaOut) // Negative values
+      energyIn: Math.max(0, deltaIn),   // Positive values
+      energyOut: Math.max(0, deltaOut)  // Positive values
     });
 
     // Keep only last N samples
