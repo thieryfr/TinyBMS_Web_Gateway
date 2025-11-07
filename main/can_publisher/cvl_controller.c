@@ -5,9 +5,16 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 #ifndef CVL_DEFAULT_SERIES_CELLS
 #define CVL_DEFAULT_SERIES_CELLS 16U
 #endif
+
+#define CVL_STATE_LOCK_TIMEOUT_MS 10U
+
+static SemaphoreHandle_t s_cvl_state_mutex = NULL;
 
 static const cvl_config_snapshot_t s_cvl_default_config = {
     .enabled = true,
@@ -83,6 +90,10 @@ static unsigned int fallback_unsigned(unsigned int preferred, unsigned int fallb
 
 void can_publisher_cvl_init(void)
 {
+    if (s_cvl_state_mutex == NULL) {
+        s_cvl_state_mutex = xSemaphoreCreateMutex();
+    }
+
     s_cvl_runtime.state = CVL_STATE_BULK;
     s_cvl_runtime.cvl_voltage_v = 0.0f;
     s_cvl_runtime.cell_protection_active = false;
@@ -181,13 +192,18 @@ void can_publisher_cvl_prepare(const uart_bms_live_data_t *data)
     cvl_computation_result_t result;
     cvl_compute_limits(&inputs, &config, &s_cvl_runtime, &result);
 
-    s_cvl_runtime.state = result.state;
-    s_cvl_runtime.cvl_voltage_v = result.cvl_voltage_v;
-    s_cvl_runtime.cell_protection_active = result.cell_protection_active;
+    if (s_cvl_state_mutex != NULL &&
+        xSemaphoreTake(s_cvl_state_mutex, pdMS_TO_TICKS(CVL_STATE_LOCK_TIMEOUT_MS)) == pdTRUE) {
+        s_cvl_runtime.state = result.state;
+        s_cvl_runtime.cvl_voltage_v = result.cvl_voltage_v;
+        s_cvl_runtime.cell_protection_active = result.cell_protection_active;
 
-    s_cvl_result.timestamp_ms = data->timestamp_ms;
-    s_cvl_result.result = result;
-    s_cvl_has_result = true;
+        s_cvl_result.timestamp_ms = data->timestamp_ms;
+        s_cvl_result.result = result;
+        s_cvl_has_result = true;
+
+        xSemaphoreGive(s_cvl_state_mutex);
+    }
 }
 
 bool can_publisher_cvl_get_latest(can_publisher_cvl_result_t *out_result)
@@ -196,7 +212,17 @@ bool can_publisher_cvl_get_latest(can_publisher_cvl_result_t *out_result)
         return false;
     }
 
-    *out_result = s_cvl_result;
-    return true;
+    if (s_cvl_state_mutex == NULL) {
+        return false;
+    }
+
+    bool success = false;
+    if (xSemaphoreTake(s_cvl_state_mutex, pdMS_TO_TICKS(CVL_STATE_LOCK_TIMEOUT_MS)) == pdTRUE) {
+        *out_result = s_cvl_result;
+        success = true;
+        xSemaphoreGive(s_cvl_state_mutex);
+    }
+
+    return success;
 }
 

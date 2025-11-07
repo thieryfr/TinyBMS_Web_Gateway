@@ -1,0 +1,225 @@
+================================================================================
+                    UART-CAN INTERACTION ISSUES - PRIORITIZED
+================================================================================
+Analysis Date: 7 November 2025
+Project: TinyBMS-GW (ESP-IDF)
+Branch: claude/audit-uart-can-interactions-011CUtJMgjryMGjvbJAzVXSk
+
+================================================================================
+PRIORITY 1: CRITICAL ISSUES (This Week)
+================================================================================
+
+[1.1] RACE CONDITION IN CVL STATE MACHINE
+    Severity: 🔴 CRITICAL - Equipment Safety Risk
+    Location: /main/can_publisher/cvl_controller.c
+    Problem:  s_cvl_state is modified by UART thread without mutex protection
+              CAN Publisher task reads while UART thread writes
+              Frame contains inconsistent values sent to Victron devices
+    Impact:   Inverters receive malformed commands
+              Could cause unsafe equipment behavior
+    Fix:      Add SemaphoreHandle_t s_cvl_mutex
+              Protect all reads/writes with 10ms timeout
+    Effort:   2-3 hours
+    Risk:     LOW (isolated change, easy to verify)
+    Test:     - Unit test: concurrent read/write access
+              - Integration: stress test with alternating updates
+    
+[1.2] EVENT BUS DROPS EVENTS ON QUEUE FULL
+    Severity: 🔴 CRITICAL - Data Loss
+    Location: /main/event_bus/event_bus.c:179
+    Problem:  xQueueSend(..., 0) non-blocking
+              If subscriber queue full → event dropped silently
+              Default queue size = 16 (may be insufficient)
+    Impact:   Web Server misses CAN frames
+              MQTT telemetry incomplete
+              Monitoring unreliable
+    Fix:      Option A: Increase queue_length: 16 → 32
+              Option B: Use blocking publish with timeout
+    Effort:   1 hour
+    Risk:     MINIMAL (config change only)
+    Test:     - Send > 16 events rapidly to slow subscriber
+              - Verify dropped_events counter increments
+              - Check logs for "Dropped event" warnings
+
+================================================================================
+PRIORITY 2: HIGH PRIORITY ISSUES (Next 2-3 Weeks)
+================================================================================
+
+[2.1] MUTEX TIMEOUT TOO SHORT (CAN PUBLISHER)
+    Severity: 🟠 HIGH - Frame Loss Under Load
+    Location: /main/can_publisher/can_publisher.c:343, 382
+    Problem:  CAN_PUBLISHER_LOCK_TIMEOUT_MS = 20ms
+              TWAI operations can take 15-20ms
+              Lock acquisition fails if TWAI congested
+    Impact:   CAN frames dropped when bus busy
+              Gaps in telemetry to Victron
+    Fix:      Increase timeout: 20ms → 50ms
+    Effort:   <1 hour
+    Risk:     MINIMAL (just increase timeout)
+    Test:     - Stress test: rapid frame publication
+              - Monitor for "Timed out acquiring" warnings
+              - Verify no deadlock with 50ms timeout
+
+[2.2] NO DECOUPLING BETWEEN UART AND CAN PUBLISHER
+    Severity: 🟠 HIGH - Reliability Issue
+    Location: Architecture (uart_bms.h callback)
+    Problem:  UART thread directly calls can_publisher_on_bms_update()
+              If CAN Publisher slow → callback fails silently
+              No retry mechanism
+    Impact:   BMS data not converted to CAN if publisher busy
+              Undetectable failures
+    Fix:      Add intermediate queue: UART → Queue → CAN Publisher task
+    Effort:   4-6 hours
+    Risk:     MEDIUM (refactor critical path, but proven pattern)
+    Test:     - Queue overflow scenarios
+              - CAN Publisher stall with UART data
+              - Data integrity with queue
+
+================================================================================
+PRIORITY 3: MEDIUM PRIORITY ISSUES (After Critical/High)
+================================================================================
+
+[3.1] KEEPALIVE TASK ADDS 50MS LATENCY
+    Severity: 🟡 MEDIUM - Latency
+    Location: /main/can_victron/can_victron.c:33, 429-441
+    Problem:  Task delay = 50ms
+              Minimum latency between CAN operations
+              If keepalive timeout very tight → can miss deadline
+    Impact:   Latency: 28-35ms → ~80-100ms worst case
+              Acceptable but not optimal
+    Fix:      Option A: Reduce to 10ms
+              Option B: Make event-driven instead of polling
+    Effort:   3-4 hours
+    Risk:     MEDIUM (affects CAN driver, needs validation)
+    Test:     - Keepalive timeout boundary conditions
+              - CAN frame latency under load
+
+[3.2] EVENT PAYLOAD NOT COPIED (JUST REFERENCED)
+    Severity: 🟡 MEDIUM - Data Corruption Risk
+    Location: /main/event_bus/event_bus.h:29
+    Problem:  payload pointer, not deep copy
+              Slow subscriber may read overwritten circular buffer
+    Impact:   Currently OK because event_frames[8] rotates slowly
+              Risk if subscriber delays > ~1 second
+    Status:   Acceptable with fast processing assumption
+    Fix:      Could add deep copy or double-buffer
+    Effort:   6-8 hours (significant refactor)
+    Risk:     HIGH (changes core event mechanism)
+
+================================================================================
+SUMMARY TABLE
+================================================================================
+
+Issue         Severity  File                          Effort  Risk   Week
+─────────────────────────────────────────────────────────────────────────────
+CVL Race      CRITICAL cvl_controller.c              2-3h    LOW    1
+Event Drops   CRITICAL event_bus.c, app_main.c      1h      MIN    1
+Mutex 20ms    HIGH     can_publisher.c               <1h     MIN    2
+UART-CAN DC   HIGH     Architecture                  4-6h    MED    2-3
+Keepalive     MEDIUM   can_victron.c                 3-4h    MED    3+
+Payload Copy  MEDIUM   event_bus.h                   6-8h    HIGH   4+
+
+Total Critical: 2 issues, 3 hours
+Total High:    2 issues, 5 hours
+Total Medium:  2 issues, 10+ hours
+═════════════════════════════════════════════════════════════════════════════
+
+================================================================================
+IMPLEMENTATION CHECKLIST
+================================================================================
+
+[ ] READ SUMMARY_FR.md (5 min)
+[ ] READ uart_can_analysis.md SECTIONS 7, 10 (30 min)
+[ ] STUDY interaction_diagrams.md (20 min)
+
+--- CRITICAL PHASE ---
+[ ] Fix CVL Race Condition
+    [ ] Create mutex s_cvl_state
+    [ ] Protect cvl_prepare() writes
+    [ ] Protect frame encoder reads
+    [ ] Unit test concurrent access
+    [ ] Integration test
+[ ] Fix Event Drops
+    [ ] Increase queue_length: 16 → 32
+    [ ] Test with slow subscriber
+    [ ] Verify memory impact
+    [ ] Monitor dropped_events counter
+
+--- HIGH PRIORITY PHASE ---
+[ ] Increase CAN Publisher Timeout
+    [ ] Change 20ms → 50ms
+    [ ] Stress test TWAI congestion
+    [ ] Verify no deadlock
+[ ] Add UART→CAN Decoupling Queue
+    [ ] Design queue structure
+    [ ] Implement producer/consumer
+    [ ] Test queue overflow
+    [ ] Performance validation
+
+--- MEDIUM PRIORITY PHASE ---
+[ ] Optimize Keepalive Latency
+[ ] Improve Event Bus Observability
+[ ] Consider long-term architecture
+
+================================================================================
+FILES TO EXAMINE
+================================================================================
+
+MUST READ (Critical Issues):
+  - /main/can_publisher/cvl_controller.c (Race condition)
+  - /main/event_bus/event_bus.c (Event drops)
+  - /main/can_publisher/can_publisher.c (Timeout issue)
+  - /main/uart_bms/uart_bms.h (Callback architecture)
+
+SHOULD READ (Understanding):
+  - /main/app_main.c (Initialization orchestration)
+  - /main/event_bus/event_bus.h (API definition)
+  - /main/include/app_events.h (Event IDs)
+  - /main/can_victron/can_victron.c (CAN driver)
+
+REFERENCES:
+  - /test/test_event_bus.c (How bus is tested)
+  - /test/test_can_publisher_integration.c (CAN pipeline tests)
+
+================================================================================
+KNOWN GOOD PATTERNS IN CODEBASE
+================================================================================
+
+- Mutex usage in can_victron.c for TWAI hardware (reference for CVL fix)
+- Event circular buffer pattern (s_event_frames[8])
+- Deadline tracking for periodic scheduling (s_channel_deadlines[])
+- Error handling with logging pattern
+- FreeRTOS task creation and management
+
+================================================================================
+QUICK REFERENCE: TIMEOUT VALUES
+================================================================================
+
+CAN_PUBLISHER_LOCK_TIMEOUT_MS    = 20ms   (⚠️ TOO TIGHT, change to 50ms)
+CAN_PUBLISHER_EVENT_TIMEOUT_MS   = 50ms   (✅ OK)
+CAN_VICTRON_LOCK_TIMEOUT_MS      = 20ms   (⚠️ TOO TIGHT)
+CAN_VICTRON_TASK_DELAY_MS        = 50ms   (⚠️ MIN LATENCY)
+CAN_VICTRON_RX_TIMEOUT_MS        = 10ms   (✅ OK)
+CAN_VICTRON_TX_TIMEOUT_MS        = 50ms   (✅ OK)
+UART_BMS_RESPONSE_TIMEOUT_MS     = 200ms  (✅ OK)
+UART_BMS_POLL_INTERVAL_MS        = 250ms  (✅ OK)
+
+Event Bus mutex timeout          = portMAX_DELAY (✅ NEVER timeout)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. This week: Fix CVL race condition (URGENT)
+2. This week: Fix event drops (URGENT)
+3. Next 2 weeks: Increase timeouts and add decoupling
+4. Later: Optimize latency and improve observability
+5. Long-term: Consider ROS2 or actor model migration
+
+================================================================================
+Questions? Review:
+  - SUMMARY_FR.md for executive overview
+  - uart_can_analysis.md for detailed analysis
+  - interaction_diagrams.md for visual understanding
+  - INDEX_ANALYSIS.md for complete cross-reference
+================================================================================
