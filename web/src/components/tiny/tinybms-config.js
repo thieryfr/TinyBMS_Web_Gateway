@@ -1,7 +1,7 @@
 /**
  * @file tinybms-config.js
- * @brief TinyBMS Battery Insider Configuration UI Module
- * @description Handles the complete TinyBMS configuration interface inspired by Battery Insider
+ * @brief TinyBMS Battery Configuration UI Module
+ * @description Handles the complete TinyBMS configuration interface
  */
 
 export class TinyBMSConfigManager {
