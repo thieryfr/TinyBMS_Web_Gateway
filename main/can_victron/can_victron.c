@@ -58,6 +58,7 @@ static portMUX_TYPE s_event_slot_lock = portMUX_INITIALIZER_UNLOCKED;
 
 #ifdef ESP_PLATFORM
 static SemaphoreHandle_t s_twai_mutex = NULL;
+static SemaphoreHandle_t s_driver_state_mutex = NULL;  // Protects s_driver_started
 static TaskHandle_t s_can_task_handle = NULL;
 static bool s_driver_started = false;
 static bool s_keepalive_ok = false;
@@ -68,6 +69,7 @@ static int s_twai_rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO;
 
 static esp_err_t can_victron_start_driver(void);
 static void can_victron_stop_driver(void);
+static bool can_victron_is_driver_started(void);
 static void can_victron_send_keepalive(uint64_t now);
 static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now);
 static void can_victron_service_keepalive(uint64_t now);
@@ -308,7 +310,14 @@ static uint32_t can_victron_effective_timeout_ms(const config_manager_can_settin
 
 static esp_err_t can_victron_start_driver(void)
 {
-    if (s_driver_started) {
+    // Check driver state with mutex protection
+    bool already_started = false;
+    if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        already_started = s_driver_started;
+        xSemaphoreGive(s_driver_state_mutex);
+    }
+
+    if (already_started) {
         return ESP_OK;
     }
 
@@ -352,7 +361,12 @@ static esp_err_t can_victron_start_driver(void)
         return err;
     }
 
-    s_driver_started = true;
+    // Set driver state with mutex protection
+    if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_driver_started = true;
+        xSemaphoreGive(s_driver_state_mutex);
+    }
+
     s_keepalive_ok = false;
     uint64_t now = can_victron_timestamp_ms();
     s_last_keepalive_rx_ms = now;
@@ -367,18 +381,37 @@ static esp_err_t can_victron_start_driver(void)
 
 static void can_victron_stop_driver(void)
 {
-    if (!s_driver_started) {
+    // Check and update driver state with mutex protection
+    bool should_stop = false;
+    if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        should_stop = s_driver_started;
+        if (should_stop) {
+            s_driver_started = false;
+        }
+        xSemaphoreGive(s_driver_state_mutex);
+    }
+
+    if (!should_stop) {
         return;
     }
 
     (void)twai_stop();
     (void)twai_driver_uninstall();
-    s_driver_started = false;
+}
+
+static bool can_victron_is_driver_started(void)
+{
+    bool started = false;
+    if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        started = s_driver_started;
+        xSemaphoreGive(s_driver_state_mutex);
+    }
+    return started;
 }
 
 static void can_victron_send_keepalive(uint64_t now)
 {
-    if (!s_driver_started) {
+    if (!can_victron_is_driver_started()) {
         return;
     }
 
@@ -410,7 +443,7 @@ static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now)
 
 static void can_victron_service_keepalive(uint64_t now)
 {
-    if (!s_driver_started) {
+    if (!can_victron_is_driver_started()) {
         return;
     }
 
@@ -470,7 +503,7 @@ static void can_victron_task(void *context)
     while (true) {
         uint64_t now = can_victron_timestamp_ms();
 
-        if (s_driver_started) {
+        if (can_victron_is_driver_started()) {
             twai_message_t message = {0};
             while (true) {
                 esp_err_t rx = twai_receive(&message, pdMS_TO_TICKS(CAN_VICTRON_RX_TIMEOUT_MS));
@@ -514,7 +547,7 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
     }
 
 #ifdef ESP_PLATFORM
-    if (!s_driver_started) {
+    if (!can_victron_is_driver_started()) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -569,15 +602,25 @@ void can_victron_init(void)
 {
 #ifdef ESP_PLATFORM
     ESP_LOGI(TAG, "Initialising Victron CAN interface");
+
+    // Create mutexes before starting driver
+    if (s_twai_mutex == NULL) {
+        s_twai_mutex = xSemaphoreCreateMutex();
+        if (s_twai_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create CAN mutex");
+        }
+    }
+
+    if (s_driver_state_mutex == NULL) {
+        s_driver_state_mutex = xSemaphoreCreateMutex();
+        if (s_driver_state_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create driver state mutex");
+            return;
+        }
+    }
+
     esp_err_t err = can_victron_start_driver();
     if (err == ESP_OK) {
-        if (s_twai_mutex == NULL) {
-            s_twai_mutex = xSemaphoreCreateMutex();
-            if (s_twai_mutex == NULL) {
-                ESP_LOGE(TAG, "Failed to create CAN mutex");
-            }
-        }
-
         if (s_can_task_handle == NULL) {
             BaseType_t rc = xTaskCreate(can_victron_task,
                                         "can_victron",
@@ -592,7 +635,7 @@ void can_victron_init(void)
             }
         }
 
-        if (s_driver_started) {
+        if (can_victron_is_driver_started()) {
             uint64_t now = can_victron_timestamp_ms();
             can_victron_send_keepalive(now);
             ESP_LOGI(TAG,
@@ -604,7 +647,7 @@ void can_victron_init(void)
         ESP_LOGE(TAG, "Victron CAN driver start failed: %s", esp_err_to_name(err));
     }
 
-    if (!s_driver_started) {
+    if (!can_victron_is_driver_started()) {
         can_victron_publish_demo_frames();
     }
 #else
