@@ -24,7 +24,7 @@
 #include "can_config_defaults.h"
 
 #define CAN_PUBLISHER_EVENT_TIMEOUT_MS 50U
-#define CAN_PUBLISHER_LOCK_TIMEOUT_MS  20U
+#define CAN_PUBLISHER_LOCK_TIMEOUT_MS  50U
 
 // CAN configuration defaults are now centralized in can_config_defaults.h
 
