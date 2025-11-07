@@ -59,6 +59,7 @@ static portMUX_TYPE s_event_slot_lock = portMUX_INITIALIZER_UNLOCKED;
 #ifdef ESP_PLATFORM
 static SemaphoreHandle_t s_twai_mutex = NULL;
 static SemaphoreHandle_t s_driver_state_mutex = NULL;  // Protects s_driver_started
+static SemaphoreHandle_t s_keepalive_mutex = NULL;     // Protects keepalive variables
 static TaskHandle_t s_can_task_handle = NULL;
 static bool s_driver_started = false;
 static bool s_keepalive_ok = false;
@@ -66,6 +67,9 @@ static uint64_t s_last_keepalive_tx_ms = 0;
 static uint64_t s_last_keepalive_rx_ms = 0;
 static int s_twai_tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO;
 static int s_twai_rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO;
+
+// Flag pour terminaison propre de la tâche
+static volatile bool s_task_should_exit = false;
 
 static esp_err_t can_victron_start_driver(void);
 static void can_victron_stop_driver(void);
@@ -311,10 +315,15 @@ static uint32_t can_victron_effective_timeout_ms(const config_manager_can_settin
 static esp_err_t can_victron_start_driver(void)
 {
     // Check driver state with mutex protection
-    bool already_started = false;
-    if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        already_started = s_driver_started;
-        xSemaphoreGive(s_driver_state_mutex);
+    bool already_started = true;  // Par défaut, assumer démarré pour être safe
+    if (s_driver_state_mutex != NULL) {
+        if (xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            already_started = s_driver_started;
+            xSemaphoreGive(s_driver_state_mutex);
+        } else {
+            ESP_LOGW(TAG, "Driver state mutex timeout, cannot verify state");
+            return ESP_ERR_TIMEOUT;  // Retourner erreur au lieu d'assumer
+        }
     }
 
     if (already_started) {
@@ -344,11 +353,8 @@ static esp_err_t can_victron_start_driver(void)
     g_config.rx_queue_len = CAN_VICTRON_TWAI_RX_QUEUE_LEN;
 
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
-    twai_filter_config_t f_config = {
-        .acceptance_code = (uint32_t)(CAN_VICTRON_KEEPALIVE_ID << 21),
-        .acceptance_mask = ~(0x7FFU << 21),
-        .single_filter = true,
-    };
+    // Accepter toutes les trames pour éviter de filtrer les messages Victron
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
     if (err != ESP_OK) {
@@ -367,15 +373,18 @@ static esp_err_t can_victron_start_driver(void)
         xSemaphoreGive(s_driver_state_mutex);
     }
 
-    s_keepalive_ok = false;
+    // Initialiser keepalive sous mutex
     uint64_t now = can_victron_timestamp_ms();
-    s_last_keepalive_rx_ms = now;
     uint32_t interval = can_victron_effective_interval_ms(settings);
-    if (now >= interval) {
-        s_last_keepalive_tx_ms = now - interval;
-    } else {
-        s_last_keepalive_tx_ms = 0;
+    uint64_t init_tx_time = (now >= interval) ? (now - interval) : 0;
+
+    if (s_keepalive_mutex != NULL && xSemaphoreTake(s_keepalive_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        s_keepalive_ok = false;
+        s_last_keepalive_rx_ms = now;
+        s_last_keepalive_tx_ms = init_tx_time;
+        xSemaphoreGive(s_keepalive_mutex);
     }
+
     return ESP_OK;
 }
 
@@ -421,7 +430,12 @@ static void can_victron_send_keepalive(uint64_t now)
                                               CAN_VICTRON_KEEPALIVE_DLC,
                                               "Victron keepalive");
     if (err == ESP_OK) {
-        s_last_keepalive_tx_ms = now;
+        // Protéger l'accès à s_last_keepalive_tx_ms
+        if (s_keepalive_mutex != NULL && xSemaphoreTake(s_keepalive_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            s_last_keepalive_tx_ms = now;
+            s_keepalive_ok = true;
+            xSemaphoreGive(s_keepalive_mutex);
+        }
     } else {
         ESP_LOGW(TAG, "Failed to transmit keepalive: %s", esp_err_to_name(err));
     }
@@ -429,9 +443,19 @@ static void can_victron_send_keepalive(uint64_t now)
 
 static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now)
 {
-    s_last_keepalive_rx_ms = now;
-    if (!s_keepalive_ok) {
-        s_keepalive_ok = true;
+    bool was_not_ok = false;
+
+    // Protéger l'accès aux variables keepalive
+    if (s_keepalive_mutex != NULL && xSemaphoreTake(s_keepalive_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        s_last_keepalive_rx_ms = now;
+        was_not_ok = !s_keepalive_ok;
+        if (was_not_ok) {
+            s_keepalive_ok = true;
+        }
+        xSemaphoreGive(s_keepalive_mutex);
+    }
+
+    if (was_not_ok) {
         ESP_LOGI(TAG, "Victron keepalive detected");
     }
 
@@ -452,19 +476,43 @@ static void can_victron_service_keepalive(uint64_t now)
     uint32_t retry = can_victron_effective_retry_ms(settings);
     uint32_t timeout = can_victron_effective_timeout_ms(settings);
 
-    if (!s_keepalive_ok && retry > 0U && retry < interval) {
+    // Lire les variables keepalive sous mutex
+    bool keepalive_ok = false;
+    uint64_t last_tx = 0;
+    uint64_t last_rx = 0;
+    bool needs_recovery = false;
+
+    if (s_keepalive_mutex != NULL && xSemaphoreTake(s_keepalive_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        keepalive_ok = s_keepalive_ok;
+        last_tx = s_last_keepalive_tx_ms;
+        last_rx = s_last_keepalive_rx_ms;
+
+        // Vérifier si recovery est nécessaire
+        if (keepalive_ok && timeout > 0U && (now - last_rx) > timeout) {
+            needs_recovery = true;
+            s_keepalive_ok = false;
+        }
+
+        xSemaphoreGive(s_keepalive_mutex);
+    } else {
+        return;  // Skip si mutex non disponible
+    }
+
+    // Ajuster interval selon état
+    if (!keepalive_ok && retry > 0U && retry < interval) {
         interval = retry;
     }
 
-    if ((now - s_last_keepalive_tx_ms) >= interval) {
+    // Envoyer keepalive si interval atteint
+    if ((now - last_tx) >= interval) {
         can_victron_send_keepalive(now);
     }
 
-    if (s_keepalive_ok && timeout > 0U && (now - s_last_keepalive_rx_ms) > timeout) {
-        s_keepalive_ok = false;
+    // Gérer timeout
+    if (needs_recovery) {
         ESP_LOGW(TAG,
                  "Victron keepalive timeout after %" PRIu64 " ms",
-                 now - s_last_keepalive_rx_ms);
+                 now - last_rx);
         can_victron_send_keepalive(now);
     }
 }
@@ -500,12 +548,12 @@ static void can_victron_handle_rx_message(const twai_message_t *message)
 static void can_victron_task(void *context)
 {
     (void)context;
-    while (true) {
+    while (!s_task_should_exit) {  // Vérifier flag de terminaison
         uint64_t now = can_victron_timestamp_ms();
 
         if (can_victron_is_driver_started()) {
             twai_message_t message = {0};
-            while (true) {
+            while (!s_task_should_exit) {  // Vérifier flag aussi dans boucle interne
                 esp_err_t rx = twai_receive(&message, pdMS_TO_TICKS(CAN_VICTRON_RX_TIMEOUT_MS));
                 if (rx == ESP_OK) {
                     can_victron_handle_rx_message(&message);
@@ -517,11 +565,16 @@ static void can_victron_task(void *context)
                 }
             }
 
-            can_victron_service_keepalive(now);
+            if (!s_task_should_exit) {
+                can_victron_service_keepalive(now);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(CAN_VICTRON_TASK_DELAY_MS));
     }
+
+    ESP_LOGI(TAG, "CAN task exiting");
+    vTaskDelete(NULL);
 }
 #endif  // ESP_PLATFORM
 
@@ -615,6 +668,14 @@ void can_victron_init(void)
         s_driver_state_mutex = xSemaphoreCreateMutex();
         if (s_driver_state_mutex == NULL) {
             ESP_LOGE(TAG, "Failed to create driver state mutex");
+            return;
+        }
+    }
+
+    if (s_keepalive_mutex == NULL) {
+        s_keepalive_mutex = xSemaphoreCreateMutex();
+        if (s_keepalive_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create keepalive mutex");
             return;
         }
     }

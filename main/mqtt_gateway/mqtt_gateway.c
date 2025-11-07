@@ -182,15 +182,16 @@ static void mqtt_gateway_publish_status(const event_bus_event_t *event)
 
     char topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     bool retain_flag = false;
-    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(10))) {
+
+    // Augmenter timeout à 100ms et retourner erreur si échec (pas d'accès sans lock)
+    if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(100))) {
         strncpy(topic, s_gateway.status_topic, sizeof(topic));
         topic[sizeof(topic) - 1U] = '\0';
         retain_flag = s_gateway.config.retain_enabled;
         mqtt_gateway_unlock_ctx();
     } else {
-        strncpy(topic, s_gateway.status_topic, sizeof(topic));
-        topic[sizeof(topic) - 1U] = '\0';
-        retain_flag = s_gateway.config.retain_enabled;
+        ESP_LOGW(TAG, "Failed to acquire gateway lock, aborting publish");
+        return;  // Retourner erreur au lieu d'accéder sans lock
     }
 
     bool retain = retain_flag && MQTT_TOPIC_STATUS_RETAIN;

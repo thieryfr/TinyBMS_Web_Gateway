@@ -78,6 +78,13 @@ uint32_t s_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
 SemaphoreHandle_t s_command_mutex = nullptr;
 SemaphoreHandle_t s_rx_buffer_mutex = nullptr;
 SemaphoreHandle_t s_snapshot_mutex = nullptr;
+SemaphoreHandle_t s_listeners_mutex = nullptr;
+
+// Flag pour pause de polling (évite deadlock vTaskSuspend)
+static volatile bool s_poll_pause_requested = false;
+
+// Spinlock pour protection event buffer
+static portMUX_TYPE s_event_buffer_lock = portMUX_INITIALIZER_UNLOCKED;
 
 TinyBMS_LiveData s_shared_snapshot{};
 bool s_shared_snapshot_valid = false;
@@ -118,9 +125,21 @@ static uint64_t uart_bms_timestamp_ms(void)
 
 static void uart_bms_notify_listeners(const uart_bms_live_data_t *data)
 {
+    // Copier les callbacks dans un buffer local sous mutex
+    ListenerEntry local_listeners[UART_BMS_LISTENER_SLOTS];
+
+    if (s_listeners_mutex != nullptr && xSemaphoreTake(s_listeners_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        memcpy(local_listeners, s_listeners, sizeof(local_listeners));
+        xSemaphoreGive(s_listeners_mutex);
+    } else {
+        // Si mutex non disponible, skip notification pour éviter race condition
+        return;
+    }
+
+    // Invoquer callbacks en dehors du mutex
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
-        if (s_listeners[i].callback != nullptr) {
-            s_listeners[i].callback(data, s_listeners[i].context);
+        if (local_listeners[i].callback != nullptr) {
+            local_listeners[i].callback(data, local_listeners[i].context);
         }
     }
 }
@@ -137,8 +156,12 @@ static void uart_bms_notify_shared_listeners(const TinyBMS_LiveData& data)
 static void uart_bms_publish_live_data(const uart_bms_live_data_t *data)
 {
     if (s_event_publisher != nullptr) {
+        // Protéger l'accès à l'index du buffer avec spinlock
+        portENTER_CRITICAL(&s_event_buffer_lock);
         uart_bms_live_data_t* storage = &s_event_buffers[s_next_event_buffer];
         s_next_event_buffer = (s_next_event_buffer + 1U) % UART_BMS_EVENT_BUFFERS;
+        portEXIT_CRITICAL(&s_event_buffer_lock);
+
         *storage = *data;
 
         event_bus_event_t event{};
@@ -513,6 +536,11 @@ static void uart_poll_task(void *arg)
     TickType_t last_wake_time = xTaskGetTickCount();
 
     while (true) {
+        // Vérifier si une pause est demandée (évite deadlock avec vTaskSuspend)
+        while (s_poll_pause_requested) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
         esp_err_t frame_err = uart_bms_prepare_poll_request();
         if (frame_err != ESP_OK || s_poll_request_length == 0) {
             ESP_LOGE(kTag,
@@ -673,6 +701,15 @@ void uart_bms_init(void)
         }
     }
 
+    if (s_listeners_mutex == nullptr) {
+        s_listeners_mutex = xSemaphoreCreateMutex();
+        if (s_listeners_mutex == nullptr) {
+            ESP_LOGE(kTag, "Unable to allocate TinyBMS listeners mutex");
+            uart_driver_delete(UART_BMS_UART_PORT);
+            return;
+        }
+    }
+
     s_uart_initialised = true;
 
     esp_err_t energy_err = can_publisher_conversion_restore_energy_state();
@@ -689,6 +726,25 @@ void uart_bms_init(void)
                     UART_BMS_TASK_PRIORITY,
                     &s_uart_poll_task_handle) != pdPASS) {
         ESP_LOGE(kTag, "Unable to create UART BMS task");
+
+        // Nettoyer tous les mutex créés
+        if (s_command_mutex != nullptr) {
+            vSemaphoreDelete(s_command_mutex);
+            s_command_mutex = nullptr;
+        }
+        if (s_rx_buffer_mutex != nullptr) {
+            vSemaphoreDelete(s_rx_buffer_mutex);
+            s_rx_buffer_mutex = nullptr;
+        }
+        if (s_snapshot_mutex != nullptr) {
+            vSemaphoreDelete(s_snapshot_mutex);
+            s_snapshot_mutex = nullptr;
+        }
+        if (s_listeners_mutex != nullptr) {
+            vSemaphoreDelete(s_listeners_mutex);
+            s_listeners_mutex = nullptr;
+        }
+
         uart_driver_delete(UART_BMS_UART_PORT);
         s_uart_initialised = false;
         s_uart_poll_task_handle = nullptr;
@@ -701,26 +757,43 @@ esp_err_t uart_bms_register_listener(uart_bms_data_callback_t callback, void *co
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (s_listeners_mutex == nullptr || xSemaphoreTake(s_listeners_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t result = ESP_ERR_NO_MEM;
+
+    // Vérifier si déjà enregistré
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
         if (s_listeners[i].callback == callback && s_listeners[i].context == context) {
-            return ESP_OK;
+            result = ESP_OK;
+            goto cleanup;
         }
     }
 
+    // Trouver slot libre
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
         if (s_listeners[i].callback == nullptr) {
             s_listeners[i].callback = callback;
             s_listeners[i].context = context;
-            return ESP_OK;
+            result = ESP_OK;
+            goto cleanup;
         }
     }
 
-    return ESP_ERR_NO_MEM;
+cleanup:
+    xSemaphoreGive(s_listeners_mutex);
+    return result;
 }
 
 void uart_bms_unregister_listener(uart_bms_data_callback_t callback, void *context)
 {
     if (callback == nullptr) {
+        return;
+    }
+
+    if (s_listeners_mutex == nullptr || xSemaphoreTake(s_listeners_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(kTag, "Failed to acquire listeners mutex for unregister");
         return;
     }
 
@@ -730,6 +803,8 @@ void uart_bms_unregister_listener(uart_bms_data_callback_t callback, void *conte
             s_listeners[i].context = nullptr;
         }
     }
+
+    xSemaphoreGive(s_listeners_mutex);
 }
 
 esp_err_t uart_bms_decode_frame(const uint8_t *frame, size_t length, uart_bms_live_data_t *out_data)
@@ -808,8 +883,11 @@ esp_err_t uart_bms_write_register(uint16_t address,
         return ESP_ERR_TIMEOUT;
     }
 
+    // Utiliser flag au lieu de vTaskSuspend (évite deadlock)
     if (s_uart_poll_task_handle != nullptr) {
-        vTaskSuspend(s_uart_poll_task_handle);
+        s_poll_pause_requested = true;
+        // Attendre que la tâche de poll confirme la pause
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 
     uart_flush_input(UART_BMS_UART_PORT);
@@ -854,8 +932,9 @@ esp_err_t uart_bms_write_register(uint16_t address,
     }
 
 cleanup:
+    // Relâcher le flag de pause
     if (s_uart_poll_task_handle != nullptr) {
-        vTaskResume(s_uart_poll_task_handle);
+        s_poll_pause_requested = false;
     }
     xSemaphoreGive(s_command_mutex);
     return result;

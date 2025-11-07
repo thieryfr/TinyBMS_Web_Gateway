@@ -959,26 +959,23 @@ static esp_err_t config_manager_store_mqtt_config_to_nvs(const mqtt_client_confi
         return err;
     }
 
-    err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_URI_KEY, config->broker_uri);
-    if (err == ESP_OK) {
-        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_USERNAME_KEY, config->username);
-    }
-    if (err == ESP_OK) {
-        err = nvs_set_str(handle, CONFIG_MANAGER_MQTT_PASSWORD_KEY, config->password);
-    }
-    if (err == ESP_OK) {
-        err = nvs_set_u16(handle, CONFIG_MANAGER_MQTT_KEEPALIVE_KEY, config->keepalive_seconds);
-    }
-    if (err == ESP_OK) {
-        err = nvs_set_u8(handle, CONFIG_MANAGER_MQTT_QOS_KEY, config->default_qos);
-    }
-    if (err == ESP_OK) {
-        err = nvs_set_u8(handle, CONFIG_MANAGER_MQTT_RETAIN_KEY, config->retain_enabled ? 1U : 0U);
-    }
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
+    // Vérifier tous les set avant commit (transaction atomique)
+    bool all_ok = true;
+
+    all_ok &= (nvs_set_str(handle, CONFIG_MANAGER_MQTT_URI_KEY, config->broker_uri) == ESP_OK);
+    all_ok &= (nvs_set_str(handle, CONFIG_MANAGER_MQTT_USERNAME_KEY, config->username) == ESP_OK);
+    all_ok &= (nvs_set_str(handle, CONFIG_MANAGER_MQTT_PASSWORD_KEY, config->password) == ESP_OK);
+    all_ok &= (nvs_set_u16(handle, CONFIG_MANAGER_MQTT_KEEPALIVE_KEY, config->keepalive_seconds) == ESP_OK);
+    all_ok &= (nvs_set_u8(handle, CONFIG_MANAGER_MQTT_QOS_KEY, config->default_qos) == ESP_OK);
+    all_ok &= (nvs_set_u8(handle, CONFIG_MANAGER_MQTT_RETAIN_KEY, config->retain_enabled ? 1U : 0U) == ESP_OK);
+
+    if (!all_ok) {
+        ESP_LOGE(TAG, "Failed to set one or more MQTT config values");
+        nvs_close(handle);
+        return ESP_FAIL;
     }
 
+    err = nvs_commit(handle);
     nvs_close(handle);
     return err;
 }
@@ -1536,16 +1533,23 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
 
     if (poll_interval_updated) {
         s_uart_poll_interval_ms = config_manager_clamp_poll_interval(poll_interval);
-        if (apply_runtime) {
-            uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
-        }
+
+        // Persister d'abord, puis appliquer au runtime seulement si succès
+        bool can_apply = !persist;  // Si pas de persistance demandée, on peut appliquer
         if (persist) {
             esp_err_t persist_err = config_manager_store_poll_interval(s_uart_poll_interval_ms);
-            if (persist_err != ESP_OK) {
+            if (persist_err == ESP_OK) {
+                can_apply = true;
+                ESP_LOGI(TAG, "Persisted poll interval: %u ms", s_uart_poll_interval_ms);
+            } else {
                 ESP_LOGW(TAG,
-                         "Failed to persist UART poll interval: %s",
+                         "Failed to persist UART poll interval: %s, not applying to runtime",
                          esp_err_to_name(persist_err));
             }
+        }
+
+        if (apply_runtime && can_apply) {
+            uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
         }
     } else if (apply_runtime) {
         uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
