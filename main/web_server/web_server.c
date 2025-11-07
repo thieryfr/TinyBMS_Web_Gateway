@@ -158,6 +158,7 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
     }
 
     if (xSemaphoreTake(s_ws_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        ESP_LOGW(TAG, "WebSocket broadcast: failed to acquire mutex (timeout), event dropped");
         return;
     }
 
