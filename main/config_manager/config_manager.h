@@ -1,5 +1,44 @@
 #pragma once
 
+/**
+ * @file config_manager.h
+ * @brief Gateway configuration management module
+ *
+ * Manages device settings, WiFi configuration, UART/CAN parameters,
+ * and MQTT connectivity settings with NVS persistence.
+ *
+ * @section config_thread_safety Thread Safety
+ *
+ * The configuration manager uses an internal mutex (s_config_mutex) to protect
+ * configuration state modifications. All setter functions are thread-safe.
+ *
+ * **Thread-Safe Functions** (mutex-protected):
+ * - config_manager_set_uart_poll_interval_ms()
+ * - All future setter functions (TODO: add mutex protection)
+ *
+ * **Read-Only Functions** (not currently mutex-protected):
+ * - config_manager_get_*() functions
+ * - NOTE: Reader-writer lock may be needed for full thread safety
+ *
+ * **Initialization**: Must call config_manager_init() before other functions.
+ *
+ * @warning Getter functions currently read global state without mutex protection.
+ *          This is safe if configuration changes are infrequent, but may cause
+ *          inconsistencies if settings are modified during reads.
+ *
+ * @section config_usage Usage Example
+ * @code
+ * // Initialize module
+ * config_manager_init();
+ *
+ * // Read configuration (thread-safe for read-only access)
+ * uint32_t interval = config_manager_get_uart_poll_interval_ms();
+ *
+ * // Modify configuration (thread-safe)
+ * esp_err_t err = config_manager_set_uart_poll_interval_ms(500);
+ * @endcode
+ */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
