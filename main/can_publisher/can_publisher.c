@@ -47,12 +47,12 @@ static can_publisher_registry_t s_registry = {
     .buffer = &s_frame_buffer,
 };
 static SemaphoreHandle_t s_buffer_mutex = NULL;
+static SemaphoreHandle_t s_event_mutex = NULL;  // Replaced portMUX_TYPE for consistent synchronization
 static TaskHandle_t s_publish_task_handle = NULL;
 static bool s_listener_registered = false;
 static uint32_t s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
 static can_publisher_frame_t s_event_frames[CAN_PUBLISHER_MAX_BUFFER_SLOTS];
 static size_t s_event_frame_index = 0;
-static portMUX_TYPE s_event_lock = portMUX_INITIALIZER_UNLOCKED;
 static TickType_t s_channel_period_ticks[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
 static TickType_t s_channel_deadlines[CAN_PUBLISHER_MAX_BUFFER_SLOTS] = {0};
 
@@ -95,14 +95,25 @@ static void can_publisher_publish_event(const can_publisher_frame_t *frame)
         return;
     }
 
+    if (s_event_mutex == NULL) {
+        ESP_LOGW(TAG, "Event mutex not initialized");
+        return;
+    }
+
     can_publisher_frame_t *event_frame = NULL;
 
-    portENTER_CRITICAL(&s_event_lock);
+    // Use mutex instead of spinlock for consistent synchronization
+    if (xSemaphoreTake(s_event_mutex, pdMS_TO_TICKS(CAN_PUBLISHER_LOCK_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire event mutex");
+        return;
+    }
+
     size_t slot = s_event_frame_index;
     s_event_frame_index = (s_event_frame_index + 1U) % CAN_PUBLISHER_MAX_BUFFER_SLOTS;
     s_event_frames[slot] = *frame;
     event_frame = &s_event_frames[slot];
-    portEXIT_CRITICAL(&s_event_lock);
+
+    xSemaphoreGive(s_event_mutex);
 
     event_bus_event_t event = {
         .id = APP_EVENT_ID_CAN_FRAME_READY,
@@ -182,6 +193,13 @@ void can_publisher_init(event_bus_publish_fn_t publisher,
         s_buffer_mutex = xSemaphoreCreateMutex();
         if (s_buffer_mutex == NULL) {
             ESP_LOGE(TAG, "Failed to create CAN publisher buffer mutex");
+        }
+    }
+
+    if (s_event_mutex == NULL) {
+        s_event_mutex = xSemaphoreCreateMutex();
+        if (s_event_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create CAN publisher event mutex");
         }
     }
 
@@ -265,19 +283,28 @@ void can_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context
 
 void can_publisher_deinit(void)
 {
-    if (s_publish_task_handle != NULL) {
-        vTaskDelete(s_publish_task_handle);
-        s_publish_task_handle = NULL;
-    }
-
+    // Unregister listener first to stop new data from coming in
     if (s_listener_registered) {
         uart_bms_unregister_listener(can_publisher_on_bms_update, &s_registry);
         s_listener_registered = false;
     }
 
+    // Allow task to complete current cycle before deletion
+    if (s_publish_task_handle != NULL) {
+        // Give the task time to finish its current iteration
+        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelete(s_publish_task_handle);
+        s_publish_task_handle = NULL;
+    }
+
     if (s_buffer_mutex != NULL) {
         vSemaphoreDelete(s_buffer_mutex);
         s_buffer_mutex = NULL;
+    }
+
+    if (s_event_mutex != NULL) {
+        vSemaphoreDelete(s_event_mutex);
+        s_event_mutex = NULL;
     }
 
     memset(&s_frame_buffer, 0, sizeof(s_frame_buffer));
