@@ -13,6 +13,9 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 #include "config_manager.h"
 #include "cvl_controller.h"
 #include "storage/nvs_energy.h"
@@ -61,6 +64,9 @@ static uint64_t s_energy_last_persist_ms = 0;
 static bool s_energy_dirty = false;
 static bool s_energy_storage_ready = false;
 
+// Mutex to protect energy counter access
+static SemaphoreHandle_t s_energy_mutex = NULL;
+
 static const config_manager_can_settings_t *conversion_get_can_settings(void)
 {
     static const config_manager_can_settings_t defaults = {
@@ -101,6 +107,15 @@ static const config_manager_can_settings_t *conversion_get_can_settings(void)
 
 static bool ensure_energy_storage_ready(void)
 {
+    // Initialize mutex on first call
+    if (s_energy_mutex == NULL) {
+        s_energy_mutex = xSemaphoreCreateMutex();
+        if (s_energy_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create energy mutex");
+            return false;
+        }
+    }
+
     if (s_energy_storage_ready) {
         return true;
     }
@@ -124,16 +139,22 @@ static void set_energy_state_internal(double charged_wh, double discharged_wh, b
         discharged_wh = 0.0;
     }
 
-    s_energy_charged_wh = charged_wh;
-    s_energy_discharged_wh = discharged_wh;
-    s_energy_last_timestamp_ms = 0;
+    if (s_energy_mutex != NULL && xSemaphoreTake(s_energy_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_energy_charged_wh = charged_wh;
+        s_energy_discharged_wh = discharged_wh;
+        s_energy_last_timestamp_ms = 0;
 
-    if (persisted) {
-        s_energy_last_persist_charged_wh = charged_wh;
-        s_energy_last_persist_discharged_wh = discharged_wh;
-        s_energy_dirty = false;
+        if (persisted) {
+            s_energy_last_persist_charged_wh = charged_wh;
+            s_energy_last_persist_discharged_wh = discharged_wh;
+            s_energy_dirty = false;
+        } else {
+            s_energy_dirty = true;
+        }
+
+        xSemaphoreGive(s_energy_mutex);
     } else {
-        s_energy_dirty = true;
+        ESP_LOGW(TAG, "Failed to acquire energy mutex in set_energy_state_internal");
     }
 }
 
@@ -534,14 +555,34 @@ static void update_energy_counters(const uart_bms_live_data_t *data)
         return;
     }
 
+    if (s_energy_mutex == NULL) {
+        ESP_LOGW(TAG, "Energy mutex not initialized");
+        return;
+    }
+
+    // Validate input data before acquiring mutex
+    double voltage = (double)data->pack_voltage_v;
+    double current = (double)data->pack_current_a;
+    if (!isfinite(voltage) || !isfinite(current) || voltage <= 0.1) {
+        return;
+    }
+
+    // Acquire mutex for all energy counter modifications
+    if (xSemaphoreTake(s_energy_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire energy mutex in update_energy_counters");
+        return;
+    }
+
     if (s_energy_last_timestamp_ms == 0U) {
         s_energy_last_timestamp_ms = data->timestamp_ms;
+        xSemaphoreGive(s_energy_mutex);
         return;
     }
 
     uint64_t current_ts = data->timestamp_ms;
     if (current_ts <= s_energy_last_timestamp_ms) {
         s_energy_last_timestamp_ms = current_ts;
+        xSemaphoreGive(s_energy_mutex);
         return;
     }
 
@@ -550,12 +591,6 @@ static void update_energy_counters(const uart_bms_live_data_t *data)
 
     if (delta_ms > 60000U) {
         ESP_LOGW(TAG, "Energy integration gap %" PRIu64 " ms", delta_ms);
-    }
-
-    double voltage = (double)data->pack_voltage_v;
-    double current = (double)data->pack_current_a;
-    if (!isfinite(voltage) || !isfinite(current) || voltage <= 0.1) {
-        return;
     }
 
     double hours = (double)delta_ms / 3600000.0;
@@ -578,6 +613,8 @@ static void update_energy_counters(const uart_bms_live_data_t *data)
     if (delta_in >= ENERGY_PERSIST_MIN_DELTA_WH || delta_out >= ENERGY_PERSIST_MIN_DELTA_WH) {
         s_energy_dirty = true;
     }
+
+    xSemaphoreGive(s_energy_mutex);
 
     maybe_persist_energy(current_ts);
 }
@@ -1158,8 +1195,20 @@ static bool encode_energy_counters(const uart_bms_live_data_t *data, can_publish
 
     memset(frame->data, 0, sizeof(frame->data));
 
-    uint32_t energy_in_raw = encode_energy_wh(s_energy_charged_wh);
-    uint32_t energy_out_raw = encode_energy_wh(s_energy_discharged_wh);
+    // Read energy counters with mutex protection
+    double charged_wh = 0.0;
+    double discharged_wh = 0.0;
+
+    if (s_energy_mutex != NULL && xSemaphoreTake(s_energy_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        charged_wh = s_energy_charged_wh;
+        discharged_wh = s_energy_discharged_wh;
+        xSemaphoreGive(s_energy_mutex);
+    } else {
+        ESP_LOGW(TAG, "Failed to acquire energy mutex in encode_energy_counters");
+    }
+
+    uint32_t energy_in_raw = encode_energy_wh(charged_wh);
+    uint32_t energy_out_raw = encode_energy_wh(discharged_wh);
 
     frame->data[0] = (uint8_t)(energy_in_raw & 0xFFU);
     frame->data[1] = (uint8_t)((energy_in_raw >> 8U) & 0xFFU);
