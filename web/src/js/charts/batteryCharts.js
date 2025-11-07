@@ -67,7 +67,7 @@ export class BatteryRealtimeCharts {
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 10,
+                    width: 5,
                     color: [
                       [0.5, '#f25f5c'],
                       [0.8, '#ffd166'],
@@ -454,11 +454,11 @@ export class BatteryRealtimeCharts {
                 pointer: {
                   icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '65%',
-                  width: 5,
+                  width: 2,
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 10,
+                    width: 5,
                     color: [
                       [0.3, '#00a896'],
                       [0.6, '#ffd166'],
@@ -538,16 +538,16 @@ export class BatteryRealtimeCharts {
                 center: ['50%', '70%'],
                 radius: '95%',
                 pointer: {
-                  icon: 'path://M2.9,0.7L2.9,0.7c1.4,0,2.6,1.2,2.6,2.6v115c0,1.4-1.2,2.6-2.6,2.6l0,0c-1.4,0-2.6-1.2-2.6-2.6V3.3C0.3,1.9,1.4,0.7,2.9,0.7z',
+                  icon: 'path://M12 4L8 12H16L12 4Z',
                   length: '70%',
-                  width: 6,
+                  width: 3,
                   itemStyle: {
                     color: 'auto',
                   },
                 },
                 axisLine: {
                   lineStyle: {
-                    width: 16,
+                    width: 5,
                     color: [
                       [0.125, '#ef4444'],  // 0-6h: rouge (critique)
                       [0.25, '#f59e0b'],   // 6-12h: orange (attention)
