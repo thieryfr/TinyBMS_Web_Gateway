@@ -1,5 +1,54 @@
 #pragma once
 
+/**
+ * @file can_publisher.h
+ * @brief CAN frame publisher and scheduler module
+ *
+ * Manages periodic CAN frame generation from BMS data and dispatches
+ * frames to the CAN bus driver. Supports both immediate dispatch and
+ * periodic scheduling modes.
+ *
+ * @section can_publisher_thread_safety Thread Safety
+ *
+ * The CAN publisher uses multiple mutexes for different resources:
+ * - s_buffer_mutex: Protects frame buffer (s_frame_buffer)
+ * - s_event_mutex: Protects event frame slots (s_event_frames)
+ *
+ * **Protected Resources**:
+ * - s_frame_buffer - Buffered frames waiting for publication
+ * - s_event_frames[] - Pre-allocated event buffers (8 slots)
+ * - s_event_frame_index - Current event slot index
+ *
+ * **Thread-Safe Functions** (all public functions are thread-safe):
+ * - can_publisher_init() - Initializes mutexes and registers BMS listener
+ * - can_publisher_deinit() - Cleans up resources in safe order
+ * - can_publisher_publish_frame() - Thread-safe frame publication
+ * - Internal: can_publisher_on_bms_update() - Encodes frames (mutex-protected)
+ *
+ * **Concurrency Pattern**:
+ * - BMS callback thread: Generates frames from UART data
+ * - Publisher task thread: Schedules periodic frame publication
+ * - Event bus subscribers: Receive frame ready notifications
+ *
+ * **Synchronization Approach**:
+ * - Uses consistent mutex strategy (no mixed spinlock/mutex)
+ * - 100ms timeout on all mutex operations
+ * - Safe shutdown: unregister BMS listener → wait → delete task
+ *
+ * @note The module was refactored to use mutex everywhere (previously
+ *       mixed portMUX_TYPE spinlock with SemaphoreHandle_t).
+ *
+ * @section can_publisher_usage Usage Example
+ * @code
+ * // Initialize with event publisher and frame publisher callbacks
+ * can_publisher_init(event_publisher, frame_publisher);
+ *
+ * // Module automatically handles frame generation from BMS data
+ * // Cleanup
+ * can_publisher_deinit();
+ * @endcode
+ */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
