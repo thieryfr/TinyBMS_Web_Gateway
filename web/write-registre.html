@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyBMS - Test Write Register</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #16213e;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #00d4ff;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            background: #0f3460;
+            border: 1px solid #1a5490;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #0f3460;
+            border-radius: 5px;
+            border-left: 4px solid #00d4ff;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .current-value {
+            color: #ffa500;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .description {
+            background: #0a2540;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-size: 14px;
+            color: #ccc;
+            border-left: 3px solid #4a90e2;
+        }
+
+        .range-info {
+            background: #1a1a2e;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .range-info strong {
+            color: #00d4ff;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #1e4620;
+            border-left: 4px solid #4caf50;
+            color: #81c784;
+            display: block;
+        }
+
+        .status.error {
+            background: #4a1a1a;
+            border-left: 4px solid #f44336;
+            color: #e57373;
+            display: block;
+        }
+
+        .status.info {
+            background: #1a3a4a;
+            border-left: 4px solid #2196f3;
+            color: #64b5f6;
+            display: block;
+        }
+
+        .warning {
+            background: #4a3a1a;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #ff9800;
+            color: #ffb74d;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 TinyBMS - Test Write Register</h1>
+        <p class="subtitle">Page de test pour l'écriture des registres de configuration (300-343)</p>
+
+        <div class="form-group">
+            <label for="register-select">Sélectionner le numéro de registre</label>
+            <select id="register-select">
+                <option value="">-- Choisir un registre --</option>
+            </select>
+        </div>
+
+        <div id="register-details" style="display: none;">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Valeur actuelle</span>
+                    <span class="info-value current-value" id="current-value">--</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Type</span>
+                    <span class="info-value" id="reg-type">--</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Résolution</span>
+                    <span class="info-value" id="reg-resolution">--</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Accès</span>
+                    <span class="info-value" id="reg-access">--</span>
+                </div>
+            </div>
+
+            <div class="description" id="reg-description"></div>
+
+            <div class="range-info" id="reg-range"></div>
+
+            <div class="form-group">
+                <label for="value-input" id="value-label">Nouvelle valeur</label>
+                <input type="number" id="value-input" placeholder="Entrer la nouvelle valeur">
+                <select id="value-select" style="display: none;">
+                </select>
+            </div>
+
+            <div class="warning">
+                ⚠️ <strong>Attention:</strong> L'écriture de valeurs incorrectes peut endommager votre BMS. Vérifiez toujours les plages de valeurs autorisées.
+            </div>
+
+            <button id="write-button" onclick="writeRegister()">📤 Envoyer la configuration au TinyBMS</button>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Base de données des registres 300-343
+        const REGISTERS = {
+            300: {
+                name: "Fully Charged Voltage",
+                description: "Tension de charge complète par cellule",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "V",
+                min: 1200,
+                max: 4500,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            301: {
+                name: "Fully Discharged Voltage",
+                description: "Tension de décharge complète par cellule",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "V",
+                min: 1000,
+                max: 3500,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            302: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            303: {
+                name: "Early Balancing Threshold",
+                description: "Seuil de début d'équilibrage",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "V",
+                min: 1000,
+                max: 4500,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            304: {
+                name: "Charge Finished Current",
+                description: "Courant de fin de charge (dépend du capteur)",
+                type: "UINT_16",
+                resolution: "1 mA",
+                unit: "A",
+                min: 100,
+                max: 5000,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            305: {
+                name: "Peak Discharge Current Cutoff",
+                description: "Seuil de coupure courant de décharge crête",
+                type: "UINT_16",
+                resolution: "1 A",
+                unit: "A",
+                min: 1,
+                max: 750,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            306: {
+                name: "Battery Capacity",
+                description: "Capacité de la batterie",
+                type: "UINT_16",
+                resolution: "0.01 Ah",
+                unit: "Ah",
+                min: 10,
+                max: 65500,
+                step: 1,
+                factor: 100,
+                access: "R/W"
+            },
+            307: {
+                name: "Number Of Series Cells",
+                description: "Nombre de cellules en série",
+                type: "UINT_16",
+                resolution: "1 cell",
+                unit: "cells",
+                min: 4,
+                max: 16,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            308: {
+                name: "Allowed Disbalance",
+                description: "Déséquilibre autorisé entre cellules",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "mV",
+                min: 15,
+                max: 100,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            309: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            310: {
+                name: "Charger Startup Delay",
+                description: "Délai de démarrage du chargeur",
+                type: "UINT_16",
+                resolution: "1 sec",
+                unit: "s",
+                min: 5,
+                max: 60,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            311: {
+                name: "Charger Disable Delay",
+                description: "Délai de désactivation du chargeur",
+                type: "UINT_16",
+                resolution: "1 sec",
+                unit: "s",
+                min: 0,
+                max: 60,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            312: {
+                name: "Pulses Per Unit (LSB)",
+                description: "Impulsions par unité (partie basse)",
+                type: "UINT_32",
+                resolution: "1 pulse",
+                unit: "pulses",
+                min: 1,
+                max: 100000,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            313: {
+                name: "Pulses Per Unit (MSB)",
+                description: "Impulsions par unité (partie haute)",
+                type: "UINT_32",
+                resolution: "1 pulse",
+                unit: "pulses",
+                access: "R/W"
+            },
+            314: {
+                name: "Distance Unit Name",
+                description: "Unité de distance",
+                type: "UINT_16 (Enum)",
+                resolution: "-",
+                enum: [
+                    {value: 1, label: "Meter"},
+                    {value: 2, label: "Kilometer"},
+                    {value: 3, label: "Feet"},
+                    {value: 4, label: "Mile"},
+                    {value: 5, label: "Yard"}
+                ],
+                access: "R/W"
+            },
+            315: {
+                name: "Over-Voltage Cutoff",
+                description: "Seuil de coupure surtension",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "V",
+                min: 1200,
+                max: 4500,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            316: {
+                name: "Under-Voltage Cutoff",
+                description: "Seuil de coupure sous-tension",
+                type: "UINT_16",
+                resolution: "1 mV",
+                unit: "V",
+                min: 800,
+                max: 3500,
+                step: 1,
+                factor: 1000,
+                access: "R/W"
+            },
+            317: {
+                name: "Discharge Over-Current Cutoff",
+                description: "Seuil de coupure surintensité décharge",
+                type: "UINT_16",
+                resolution: "1 A",
+                unit: "A",
+                min: 1,
+                max: 750,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            318: {
+                name: "Charge Over-Current Cutoff",
+                description: "Seuil de coupure surintensité charge",
+                type: "UINT_16",
+                resolution: "1 A",
+                unit: "A",
+                min: 1,
+                max: 750,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            319: {
+                name: "Over-Heat Cutoff",
+                description: "Seuil de coupure surchauffe",
+                type: "INT_16",
+                resolution: "1 °C",
+                unit: "°C",
+                min: 20,
+                max: 90,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            320: {
+                name: "Low Temperature Charger Cutoff",
+                description: "Seuil de coupure basse température charge",
+                type: "INT_16",
+                resolution: "1 °C",
+                unit: "°C",
+                min: -40,
+                max: 10,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            321: {
+                name: "Charge Restart Level",
+                description: "Niveau de redémarrage de la charge",
+                type: "UINT_16",
+                resolution: "1 %",
+                unit: "%",
+                min: 60,
+                max: 95,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            322: {
+                name: "Battery Maximum Cycles Count",
+                description: "Nombre maximum de cycles batterie",
+                type: "UINT_16",
+                resolution: "1 cycle",
+                unit: "cycles",
+                min: 10,
+                max: 65000,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            323: {
+                name: "State Of Health",
+                description: "État de santé de la batterie (0xFFFF pour acceptation interne)",
+                type: "UINT_16",
+                resolution: "0.002 %",
+                unit: "%",
+                min: 0,
+                max: 50000,
+                step: 1,
+                factor: 500,
+                access: "R/W"
+            },
+            324: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            325: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            326: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            327: {
+                name: "Reserved",
+                description: "Registre réservé",
+                type: "Reserved",
+                resolution: "-",
+                access: "R/W"
+            },
+            328: {
+                name: "State Of Charge",
+                description: "État de charge de la batterie",
+                type: "UINT_16",
+                resolution: "0.002 %",
+                unit: "%",
+                min: 0,
+                max: 50000,
+                step: 1,
+                factor: 500,
+                access: "R/W"
+            },
+            329: {
+                name: "Flags Register",
+                description: "Registre de flags (bit 0: Invert Current Sensor, bit 1: Disable Diagnostics, bit 2: Enable Restart Level)",
+                type: "UINT_16 (Flags)",
+                resolution: "-",
+                min: 0,
+                max: 7,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            330: {
+                name: "Charger Type & Discharge Timeout",
+                description: "Type de chargeur (8 bits LSB) + Timeout décharge (8 bits MSB)",
+                type: "UINT_16 (8bit+8bit)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Variable (Reserved)"},
+                    {value: 1, label: "0x01 - CC/CV"},
+                    {value: 2, label: "0x02 - CAN (Reserved)"}
+                ],
+                access: "R/W"
+            },
+            331: {
+                name: "Load Switch Type",
+                description: "Type de switch de charge",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - FET"},
+                    {value: 1, label: "0x01 - AIDO1"},
+                    {value: 2, label: "0x02 - AIDO2"},
+                    {value: 3, label: "0x03 - DIDO1"},
+                    {value: 4, label: "0x04 - DIDO2"},
+                    {value: 5, label: "0x05 - AIHO1 Active Low"},
+                    {value: 6, label: "0x06 - AIHO1 Active High"},
+                    {value: 7, label: "0x07 - AIHO2 Active Low"},
+                    {value: 8, label: "0x08 - AIHO2 Active High"}
+                ],
+                access: "R/W"
+            },
+            332: {
+                name: "Automatic Recovery",
+                description: "Récupération automatique",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "1 s",
+                unit: "s",
+                min: 1,
+                max: 30,
+                step: 1,
+                factor: 1,
+                access: "R/W"
+            },
+            333: {
+                name: "Charger Switch Type",
+                description: "Type de switch du chargeur",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 1, label: "0x01 - Charge FET"},
+                    {value: 2, label: "0x02 - AIDO1"},
+                    {value: 3, label: "0x03 - AIDO2"},
+                    {value: 4, label: "0x04 - DIDO1"},
+                    {value: 5, label: "0x05 - DIDO2"},
+                    {value: 6, label: "0x06 - AIHO1 Active Low"},
+                    {value: 7, label: "0x07 - AIHO1 Active High"},
+                    {value: 8, label: "0x08 - AIHO2 Active Low"},
+                    {value: 9, label: "0x09 - AIHO2 Active High"}
+                ],
+                access: "R/W"
+            },
+            334: {
+                name: "Ignition",
+                description: "Configuration de l'ignition",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Disabled"},
+                    {value: 1, label: "0x01 - AIDO1"},
+                    {value: 2, label: "0x02 - AIDO2"},
+                    {value: 3, label: "0x03 - DIDO1"},
+                    {value: 4, label: "0x04 - DIDO2"},
+                    {value: 5, label: "0x05 - AIHO1"},
+                    {value: 6, label: "0x06 - AIHO2"}
+                ],
+                access: "R/W"
+            },
+            335: {
+                name: "Charger Detection",
+                description: "Détection du chargeur",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 1, label: "0x01 - Internal"},
+                    {value: 2, label: "0x02 - AIDO1"},
+                    {value: 3, label: "0x03 - AIDO2"},
+                    {value: 4, label: "0x04 - DIDO1"},
+                    {value: 5, label: "0x05 - DIDO2"},
+                    {value: 6, label: "0x06 - AIHO1"},
+                    {value: 7, label: "0x07 - AIHO2"}
+                ],
+                access: "R/W"
+            },
+            336: {
+                name: "Speed Sensor Input",
+                description: "Entrée du capteur de vitesse",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Disabled"},
+                    {value: 1, label: "0x01 - DIDO1"},
+                    {value: 2, label: "0x02 - DIDO2"}
+                ],
+                access: "R/W"
+            },
+            337: {
+                name: "Precharge Pin",
+                description: "Pin de précharge",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Disabled"},
+                    {value: 2, label: "0x02 - Discharge FET"},
+                    {value: 3, label: "0x03 - AIDO1"},
+                    {value: 4, label: "0x04 - AIDO2"},
+                    {value: 5, label: "0x05 - DIDO1"},
+                    {value: 6, label: "0x06 - DIDO2"},
+                    {value: 7, label: "0x07 - AIHO1 Active Low"},
+                    {value: 8, label: "0x08 - AIHO1 Active High"},
+                    {value: 9, label: "0x09 - AIHO2 Active Low"},
+                    {value: 10, label: "0x0A - AIHO2 Active High"}
+                ],
+                access: "R/W"
+            },
+            338: {
+                name: "Precharge Duration",
+                description: "Durée de précharge",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - 0.1 sec"},
+                    {value: 1, label: "0x01 - 0.2 sec"},
+                    {value: 2, label: "0x02 - 0.5 sec"},
+                    {value: 3, label: "0x03 - 1 sec"},
+                    {value: 4, label: "0x04 - 2 sec"},
+                    {value: 5, label: "0x05 - 3 sec"},
+                    {value: 6, label: "0x06 - 4 sec"},
+                    {value: 7, label: "0x07 - 5 sec"}
+                ],
+                access: "R/W"
+            },
+            339: {
+                name: "Temperature Sensor Type",
+                description: "Type de capteur de température",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Dual 10K NTC"},
+                    {value: 1, label: "0x01 - Multipoint Active Sensor"}
+                ],
+                access: "R/W"
+            },
+            340: {
+                name: "BMS Operation Mode",
+                description: "Mode d'opération du BMS",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Dual Port Operation"},
+                    {value: 1, label: "0x01 - Single Port Operation"}
+                ],
+                access: "R/W"
+            },
+            341: {
+                name: "Single Port Switch Type",
+                description: "Type de switch en mode single port",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - FET"},
+                    {value: 1, label: "0x01 - AIDO1"},
+                    {value: 2, label: "0x02 - AIDO2"},
+                    {value: 3, label: "0x03 - DIDO1"},
+                    {value: 4, label: "0x04 - DIDO2"},
+                    {value: 5, label: "0x05 - AIHO1 Active Low"},
+                    {value: 6, label: "0x06 - AIHO1 Active High"},
+                    {value: 7, label: "0x07 - AIHO2 Active Low"},
+                    {value: 8, label: "0x08 - AIHO2 Active High"}
+                ],
+                access: "R/W"
+            },
+            342: {
+                name: "Broadcast Time",
+                description: "Intervalle de diffusion",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - Disabled"},
+                    {value: 1, label: "0x01 - 0.1 sec"},
+                    {value: 2, label: "0x02 - 0.2 sec"},
+                    {value: 3, label: "0x03 - 0.5 sec"},
+                    {value: 4, label: "0x04 - 1 sec"},
+                    {value: 5, label: "0x05 - 2 sec"},
+                    {value: 6, label: "0x06 - 5 sec"},
+                    {value: 7, label: "0x07 - 10 sec"}
+                ],
+                access: "R/W"
+            },
+            343: {
+                name: "Protocol",
+                description: "Protocole de diffusion",
+                type: "UINT_8 (8 bits LSB)",
+                resolution: "-",
+                enum: [
+                    {value: 0, label: "0x00 - CA V3"},
+                    {value: 1, label: "0x01 - ASCII"},
+                    {value: 2, label: "0x02 - SOC BAR"}
+                ],
+                access: "R/W"
+            }
+        };
+
+        let currentRegisters = {};
+
+        // Charger les registres au démarrage
+        async function loadRegisters() {
+            try {
+                const response = await fetch('/api/registers');
+                if (!response.ok) {
+                    throw new Error('Impossible de charger les registres');
+                }
+                const data = await response.json();
+
+                // Stocker les valeurs actuelles
+                if (data.registers) {
+                    data.registers.forEach(reg => {
+                        currentRegisters[reg.address] = reg.current_user_value;
+                    });
+                }
+
+                populateRegisterSelect();
+            } catch (error) {
+                console.error('Erreur:', error);
+                showStatus('Erreur de chargement des registres: ' + error.message, 'error');
+            }
+        }
+
+        // Peupler la liste déroulante
+        function populateRegisterSelect() {
+            const select = document.getElementById('register-select');
+
+            for (let i = 300; i <= 343; i++) {
+                if (REGISTERS[i] && REGISTERS[i].type !== 'Reserved') {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = `Reg ${i} - ${REGISTERS[i].name}`;
+                    select.appendChild(option);
+                }
+            }
+
+            select.addEventListener('change', onRegisterChange);
+        }
+
+        // Gestion du changement de registre
+        function onRegisterChange(event) {
+            const regNum = parseInt(event.target.value);
+            if (!regNum || !REGISTERS[regNum]) {
+                document.getElementById('register-details').style.display = 'none';
+                return;
+            }
+
+            const reg = REGISTERS[regNum];
+            const currentValue = currentRegisters[regNum];
+
+            // Afficher les détails
+            document.getElementById('register-details').style.display = 'block';
+
+            // Valeur actuelle
+            if (currentValue !== undefined) {
+                const displayValue = reg.factor ? (currentValue / reg.factor).toFixed(3) : currentValue;
+                document.getElementById('current-value').textContent =
+                    displayValue + (reg.unit ? ' ' + reg.unit : '');
+            } else {
+                document.getElementById('current-value').textContent = 'Non disponible';
+            }
+
+            // Type
+            document.getElementById('reg-type').textContent = reg.type;
+
+            // Résolution
+            document.getElementById('reg-resolution').textContent = reg.resolution;
+
+            // Accès
+            document.getElementById('reg-access').textContent = reg.access;
+
+            // Description
+            document.getElementById('reg-description').textContent = reg.description;
+
+            // Plage
+            let rangeText = '';
+            if (reg.enum) {
+                rangeText = '<strong>Valeurs possibles:</strong><br>';
+                reg.enum.forEach(opt => {
+                    rangeText += `• ${opt.label}<br>`;
+                });
+            } else if (reg.min !== undefined && reg.max !== undefined) {
+                const minDisplay = reg.factor ? (reg.min / reg.factor).toFixed(3) : reg.min;
+                const maxDisplay = reg.factor ? (reg.max / reg.factor).toFixed(3) : reg.max;
+                rangeText = `<strong>Plage:</strong> ${minDisplay} à ${maxDisplay} ${reg.unit || ''}`;
+            } else {
+                rangeText = '<strong>Plage:</strong> Non spécifiée';
+            }
+            document.getElementById('reg-range').innerHTML = rangeText;
+
+            // Champ de saisie
+            const valueInput = document.getElementById('value-input');
+            const valueSelect = document.getElementById('value-select');
+            const valueLabel = document.getElementById('value-label');
+
+            if (reg.enum) {
+                // Afficher select pour les enums
+                valueInput.style.display = 'none';
+                valueSelect.style.display = 'block';
+                valueSelect.innerHTML = '';
+
+                reg.enum.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    if (currentValue === opt.value) {
+                        option.selected = true;
+                    }
+                    valueSelect.appendChild(option);
+                });
+
+                valueLabel.textContent = 'Sélectionner la nouvelle valeur';
+            } else {
+                // Afficher input pour les nombres
+                valueInput.style.display = 'block';
+                valueSelect.style.display = 'none';
+
+                if (reg.min !== undefined) {
+                    valueInput.min = reg.factor ? (reg.min / reg.factor) : reg.min;
+                }
+                if (reg.max !== undefined) {
+                    valueInput.max = reg.factor ? (reg.max / reg.factor) : reg.max;
+                }
+                if (reg.step !== undefined) {
+                    valueInput.step = reg.factor ? (reg.step / reg.factor) : reg.step;
+                }
+
+                valueInput.value = '';
+                valueInput.placeholder = `Entrer une valeur entre ${valueInput.min} et ${valueInput.max} ${reg.unit || ''}`;
+
+                valueLabel.textContent = `Nouvelle valeur ${reg.unit ? '(' + reg.unit + ')' : ''}`;
+            }
+        }
+
+        // Écrire le registre
+        async function writeRegister() {
+            const regNum = parseInt(document.getElementById('register-select').value);
+            if (!regNum || !REGISTERS[regNum]) {
+                showStatus('Veuillez sélectionner un registre', 'error');
+                return;
+            }
+
+            const reg = REGISTERS[regNum];
+            let value;
+
+            // Récupérer la valeur
+            if (reg.enum) {
+                value = parseInt(document.getElementById('value-select').value);
+            } else {
+                const inputValue = parseFloat(document.getElementById('value-input').value);
+                if (isNaN(inputValue)) {
+                    showStatus('Veuillez entrer une valeur valide', 'error');
+                    return;
+                }
+
+                // Convertir selon le facteur
+                value = reg.factor ? Math.round(inputValue * reg.factor) : inputValue;
+
+                // Vérifier les limites
+                if (reg.min !== undefined && value < reg.min) {
+                    showStatus(`Valeur trop basse (min: ${reg.min / (reg.factor || 1)} ${reg.unit || ''})`, 'error');
+                    return;
+                }
+                if (reg.max !== undefined && value > reg.max) {
+                    showStatus(`Valeur trop haute (max: ${reg.max / (reg.factor || 1)} ${reg.unit || ''})`, 'error');
+                    return;
+                }
+            }
+
+            // Confirmation
+            const displayValue = reg.factor ? (value / reg.factor).toFixed(3) : value;
+            if (!confirm(`Confirmer l'écriture:\n\nRegistre ${regNum} - ${reg.name}\nValeur: ${displayValue} ${reg.unit || ''}\n\nContinuer?`)) {
+                return;
+            }
+
+            try {
+                showStatus('Envoi de la configuration...', 'info');
+                document.getElementById('write-button').disabled = true;
+
+                const response = await fetch('/api/registers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        [regNum]: value
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Erreur ${response.status}: ${errorText}`);
+                }
+
+                const result = await response.json();
+                showStatus(`✓ Registre ${regNum} mis à jour avec succès!\nValeur: ${displayValue} ${reg.unit || ''}`, 'success');
+
+                // Recharger les registres
+                setTimeout(() => {
+                    loadRegisters();
+                    // Reselect current register to refresh display
+                    onRegisterChange({ target: { value: regNum } });
+                }, 1000);
+
+            } catch (error) {
+                console.error('Erreur:', error);
+                showStatus('Erreur lors de l\'écriture: ' + error.message, 'error');
+            } finally {
+                document.getElementById('write-button').disabled = false;
+            }
+        }
+
+        // Afficher un message de statut
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    status.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Initialisation au chargement
+        window.addEventListener('DOMContentLoaded', loadRegisters);
+    </script>
+</body>
+</html>
