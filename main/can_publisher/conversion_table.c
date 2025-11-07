@@ -1,3 +1,25 @@
+/**
+ * @file conversion_table.c
+ * @brief TinyBMS to Victron CAN bus data conversion module
+ *
+ * This module converts TinyBMS UART data to Victron CAN bus PGN format.
+ * It manages energy counters, encodes various PGN messages, and maintains
+ * a registry of CAN channels for the publisher.
+ *
+ * @note Thread Safety: Energy counters are protected by s_energy_mutex.
+ *       All energy counter modifications MUST be mutex-protected.
+ *
+ * @see conversion_table.md for detailed module documentation
+ * @see can_publisher.h for integration with CAN publisher
+ *
+ * File organization (1436 lines):
+ * - Lines   56-240: Energy Management (energy counters, NVS persistence)
+ * - Lines  300-500: Utility Functions (encoding, scaling, conversions)
+ * - Lines  500-1200: PGN Encoders (Victron protocol encoding)
+ * - Lines  600-700: Data Resolution (metadata from UART/config)
+ * - Lines 1300-1436: Channel Registry (CAN channel descriptors)
+ */
+
 #include "conversion_table.h"
 
 #include <float.h>
@@ -20,6 +42,10 @@
 #include "cvl_controller.h"
 #include "storage/nvs_energy.h"
 #include "can_config_defaults.h"
+
+// =============================================================================
+// VICTRON CAN PROTOCOL DEFINITIONS
+// =============================================================================
 
 #define VICTRON_CAN_HANDSHAKE_ID     0x307U
 #define VICTRON_PGN_CVL_CCL_DCL      0x351U
@@ -54,6 +80,12 @@
 #endif
 
 static const char *TAG = "can_conv";
+
+// =============================================================================
+// ENERGY MANAGEMENT - State Variables
+// =============================================================================
+// These variables track cumulative energy in/out and are protected by s_energy_mutex
+// to prevent race conditions between BMS updates and CAN frame encoding.
 
 static double s_energy_charged_wh = 0.0;
 static double s_energy_discharged_wh = 0.0;
@@ -104,6 +136,12 @@ static const config_manager_can_settings_t *conversion_get_can_settings(void)
 #define TINY_REGISTER_INTERNAL_FW      0x01F6U
 #define TINY_REGISTER_SERIAL_NUMBER    0x01FAU
 #define TINY_REGISTER_BATTERY_FAMILY   0x01F8U
+
+// =============================================================================
+// ENERGY MANAGEMENT - NVS Storage Functions
+// =============================================================================
+// Functions for initializing, loading, and persisting energy counters to NVS.
+// Thread Safety: All functions that modify energy state variables must hold s_energy_mutex.
 
 static bool ensure_energy_storage_ready(void)
 {
@@ -296,6 +334,12 @@ static inline uint8_t sanitize_ascii(uint8_t value)
     }
     return value;
 }
+
+// =============================================================================
+// UTILITY FUNCTIONS - Encoding and Data Conversion
+// =============================================================================
+// Helper functions for encoding values into CAN frame format.
+// These are pure functions with no shared state - thread-safe by design.
 
 static uint16_t encode_u16_scaled(float value, float scale, float offset, uint16_t min_value, uint16_t max_value)
 {
@@ -494,6 +538,14 @@ static uint32_t encode_energy_wh(double energy_wh)
     if (!isfinite(scaled) || scaled < 0.0) {
         return 0U;
     }
+// =============================================================================
+// VICTRON PGN ENCODERS
+// =============================================================================
+// Functions to encode TinyBMS data into Victron CAN PGN format.
+// Each encoder fills a CAN frame with data according to Victron's protocol.
+// Most encoders are thread-safe as they only read from the input data parameter.
+// Exception: encode_energy_counters() uses mutex-protected energy counters.
+
     if (scaled > 4294967295.0) {
         scaled = 4294967295.0;
     }
@@ -1268,6 +1320,13 @@ static bool encode_battery_family(const uart_bms_live_data_t *data, can_publishe
     const char *resolved = resolve_battery_family_string(data);
     return encode_ascii_field(data, resolved, TINY_REGISTER_BATTERY_FAMILY, 0U, frame);
 }
+// =============================================================================
+// CAN CHANNEL REGISTRY
+// =============================================================================
+// Registry of all CAN channels with their PGN IDs, encoder functions,
+// and publishing intervals. This table is used by the can_publisher module
+// to schedule and encode CAN frames.
+
 
 const can_publisher_channel_t g_can_publisher_channels[] = {
     {
