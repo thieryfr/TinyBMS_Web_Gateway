@@ -13,6 +13,7 @@
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "app_events.h"
 #include "app_config.h"
@@ -731,6 +732,11 @@ static bool s_settings_loaded = false;
 static bool s_nvs_initialised = false;
 #endif
 
+// Mutex to protect access to global configuration state
+// NOTE: Currently protects write operations (setters) only.
+// TODO: Full thread safety requires protecting all config structure access
+static SemaphoreHandle_t s_config_mutex = NULL;
+
 static bool config_manager_json_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
 {
     if (buffer == NULL || buffer_size == 0 || offset == NULL) {
@@ -1187,7 +1193,7 @@ static void config_manager_publish_register_change(const config_manager_register
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(50))) {
-        ESP_LOGW(TAG, "Failed to publish register update for %s", key);
+        ESP_LOGW(TAG, "Failed to publish register update for %s", desc->key);
     }
 }
 
@@ -1721,6 +1727,14 @@ static esp_err_t config_manager_convert_user_to_raw(const config_manager_registe
 
 static void config_manager_ensure_initialised(void)
 {
+    // Initialize mutex on first call (thread-safe in FreeRTOS)
+    if (s_config_mutex == NULL) {
+        s_config_mutex = xSemaphoreCreateMutex();
+        if (s_config_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create config mutex");
+        }
+    }
+
     if (!s_registers_initialised) {
         config_manager_load_register_defaults();
     }
@@ -1757,8 +1771,19 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
 {
     config_manager_ensure_initialised();
 
+    if (s_config_mutex == NULL) {
+        ESP_LOGE(TAG, "Config mutex not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_config_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire config mutex");
+        return ESP_ERR_TIMEOUT;
+    }
+
     uint32_t clamped = config_manager_clamp_poll_interval(interval_ms);
     if (clamped == s_uart_poll_interval_ms) {
+        xSemaphoreGive(s_config_mutex);
         uart_bms_set_poll_interval_ms(clamped);
         return ESP_OK;
     }
@@ -1781,6 +1806,8 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
             }
         }
     }
+
+    xSemaphoreGive(s_config_mutex);
 
     if (persist_err != ESP_OK) {
         return persist_err;
