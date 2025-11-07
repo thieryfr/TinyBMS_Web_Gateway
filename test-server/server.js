@@ -161,11 +161,26 @@ app.get('/api/registers', (req, res) => {
 /**
  * POST /api/registers
  * Write/update BMS registers
+ * Accepts: {300: value, 301: value} or [{address: 300, value: 123}]
  */
 app.post('/api/registers', (req, res) => {
   try {
     const updates = req.body.registers || req.body;
-    const result = registers.updateRegisters(Array.isArray(updates) ? updates : [updates]);
+    let updatesArray;
+
+    if (Array.isArray(updates)) {
+      updatesArray = updates;
+    } else if (typeof updates === 'object') {
+      // Convert object format {300: value, 301: value} to array format
+      updatesArray = Object.entries(updates).map(([address, value]) => ({
+        address: parseInt(address),
+        value: value
+      }));
+    } else {
+      updatesArray = [updates];
+    }
+
+    const result = registers.updateRegisters(updatesArray);
 
     if (result.success) {
       res.json({ success: true, updated: result.updated });
