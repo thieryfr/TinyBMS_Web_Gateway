@@ -76,6 +76,8 @@ portMUX_TYPE s_poll_interval_lock = portMUX_INITIALIZER_UNLOCKED;
 #endif
 uint32_t s_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
 SemaphoreHandle_t s_command_mutex = nullptr;
+SemaphoreHandle_t s_rx_buffer_mutex = nullptr;
+SemaphoreHandle_t s_snapshot_mutex = nullptr;
 
 TinyBMS_LiveData s_shared_snapshot{};
 bool s_shared_snapshot_valid = false;
@@ -280,7 +282,17 @@ static void uart_bms_publish_frame_events(const uint8_t *frame,
 
 static void uart_bms_reset_buffer(void)
 {
+#ifdef ESP_PLATFORM
+    if (s_rx_buffer_mutex != nullptr) {
+        xSemaphoreTake(s_rx_buffer_mutex, portMAX_DELAY);
+    }
+#endif
     s_rx_length = 0;
+#ifdef ESP_PLATFORM
+    if (s_rx_buffer_mutex != nullptr) {
+        xSemaphoreGive(s_rx_buffer_mutex);
+    }
+#endif
 }
 
 #ifdef ESP_PLATFORM
@@ -416,10 +428,26 @@ static esp_err_t uart_bms_read_register_blocking(uint16_t address,
 
 static void uart_bms_consume_bytes(const uint8_t *data, size_t length)
 {
+#ifdef ESP_PLATFORM
+    if (s_rx_buffer_mutex != nullptr) {
+        xSemaphoreTake(s_rx_buffer_mutex, portMAX_DELAY);
+    }
+#endif
+
     for (size_t i = 0; i < length; ++i) {
         if (s_rx_length >= sizeof(s_rx_buffer)) {
             ESP_LOGW(kTag, "RX buffer overflow, resetting synchronisation");
+#ifdef ESP_PLATFORM
+            if (s_rx_buffer_mutex != nullptr) {
+                xSemaphoreGive(s_rx_buffer_mutex);
+            }
+#endif
             uart_bms_reset_buffer();
+#ifdef ESP_PLATFORM
+            if (s_rx_buffer_mutex != nullptr) {
+                xSemaphoreTake(s_rx_buffer_mutex, portMAX_DELAY);
+            }
+#endif
         }
 
         s_rx_buffer[s_rx_length++] = data[i];
@@ -469,6 +497,12 @@ static void uart_bms_consume_bytes(const uint8_t *data, size_t length)
             progress = (s_rx_length > 0);
         }
     }
+
+#ifdef ESP_PLATFORM
+    if (s_rx_buffer_mutex != nullptr) {
+        xSemaphoreGive(s_rx_buffer_mutex);
+    }
+#endif
 }
 
 static void uart_poll_task(void *arg)
@@ -621,6 +655,24 @@ void uart_bms_init(void)
         }
     }
 
+    if (s_rx_buffer_mutex == nullptr) {
+        s_rx_buffer_mutex = xSemaphoreCreateMutex();
+        if (s_rx_buffer_mutex == nullptr) {
+            ESP_LOGE(kTag, "Unable to allocate TinyBMS RX buffer mutex");
+            uart_driver_delete(UART_BMS_UART_PORT);
+            return;
+        }
+    }
+
+    if (s_snapshot_mutex == nullptr) {
+        s_snapshot_mutex = xSemaphoreCreateMutex();
+        if (s_snapshot_mutex == nullptr) {
+            ESP_LOGE(kTag, "Unable to allocate TinyBMS snapshot mutex");
+            uart_driver_delete(UART_BMS_UART_PORT);
+            return;
+        }
+    }
+
     s_uart_initialised = true;
 
     esp_err_t energy_err = can_publisher_conversion_restore_energy_state();
@@ -710,8 +762,19 @@ esp_err_t uart_bms_process_frame(const uint8_t *frame, size_t length)
         return err;
     }
 
+#ifdef ESP_PLATFORM
+    if (s_snapshot_mutex != nullptr) {
+        xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
+    }
+#endif
     s_shared_snapshot = shared;
     s_shared_snapshot_valid = true;
+#ifdef ESP_PLATFORM
+    if (s_snapshot_mutex != nullptr) {
+        xSemaphoreGive(s_snapshot_mutex);
+    }
+#endif
+
     uart_bms_publish_frame_events(frame, length, &legacy_data);
     uart_bms_publish_live_data(&legacy_data);
     uart_bms_notify_shared_listeners(shared);
@@ -858,9 +921,27 @@ void uart_bms_unregister_shared_listener(uart_bms_shared_callback_t callback, vo
 
 const TinyBMS_LiveData *uart_bms_get_latest_shared(void)
 {
-    if (!s_shared_snapshot_valid) {
-        return nullptr;
+    // NOTE: This function returns a pointer to shared data. The caller must ensure
+    // that the returned pointer is used quickly and not stored, as the data may be
+    // updated by the UART polling task at any time. For thread-safe access to all
+    // fields, the caller should copy the data while holding appropriate locks.
+#ifdef ESP_PLATFORM
+    if (s_snapshot_mutex != nullptr) {
+        xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
     }
-    return &s_shared_snapshot;
+#endif
+
+    const TinyBMS_LiveData *result = nullptr;
+    if (s_shared_snapshot_valid) {
+        result = &s_shared_snapshot;
+    }
+
+#ifdef ESP_PLATFORM
+    if (s_snapshot_mutex != nullptr) {
+        xSemaphoreGive(s_snapshot_mutex);
+    }
+#endif
+
+    return result;
 }
 *** End of File
