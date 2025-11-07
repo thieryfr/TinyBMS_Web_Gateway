@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "history_fs.h"
 
@@ -67,6 +68,12 @@ static FILE *s_active_file = NULL;
 static char s_active_filename[64] = {0};
 static int s_active_day = -1;
 static bool s_directory_ready = false;
+
+// Buffer de retry pour récupération d'erreurs d'écriture
+#define HISTORY_RETRY_BUFFER_SIZE 32
+static char s_retry_buffer[HISTORY_RETRY_BUFFER_SIZE][256];
+static size_t s_retry_buffer_count = 0;
+static SemaphoreHandle_t s_retry_mutex = NULL;
 
 static int history_logger_compare_file_info(const void *lhs, const void *rhs)
 {
@@ -262,15 +269,38 @@ static void history_logger_write_sample(FILE *file, time_t now, const uart_bms_l
     char iso[32];
     history_logger_format_iso(now, iso, sizeof(iso));
 
-    fprintf(file,
-            "%s,%" PRIu64 ",%.3f,%.3f,%.2f,%.2f,%.2f\n",
-            iso,
-            sample->timestamp_ms,
-            sample->pack_voltage_v,
-            sample->pack_current_a,
-            sample->state_of_charge_pct,
-            sample->state_of_health_pct,
-            sample->average_temperature_c);
+    char line[256];
+    int len = snprintf(line, sizeof(line),
+                      "%s,%" PRIu64 ",%.3f,%.3f,%.2f,%.2f,%.2f",
+                      iso,
+                      sample->timestamp_ms,
+                      sample->pack_voltage_v,
+                      sample->pack_current_a,
+                      sample->state_of_charge_pct,
+                      sample->state_of_health_pct,
+                      sample->average_temperature_c);
+
+    if (len < 0 || len >= (int)sizeof(line)) {
+        ESP_LOGW(TAG, "Failed to format sample line");
+        return;
+    }
+
+    if (fprintf(file, "%s\n", line) < 0) {
+        ESP_LOGW(TAG, "Failed to write line");
+
+        // Ajouter au buffer de retry si pas plein
+        if (s_retry_mutex != NULL && xSemaphoreTake(s_retry_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            if (s_retry_buffer_count < HISTORY_RETRY_BUFFER_SIZE) {
+                strlcpy(s_retry_buffer[s_retry_buffer_count], line, 256);
+                s_retry_buffer_count++;
+                ESP_LOGI(TAG, "Buffered failed write for retry (%zu in queue)",
+                        s_retry_buffer_count);
+            } else {
+                ESP_LOGW(TAG, "Retry buffer full, dropping sample");
+            }
+            xSemaphoreGive(s_retry_mutex);
+        }
+    }
 }
 
 static void history_logger_remove_file(const char *name)
@@ -383,6 +413,14 @@ static void history_logger_process_sample(const uart_bms_live_data_t *sample)
     if (CONFIG_TINYBMS_HISTORY_FLUSH_INTERVAL > 0 &&
         ++write_counter % CONFIG_TINYBMS_HISTORY_FLUSH_INTERVAL == 0) {
         fflush(s_active_file);
+
+        // Synchroniser avec disque pour durabilité
+        int fd = fileno(s_active_file);
+        if (fd >= 0) {
+            if (fsync(fd) != 0) {
+                ESP_LOGW(TAG, "fsync failed: %d", errno);
+            }
+        }
     }
 
     if (s_active_day >= 0) {
@@ -426,6 +464,17 @@ void history_logger_init(void)
     if (s_queue == NULL) {
         ESP_LOGE(TAG, "Unable to create history queue");
         return;
+    }
+
+    // Créer mutex pour buffer de retry
+    if (s_retry_mutex == NULL) {
+        s_retry_mutex = xSemaphoreCreateMutex();
+        if (s_retry_mutex == NULL) {
+            ESP_LOGE(TAG, "Unable to create retry mutex");
+            vQueueDelete(s_queue);
+            s_queue = NULL;
+            return;
+        }
     }
 
     BaseType_t task_ok = xTaskCreatePinnedToCore(history_logger_task,

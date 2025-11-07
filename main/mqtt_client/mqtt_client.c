@@ -38,6 +38,9 @@ static mqtt_client_ctx_t s_ctx = {
 
 static const char *TAG = "mqtt_client";
 
+// Spinlock pour protéger la création du mutex (évite race condition)
+static portMUX_TYPE s_init_lock = portMUX_INITIALIZER_UNLOCKED;
+
 #ifdef ESP_PLATFORM
 static void mqtt_client_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 #endif
@@ -76,11 +79,16 @@ static void mqtt_client_unlock(void)
 
 void mqtt_client_set_event_publisher(event_bus_publish_fn_t publisher)
 {
+    // Protéger la création du mutex avec spinlock (évite race condition)
+    portENTER_CRITICAL(&s_init_lock);
     if (s_ctx.lock == NULL) {
         s_ctx.lock = xSemaphoreCreateMutex();
-        if (s_ctx.lock == NULL) {
-            return;
-        }
+    }
+    portEXIT_CRITICAL(&s_init_lock);
+
+    if (s_ctx.lock == NULL) {
+        ESP_LOGE(TAG, "Failed to create MQTT mutex");
+        return;
     }
 
     if (!mqtt_client_lock(portMAX_DELAY)) {

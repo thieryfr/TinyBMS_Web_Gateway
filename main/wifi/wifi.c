@@ -7,6 +7,7 @@
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "config_manager.h"
 #ifdef ESP_PLATFORM
@@ -87,6 +88,9 @@ static esp_event_handler_instance_t s_wifi_event_handle = NULL;
 static esp_event_handler_instance_t s_ip_got_handle = NULL;
 static esp_event_handler_instance_t s_ip_lost_handle = NULL;
 
+// Mutex pour protéger les variables d'état WiFi
+static SemaphoreHandle_t s_wifi_state_mutex = NULL;
+
 static void wifi_publish_event(app_event_id_t id)
 {
     if (s_event_publisher == NULL) {
@@ -115,7 +119,16 @@ static void wifi_attempt_connect(void)
 static void wifi_start_ap_mode(void)
 {
 #if CONFIG_TINYBMS_WIFI_AP_FALLBACK
-    if (s_ap_fallback_active) {
+    // Vérifier et définir flag AP sous mutex pour éviter race condition
+    if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (s_ap_fallback_active) {
+            xSemaphoreGive(s_wifi_state_mutex);
+            return;
+        }
+        s_ap_fallback_active = true;
+        xSemaphoreGive(s_wifi_state_mutex);
+    } else {
+        ESP_LOGW(TAG, "Cannot start AP, mutex timeout");
         return;
     }
 
@@ -176,8 +189,11 @@ static void wifi_start_ap_mode(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    s_ap_fallback_active = true;
-    s_retry_count = 0;
+    // Reset retry count sous mutex (s_ap_fallback_active déjà défini au début)
+    if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_retry_count = 0;
+        xSemaphoreGive(s_wifi_state_mutex);
+    }
 #else
     ESP_LOGW(TAG, "Wi-Fi connection failed and AP fallback disabled");
 #endif
@@ -252,23 +268,51 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
                     ESP_LOGW(TAG, "Station disconnected");
                 }
 
-                if (s_ap_fallback_active) {
+                bool ap_active = false;
+                if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    ap_active = s_ap_fallback_active;
+                    xSemaphoreGive(s_wifi_state_mutex);
+                }
+
+                if (ap_active) {
                     ESP_LOGW(TAG, "Station disconnected while fallback AP active");
                     break;
                 }
 
-                if (s_retry_count < max_retry) {
+                int current_retry = 0;
+                if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     s_retry_count++;
-                    ESP_LOGW(TAG, "Wi-Fi disconnected, retry %d/%d", s_retry_count, max_retry);
+                    current_retry = s_retry_count;
+                    xSemaphoreGive(s_wifi_state_mutex);
+                } else {
+                    ESP_LOGW(TAG, "Failed to acquire wifi state mutex");
+                    break;
+                }
+
+                if (current_retry < max_retry) {
+                    ESP_LOGW(TAG, "Wi-Fi disconnected, retry %d/%d", current_retry, max_retry);
                     wifi_attempt_connect();
                 } else {
                     ESP_LOGE(TAG, "Wi-Fi failed to connect after %d attempts", max_retry);
 #if CONFIG_TINYBMS_WIFI_AP_FALLBACK
                     wifi_start_ap_mode();
 #else
-                    s_retry_count = 0;
-                    ESP_LOGW(TAG, "Fallback AP disabled, continuing to retry station connection");
-                    wifi_attempt_connect();
+                    // Backoff exponentiel pour éviter tempête de reconnexion
+                    if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                        s_retry_count++;
+                        int retry = s_retry_count;
+                        xSemaphoreGive(s_wifi_state_mutex);
+
+                        // Backoff: 1s, 2s, 4s, 8s, 16s, 32s, max 60s
+                        uint32_t backoff_ms = 1000 << (retry < 6 ? retry : 6);
+                        if (backoff_ms > 60000) backoff_ms = 60000;
+
+                        ESP_LOGW(TAG, "Retry %d in %u ms", retry, backoff_ms);
+                        vTaskDelay(pdMS_TO_TICKS(backoff_ms));
+                        wifi_attempt_connect();
+                    } else {
+                        ESP_LOGE(TAG, "Cannot acquire mutex for retry logic");
+                    }
 #endif
                 }
                 break;
@@ -323,8 +367,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == IP_EVENT) {
         if (event_id == IP_EVENT_STA_GOT_IP) {
             wifi_publish_event(APP_EVENT_ID_WIFI_STA_GOT_IP);
-            s_retry_count = 0;
-            s_ap_fallback_active = false;
+
+            // Réinitialiser les compteurs sous mutex
+            if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                s_retry_count = 0;
+                s_ap_fallback_active = false;
+                xSemaphoreGive(s_wifi_state_mutex);
+            }
+
             if (event_data != NULL) {
                 const ip_event_got_ip_t *ip_event = (const ip_event_got_ip_t *)event_data;
                 ESP_LOGI(TAG,
@@ -352,6 +402,15 @@ void wifi_init(void)
 #ifdef ESP_PLATFORM
     if (s_wifi_initialised) {
         return;
+    }
+
+    // Créer le mutex pour protéger les variables d'état WiFi
+    if (s_wifi_state_mutex == NULL) {
+        s_wifi_state_mutex = xSemaphoreCreateMutex();
+        if (s_wifi_state_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create WiFi state mutex");
+            return;
+        }
     }
 
     esp_err_t err = nvs_flash_init();

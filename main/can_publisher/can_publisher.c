@@ -50,6 +50,9 @@ static SemaphoreHandle_t s_buffer_mutex = NULL;
 static SemaphoreHandle_t s_event_mutex = NULL;  // Replaced portMUX_TYPE for consistent synchronization
 static TaskHandle_t s_publish_task_handle = NULL;
 static bool s_listener_registered = false;
+
+// Flag pour terminaison propre de la tâche
+static volatile bool s_task_should_exit = false;
 static uint32_t s_publish_interval_ms = CONFIG_TINYBMS_CAN_PUBLISHER_PERIOD_MS;
 static can_publisher_frame_t s_event_frames[CAN_PUBLISHER_MAX_BUFFER_SLOTS];
 static size_t s_event_frame_index = 0;
@@ -289,12 +292,20 @@ void can_publisher_deinit(void)
         s_listener_registered = false;
     }
 
-    // Allow task to complete current cycle before deletion
+    // Arrêt propre de la tâche avec flag
     if (s_publish_task_handle != NULL) {
-        // Give the task time to finish its current iteration
-        vTaskDelay(pdMS_TO_TICKS(100));
-        vTaskDelete(s_publish_task_handle);
-        s_publish_task_handle = NULL;
+        s_task_should_exit = true;  // Signaler arrêt
+
+        // Attendre que tâche confirme arrêt (max 1s)
+        for (int i = 0; i < 20 && s_publish_task_handle != NULL; i++) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+
+        if (s_publish_task_handle != NULL) {
+            ESP_LOGW(TAG, "Task did not exit gracefully, forcing delete");
+            vTaskDelete(s_publish_task_handle);
+            s_publish_task_handle = NULL;
+        }
     }
 
     if (s_buffer_mutex != NULL) {
@@ -402,10 +413,20 @@ static TickType_t can_publisher_publish_buffer(can_publisher_registry_t *registr
 
         if (due && has_frame) {
             can_publisher_dispatch_frame(channel, &frame);
-            s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            // Éviter dérive: incrémenter depuis deadline précédente
+            s_channel_deadlines[i] += s_channel_period_ticks[i];
+            // Si deadline dans le passé (ex: après longue pause), resynchroniser
+            if ((int32_t)(now - s_channel_deadlines[i]) > 0) {
+                s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            }
             deadline = s_channel_deadlines[i];
         } else if (due && !has_frame) {
-            s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            // Éviter dérive: incrémenter depuis deadline précédente
+            s_channel_deadlines[i] += s_channel_period_ticks[i];
+            // Si deadline dans le passé (ex: après longue pause), resynchroniser
+            if ((int32_t)(now - s_channel_deadlines[i]) > 0) {
+                s_channel_deadlines[i] = now + s_channel_period_ticks[i];
+            }
             deadline = s_channel_deadlines[i];
         }
 
@@ -430,7 +451,7 @@ static void can_publisher_task(void *context)
 {
     can_publisher_registry_t *registry = (can_publisher_registry_t *)context;
 
-    while (true) {
+    while (!s_task_should_exit) {
         TickType_t now = xTaskGetTickCount();
         TickType_t delay_ticks = can_publisher_publish_buffer(registry, now);
         if (delay_ticks == 0) {
@@ -439,6 +460,9 @@ static void can_publisher_task(void *context)
             vTaskDelay(delay_ticks);
         }
     }
+
+    s_publish_task_handle = NULL;  // Signaler sortie
+    vTaskDelete(NULL);
 }
 
 static const config_manager_can_settings_t *can_publisher_get_settings(void)

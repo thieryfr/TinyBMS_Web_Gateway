@@ -296,7 +296,29 @@ esp_err_t monitoring_get_status_json(char *buffer, size_t buffer_size, size_t *o
         return ESP_ERR_INVALID_ARG;
     }
 
-    const uart_bms_live_data_t *snapshot = s_has_latest_bms ? &s_latest_bms : NULL;
+    // Acquérir mutex pour lecture thread-safe
+    if (s_monitoring_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uart_bms_live_data_t local_data;
+    bool has_data = false;
+
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Mutex timeout reading status");
+        // Retourner erreur au lieu d'accéder sans protection
+        return ESP_ERR_TIMEOUT;
+    }
+
+    has_data = s_has_latest_bms;
+    if (has_data) {
+        local_data = s_latest_bms;
+    }
+
+    xSemaphoreGive(s_monitoring_mutex);
+
+    // Construire JSON avec données locales (hors mutex)
+    const uart_bms_live_data_t *snapshot = has_data ? &local_data : NULL;
     return monitoring_build_snapshot_json(snapshot, buffer, buffer_size, out_length);
 }
 
