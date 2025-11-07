@@ -10,6 +10,7 @@
 #include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "app_events.h"
 #include "uart_bms.h"
@@ -37,14 +38,31 @@ static size_t s_history_count = 0;
 static char s_last_snapshot[MONITORING_SNAPSHOT_MAX_SIZE] = {0};
 static size_t s_last_snapshot_len = 0;
 
+// Mutex to protect access to shared monitoring state
+static SemaphoreHandle_t s_monitoring_mutex = NULL;
+
 static bool monitoring_history_empty(void)
 {
-    return s_history_count == 0;
+    if (s_monitoring_mutex == NULL) {
+        return true;
+    }
+
+    bool empty = false;
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        empty = (s_history_count == 0);
+        xSemaphoreGive(s_monitoring_mutex);
+    }
+    return empty;
 }
 
 static void monitoring_history_push(const uart_bms_live_data_t *data)
 {
-    if (data == NULL) {
+    if (data == NULL || s_monitoring_mutex == NULL) {
+        return;
+    }
+
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire mutex for history push");
         return;
     }
 
@@ -60,6 +78,8 @@ static void monitoring_history_push(const uart_bms_live_data_t *data)
     if (s_history_count < MONITORING_HISTORY_CAPACITY) {
         ++s_history_count;
     }
+
+    xSemaphoreGive(s_monitoring_mutex);
 }
 
 static bool monitoring_json_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
@@ -192,19 +212,45 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
 
 static esp_err_t monitoring_prepare_snapshot(void)
 {
-    const uart_bms_live_data_t *snapshot = s_has_latest_bms ? &s_latest_bms : NULL;
+    if (s_monitoring_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Copy BMS data under mutex protection
+    uart_bms_live_data_t bms_copy = {0};
+    bool has_data = false;
+
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (s_has_latest_bms) {
+            bms_copy = s_latest_bms;
+            has_data = true;
+        }
+        xSemaphoreGive(s_monitoring_mutex);
+    } else {
+        ESP_LOGW(TAG, "Failed to acquire mutex for snapshot preparation");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    const uart_bms_live_data_t *snapshot = has_data ? &bms_copy : NULL;
     return monitoring_build_snapshot_json(snapshot, s_last_snapshot, sizeof(s_last_snapshot), &s_last_snapshot_len);
 }
 
 static void monitoring_on_bms_update(const uart_bms_live_data_t *data, void *context)
 {
     (void)context;
-    if (data == NULL) {
+    if (data == NULL || s_monitoring_mutex == NULL) {
         return;
     }
 
-    s_latest_bms = *data;
-    s_has_latest_bms = true;
+    // Update latest BMS data with mutex protection
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_latest_bms = *data;
+        s_has_latest_bms = true;
+        xSemaphoreGive(s_monitoring_mutex);
+    } else {
+        ESP_LOGW(TAG, "Failed to acquire mutex for BMS update");
+    }
+
     monitoring_history_push(data);
     history_logger_handle_sample(data);
 
@@ -221,6 +267,13 @@ void monitoring_set_event_publisher(event_bus_publish_fn_t publisher)
 
 void monitoring_init(void)
 {
+    // Initialize mutex for thread-safe access to monitoring state
+    s_monitoring_mutex = xSemaphoreCreateMutex();
+    if (s_monitoring_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to create monitoring mutex");
+        return;
+    }
+
     esp_err_t reg_err = uart_bms_register_listener(monitoring_on_bms_update, NULL);
     if (reg_err != ESP_OK) {
         ESP_LOGW(TAG, "Unable to register TinyBMS listener: %s", esp_err_to_name(reg_err));
@@ -278,8 +331,19 @@ esp_err_t monitoring_get_history_json(size_t limit, char *buffer, size_t buffer_
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (s_monitoring_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Acquire mutex for reading history data
+    if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire mutex for history read");
+        return ESP_ERR_TIMEOUT;
+    }
+
     size_t available = s_history_count;
     if (available == 0) {
+        xSemaphoreGive(s_monitoring_mutex);
         int written = snprintf(buffer, buffer_size, "{\"total\":0,\"samples\":[]}");
         if (written < 0 || (size_t)written >= buffer_size) {
             return ESP_ERR_INVALID_SIZE;
@@ -293,6 +357,7 @@ esp_err_t monitoring_get_history_json(size_t limit, char *buffer, size_t buffer_
     size_t max_samples = (limit == 0 || limit > available) ? available : limit;
     size_t offset = 0;
     if (!monitoring_json_append(buffer, buffer_size, &offset, "{\"total\":%zu,\"samples\":[", available)) {
+        xSemaphoreGive(s_monitoring_mutex);
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -312,13 +377,17 @@ esp_err_t monitoring_get_history_json(size_t limit, char *buffer, size_t buffer_
                                     entry->state_of_charge_pct,
                                     entry->state_of_health_pct,
                                     entry->average_temperature_c)) {
+            xSemaphoreGive(s_monitoring_mutex);
             return ESP_ERR_INVALID_SIZE;
         }
     }
 
     if (!monitoring_json_append(buffer, buffer_size, &offset, "]}")) {
+        xSemaphoreGive(s_monitoring_mutex);
         return ESP_ERR_INVALID_SIZE;
     }
+
+    xSemaphoreGive(s_monitoring_mutex);
 
     if (out_length != NULL) {
         *out_length = offset;
