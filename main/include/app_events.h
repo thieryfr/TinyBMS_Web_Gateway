@@ -54,6 +54,8 @@ typedef enum {
     APP_EVENT_ID_STORAGE_HISTORY_READY = 0x1400,
     /** History flash storage missing or unavailable. */
     APP_EVENT_ID_STORAGE_HISTORY_UNAVAILABLE = 0x1401,
+    /** Alert was triggered by the alert manager. */
+    APP_EVENT_ID_ALERT_TRIGGERED = 0x1500,
 } app_event_id_t;
 
 #ifdef __cplusplus
