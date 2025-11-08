@@ -1,6 +1,11 @@
 # Name,   Type, SubType, Offset,  Size,     Flags
+# Optimized for ESP32-S3 with 8MB Flash (8192 KB total)
+# Total allocated: 8156 KB (margin: 36 KB)
+# - Factory (firmware): 2048 KB (2.0 MB)
+# - SPIFFS (web assets): 3456 KB (3.375 MB) - reduced from 3.5 MB
+# - HistoryFS (logs): 2624 KB (2.563 MB) - increased from 2.5 MB
 nvs,      data, nvs,     0x9000,  0x6000,
 phy_init, data, phy,     0xf000,  0x1000,
 factory,  app,  factory, 0x10000, 2M,
-spiffs,   data, spiffs,  ,        3584K,
-historyfs,data, littlefs,,        2560K,
+spiffs,   data, spiffs,  ,        3456K,
+historyfs,data, littlefs,,        2624K,
