@@ -1,0 +1,166 @@
+<section id="tab-alerts" class="tab-panel" aria-labelledby="tab-alerts-label">
+  <div class="row g-3">
+    <!-- Active Alerts Card -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Alertes Actives</h3>
+          <div class="ms-auto">
+            <button class="btn btn-primary btn-sm" onclick="acknowledgeAllAlerts()">
+              <i class="ti ti-check-all me-1"></i>
+              Tout acquitter
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="active-alerts-container">
+            <div class="text-muted text-center py-4">Aucune alerte active</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Statistics Card -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Statistiques</h3>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <div class="text-center">
+                <div class="h1 m-0" id="stat-total-alerts">0</div>
+                <div class="text-muted">Total</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <div class="h1 m-0 text-danger" id="stat-critical">0</div>
+                <div class="text-muted">Critiques</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <div class="h1 m-0 text-warning" id="stat-warnings">0</div>
+                <div class="text-muted">Avertissements</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <div class="h1 m-0 text-info" id="stat-info">0</div>
+                <div class="text-muted">Informations</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert History Card -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Historique des Alertes</h3>
+          <div class="ms-auto">
+            <button class="btn btn-outline-secondary btn-sm" onclick="clearAlertHistory()">
+              <i class="ti ti-trash me-1"></i>
+              Effacer l'historique
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="alert-history-container">
+            <div class="text-muted text-center py-4">Aucun historique</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Configuration Card -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Configuration des Alertes</h3>
+        </div>
+        <div class="card-body">
+          <form id="alert-config-form">
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-enabled">
+                  <span class="form-check-label">Système d'alertes activé</span>
+                </label>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="config-debounce" class="form-label">Délai anti-spam (secondes)</label>
+                <input type="number" class="form-control" id="config-debounce" min="0" max="3600" value="60">
+              </div>
+            </div>
+
+            <h4 class="mt-4 mb-3">Seuils de Température</h4>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-temp-high-enabled">
+                  <span class="form-check-label">Alerte température haute</span>
+                </label>
+                <input type="number" class="form-control mt-2" id="config-temp-max" placeholder="°C" step="0.1">
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-temp-low-enabled">
+                  <span class="form-check-label">Alerte température basse</span>
+                </label>
+                <input type="number" class="form-control mt-2" id="config-temp-min" placeholder="°C" step="0.1">
+              </div>
+            </div>
+
+            <h4 class="mt-4 mb-3">Seuils de Tension</h4>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-cell-volt-high-enabled">
+                  <span class="form-check-label">Alerte tension cellule haute</span>
+                </label>
+                <input type="number" class="form-control mt-2" id="config-cell-volt-max" placeholder="mV">
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-cell-volt-low-enabled">
+                  <span class="form-check-label">Alerte tension cellule basse</span>
+                </label>
+                <input type="number" class="form-control mt-2" id="config-cell-volt-min" placeholder="mV">
+              </div>
+            </div>
+
+            <h4 class="mt-4 mb-3">Options</h4>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-monitor-events">
+                  <span class="form-check-label">Surveiller les événements TinyBMS</span>
+                </label>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="config-monitor-status">
+                  <span class="form-check-label">Surveiller les changements de statut</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <button type="submit" class="btn btn-primary">
+                <i class="ti ti-device-floppy me-1"></i>
+                Enregistrer la configuration
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="/src/components/alerts/alerts.js"></script>

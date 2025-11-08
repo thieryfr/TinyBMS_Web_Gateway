@@ -27,6 +27,8 @@
 #include "mqtt_gateway.h"
 #include "history_logger.h"
 #include "history_fs.h"
+#include "alert_manager.h"
+#include "web_server_alerts.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -62,6 +64,7 @@ static ws_client_t *s_telemetry_clients = NULL;
 static ws_client_t *s_event_clients = NULL;
 static ws_client_t *s_uart_clients = NULL;
 static ws_client_t *s_can_clients = NULL;
+static ws_client_t *s_alert_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
 
@@ -1423,6 +1426,9 @@ static void web_server_event_task(void *context)
         case APP_EVENT_ID_CAN_FRAME_DECODED:
             ws_client_list_broadcast(&s_can_clients, payload, length);
             break;
+        case APP_EVENT_ID_ALERT_TRIGGERED:
+            ws_client_list_broadcast(&s_alert_clients, payload, length);
+            break;
         default:
             break;
         }
@@ -1566,6 +1572,71 @@ void web_server_init(void)
     };
     httpd_register_uri_handler(s_httpd, &api_ota_post);
 
+    // Alert API endpoints
+    const httpd_uri_t api_alerts_config_get = {
+        .uri = "/api/alerts/config",
+        .method = HTTP_GET,
+        .handler = web_server_api_alerts_config_get_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_config_get);
+
+    const httpd_uri_t api_alerts_config_post = {
+        .uri = "/api/alerts/config",
+        .method = HTTP_POST,
+        .handler = web_server_api_alerts_config_post_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_config_post);
+
+    const httpd_uri_t api_alerts_active = {
+        .uri = "/api/alerts/active",
+        .method = HTTP_GET,
+        .handler = web_server_api_alerts_active_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_active);
+
+    const httpd_uri_t api_alerts_history = {
+        .uri = "/api/alerts/history",
+        .method = HTTP_GET,
+        .handler = web_server_api_alerts_history_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_history);
+
+    const httpd_uri_t api_alerts_ack = {
+        .uri = "/api/alerts/acknowledge",
+        .method = HTTP_POST,
+        .handler = web_server_api_alerts_acknowledge_all_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_ack);
+
+    const httpd_uri_t api_alerts_ack_id = {
+        .uri = "/api/alerts/acknowledge/*",
+        .method = HTTP_POST,
+        .handler = web_server_api_alerts_acknowledge_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_ack_id);
+
+    const httpd_uri_t api_alerts_stats = {
+        .uri = "/api/alerts/statistics",
+        .method = HTTP_GET,
+        .handler = web_server_api_alerts_statistics_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_stats);
+
+    const httpd_uri_t api_alerts_clear = {
+        .uri = "/api/alerts/history",
+        .method = HTTP_DELETE,
+        .handler = web_server_api_alerts_clear_history_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_alerts_clear);
+
     const httpd_uri_t telemetry_ws = {
         .uri = "/ws/telemetry",
         .method = HTTP_GET,
@@ -1602,6 +1673,16 @@ void web_server_init(void)
     };
     httpd_register_uri_handler(s_httpd, &can_ws);
 
+    const httpd_uri_t ws_alerts = {
+        .uri = "/ws/alerts",
+        .method = HTTP_GET,
+        .handler = web_server_ws_alerts_handler,
+        .user_ctx = NULL,
+        .is_websocket = true,
+        .handle_ws_control_frames = true,
+    };
+    httpd_register_uri_handler(s_httpd, &ws_alerts);
+
     const httpd_uri_t static_files = {
         .uri = "/*",
         .method = HTTP_GET,
@@ -1609,6 +1690,12 @@ void web_server_init(void)
         .user_ctx = NULL,
     };
     httpd_register_uri_handler(s_httpd, &static_files);
+
+    // Initialize alert manager
+    alert_manager_init();
+    if (s_event_publisher != NULL) {
+        alert_manager_set_event_publisher(s_event_publisher);
+    }
 
     s_event_subscription = event_bus_subscribe_default(NULL, NULL);
     if (s_event_subscription == NULL) {

@@ -8,6 +8,7 @@ idf_component_register(SRCS
     "can_victron/can_victron.c"
     "pgn_mapper/pgn_mapper.c"
     "web_server/web_server.c"
+    "web_server/web_server_alerts.c"
     "config_manager/config_manager.c"
     "mqtt_client/mqtt_client.c"
     "mqtt/tiny_mqtt_publisher.c"
@@ -17,6 +18,7 @@ idf_component_register(SRCS
     "monitoring/history_logger.c"
     "storage/nvs_energy.c"
     "storage/history_fs.c"
+    "alert_manager/alert_manager.c"
     INCLUDE_DIRS "include"
                  "event_bus"
                  "status_led"
@@ -32,4 +34,5 @@ idf_component_register(SRCS
                  "wifi"
                  "monitoring"
                  "storage"
+                 "alert_manager"
     REQUIRES cjson)
