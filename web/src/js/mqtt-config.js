@@ -2,6 +2,8 @@ const MQTT_CONFIG_ENDPOINT = '/api/mqtt/config';
 const MQTT_STATUS_ENDPOINT = '/api/mqtt/status';
 const MQTT_TEST_ENDPOINT = '/api/mqtt/test';
 const DEFAULT_NETWORK_ERROR_MESSAGE = 'Impossible de contacter le serveur.';
+const SYSTEM_RUNTIME_ENDPOINTS = ['/api/monitoring/runtime', '/api/metrics/runtime'];
+const MQTT_SUCCESS_EVENTS = new Set(['connected', 'published', 'subscribed', 'data']);
 
 const NUMERIC_VALIDATION_RULES = {
   port: {
@@ -54,6 +56,32 @@ let networkErrorBanner = null;
 let networkErrorTimeoutId = null;
 
 let originalSnapshot = null;
+
+function formatDateTime(timestampMs) {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+    return null;
+  }
+
+  try {
+    return new Date(timestampMs).toLocaleString('fr-FR');
+  } catch (err) {
+    return null;
+  }
+}
+
+function updateFirmwareSummary(value) {
+  const el = document.getElementById('mqtt-summary-firmware');
+  if (!el) return;
+
+  const text = typeof value === 'string' && value.trim().length > 0 ? value.trim() : '--';
+  el.textContent = text;
+
+  if (text === '--') {
+    el.removeAttribute('title');
+  } else {
+    el.setAttribute('title', text);
+  }
+}
 
 function getNetworkBannerContainer() {
   return document.querySelector('.page-body .container-xl') || document.body;
@@ -513,12 +541,30 @@ async function fetchMqttConfig() {
 }
 
 function setStatusLoading(loading) {
+  const containers = [];
   const body = document.getElementById('mqtt-status-body');
-  if (!body) return;
-  body.classList.toggle('placeholder-wave', loading);
-  body.setAttribute('aria-busy', loading ? 'true' : 'false');
+  if (body) {
+    containers.push(body);
+    body.setAttribute('aria-busy', loading ? 'true' : 'false');
+  }
 
-  const placeholders = body.querySelectorAll('[data-placeholder]');
+  const summary = document.getElementById('mqtt-status-summary');
+  if (summary) {
+    containers.push(summary);
+    summary.setAttribute('aria-busy', loading ? 'true' : 'false');
+  }
+
+  if (!containers.length) return;
+
+  containers.forEach((container) => {
+    container.classList.toggle('placeholder-wave', loading);
+  });
+
+  const placeholders = [];
+  containers.forEach((container) => {
+    placeholders.push(...container.querySelectorAll('[data-placeholder]'));
+  });
+
   placeholders.forEach((el) => {
     if (loading) {
       if (!el.dataset.placeholderStored) {
@@ -538,10 +584,38 @@ function setStatusLoading(loading) {
 function updateMqttStatus(status, error) {
   const badge = document.getElementById('mqtt-connection-state');
   const helper = document.getElementById('mqtt-last-error');
-  if (!badge || !helper) return;
+  const summaryBadge = document.getElementById('mqtt-summary-state');
+  const lastSuccessEl = document.getElementById('mqtt-summary-last-success');
 
-  badge.className = 'badge status-badge';
-  helper.classList.remove('text-danger');
+  if (!badge && !helper && !summaryBadge && !lastSuccessEl) return;
+
+  const applyBadge = (element, modifier, text) => {
+    if (!element) return;
+    element.className = 'badge status-badge';
+    if (modifier) {
+      element.classList.add(modifier);
+    }
+    element.textContent = text;
+  };
+
+  const setLastSuccess = (timestampMs) => {
+    if (!lastSuccessEl) return;
+
+    const formatted = formatDateTime(Number(timestampMs));
+    if (formatted) {
+      lastSuccessEl.textContent = formatted;
+      try {
+        lastSuccessEl.setAttribute('title', new Date(Number(timestampMs)).toISOString());
+      } catch (err) {
+        lastSuccessEl.removeAttribute('title');
+      }
+    } else {
+      lastSuccessEl.textContent = '--';
+      lastSuccessEl.removeAttribute('title');
+    }
+  };
+
+  if (helper) helper.classList.remove('text-danger');
 
   const set = (id, value) => {
     const el = document.getElementById(`mqtt-${id}`);
@@ -564,34 +638,45 @@ function updateMqttStatus(status, error) {
 
   if (error) {
     reset();
-    badge.textContent = 'Erreur';
-    badge.classList.add('status-badge--error');
-    helper.textContent = error.message || 'Statut indisponible';
-    helper.classList.add('text-danger');
+    applyBadge(badge, 'status-badge--error', 'Erreur');
+    applyBadge(summaryBadge, 'status-badge--error', 'Erreur');
+    if (helper) {
+      helper.textContent = error.message || 'Statut indisponible';
+      helper.classList.add('text-danger');
+    }
+    setLastSuccess(null);
     return;
   }
 
   if (!status) {
     reset();
-    badge.textContent = 'Inconnu';
-    badge.classList.add('status-badge--disconnected');
-    helper.textContent = 'Aucune donnée';
+    applyBadge(badge, 'status-badge--disconnected', 'Inconnu');
+    applyBadge(summaryBadge, 'status-badge--disconnected', 'Inconnu');
+    if (helper) helper.textContent = 'Aucune donnée';
+    setLastSuccess(null);
     return;
   }
 
+  let modifier;
+  let text;
   if (status.connected) {
-    badge.textContent = 'Connecté';
-    badge.classList.add('status-badge--connected');
+    modifier = 'status-badge--connected';
+    text = 'Connecté';
   } else if (status.client_started) {
-    badge.textContent = 'Déconnecté';
-    badge.classList.add('status-badge--disconnected');
+    modifier = 'status-badge--disconnected';
+    text = 'Déconnecté';
   } else {
-    badge.textContent = 'Arrêté';
-    badge.classList.add('status-badge--error');
+    modifier = 'status-badge--error';
+    text = 'Arrêté';
   }
 
-  helper.textContent = status.last_error ? status.last_error : 'Aucune erreur récente';
-  if (status.last_error) helper.classList.add('text-danger');
+  applyBadge(badge, modifier, text);
+  applyBadge(summaryBadge, modifier, text);
+
+  if (helper) {
+    helper.textContent = status.last_error ? status.last_error : 'Aucune erreur récente';
+    if (status.last_error) helper.classList.add('text-danger');
+  }
 
   set('client-started', status.client_started ? 'Actif' : 'Arrêté');
   set('wifi-state', status.wifi_connected ? 'Connecté' : 'Déconnecté');
@@ -601,7 +686,23 @@ function updateMqttStatus(status, error) {
   set('last-event', status.last_event || '--');
 
   const ts = Number(status.last_event_timestamp_ms);
-  set('last-event-time', Number.isFinite(ts) && ts > 0 ? new Date(ts).toLocaleString() : '--');
+  const formattedEventTime = formatDateTime(ts);
+  set('last-event-time', formattedEventTime ?? '--');
+
+  let successTimestamp = Number(status.last_success_timestamp_ms);
+  if (!Number.isFinite(successTimestamp) || successTimestamp <= 0) {
+    successTimestamp = Number(status.last_publish_success_ms);
+  }
+
+  if (!Number.isFinite(successTimestamp) || successTimestamp <= 0) {
+    const eventTimestamp = Number(status.last_event_timestamp_ms);
+    const eventName = typeof status.last_event === 'string' ? status.last_event.toLowerCase() : '';
+    if (Number.isFinite(eventTimestamp) && eventTimestamp > 0 && MQTT_SUCCESS_EVENTS.has(eventName)) {
+      successTimestamp = eventTimestamp;
+    }
+  }
+
+  setLastSuccess(Number.isFinite(successTimestamp) && successTimestamp > 0 ? successTimestamp : null);
 }
 
 async function fetchMqttStatus() {
@@ -622,6 +723,40 @@ async function fetchMqttStatus() {
     setStatusLoading(false);
     if (refresh) refresh.disabled = false;
   }
+}
+
+async function fetchRuntimeSummary() {
+  const target = document.getElementById('mqtt-summary-firmware');
+  if (!target) {
+    return null;
+  }
+
+  updateFirmwareSummary('--');
+
+  for (const endpoint of SYSTEM_RUNTIME_ENDPOINTS) {
+    try {
+      const response = await fetch(endpoint, { cache: 'no-store' });
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = await response.json();
+      const firmware =
+        typeof payload?.firmware === 'string'
+          ? payload.firmware
+          : typeof payload?.runtime?.firmware === 'string'
+            ? payload.runtime.firmware
+            : null;
+
+      updateFirmwareSummary(firmware);
+      return payload;
+    } catch (err) {
+      // Ignore and try the next endpoint
+    }
+  }
+
+  updateFirmwareSummary(null);
+  return null;
 }
 
 async function handleSubmit(e) {
@@ -669,7 +804,7 @@ async function handleSubmit(e) {
 
     if (!res.ok) throw new Error((await res.text()) || 'Update failed');
 
-    await Promise.all([fetchMqttConfig(), fetchMqttStatus()]);
+    await Promise.all([fetchMqttConfig(), fetchMqttStatus(), fetchRuntimeSummary()]);
     clearNetworkError();
     displayMessage('Configuration mise à jour avec succès !', false);
   } catch (err) {
@@ -744,7 +879,12 @@ function setupEventListeners() {
   if (scheme) scheme.addEventListener('change', updateTlsVisibility);
 
   const refresh = document.getElementById('mqtt-refresh');
-  if (refresh) refresh.addEventListener('click', fetchMqttStatus);
+  if (refresh) {
+    refresh.addEventListener('click', () => {
+      fetchMqttStatus();
+      fetchRuntimeSummary();
+    });
+  }
 
   const reset = document.getElementById('mqtt-reset');
   if (reset) reset.addEventListener('click', handleResetClick);
@@ -767,7 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return Promise.reject(error);
     });
 
-  Promise.all([configPromise, fetchMqttStatus()]).catch(() => {});
+  Promise.all([configPromise, fetchMqttStatus(), fetchRuntimeSummary()]).catch(() => {});
 });
 
 export {};

@@ -18,20 +18,42 @@
       <!-- Header simple -->
       <header class="navbar navbar-expand-md navbar-dark app-header">
         <div class="container-xl">
-          <div class="app-logo">
-            <div class="app-logo-icon">
-              <i class="ti ti-settings"></i>
+          <div class="d-flex flex-column gap-3 w-100">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+              <div class="app-logo">
+                <div class="app-logo-icon">
+                  <i class="ti ti-settings"></i>
+                </div>
+                <div class="app-logo-text">
+                  <div class="app-logo-title">Configuration MQTT</div>
+                  <div class="app-logo-subtitle">TinyBMS Gateway</div>
+                </div>
+              </div>
+              <div class="ms-auto">
+                <a href="/" class="btn btn-outline-primary">
+                  <i class="ti ti-arrow-left me-2"></i>
+                  Retour au Dashboard
+                </a>
+              </div>
             </div>
-            <div class="app-logo-text">
-              <div class="app-logo-title">Configuration MQTT</div>
-              <div class="app-logo-subtitle">TinyBMS Gateway</div>
+            <div
+              id="mqtt-status-summary"
+              class="d-flex flex-wrap align-items-center gap-3"
+              aria-live="polite"
+            >
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-secondary text-uppercase small fw-semibold">Statut</span>
+                <span id="mqtt-summary-state" class="badge status-badge" data-placeholder>--</span>
+              </div>
+              <div class="d-flex flex-column">
+                <span class="text-secondary text-uppercase small fw-semibold">Dernier succès</span>
+                <span id="mqtt-summary-last-success" class="fw-semibold" data-placeholder>--</span>
+              </div>
+              <div class="d-flex flex-column">
+                <span class="text-secondary text-uppercase small fw-semibold">Firmware</span>
+                <span id="mqtt-summary-firmware" class="fw-semibold" data-placeholder>--</span>
+              </div>
             </div>
-          </div>
-          <div class="ms-auto">
-            <a href="/" class="btn btn-outline-primary">
-              <i class="ti ti-arrow-left me-2"></i>
-              Retour au Dashboard
-            </a>
           </div>
         </div>
       </header>
