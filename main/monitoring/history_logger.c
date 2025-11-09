@@ -514,6 +514,13 @@ void history_logger_handle_sample(const uart_bms_live_data_t *sample)
 #endif
 }
 
+/**
+ * @brief Résoudre un nom de fichier en chemin absolu sécurisé.
+ *
+ * SÉCURITÉ CRITIQUE : Cette fonction valide les noms de fichiers pour empêcher
+ * les attaques par traversée de répertoire. TOUS les accès fichiers DOIVENT
+ * passer par cette fonction. Ne jamais construire de chemins manuellement.
+ */
 esp_err_t history_logger_resolve_path(const char *filename, char *buffer, size_t buffer_size)
 {
 #if !CONFIG_TINYBMS_HISTORY_ENABLE
@@ -526,12 +533,14 @@ esp_err_t history_logger_resolve_path(const char *filename, char *buffer, size_t
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Bloquer les séparateurs de chemin pour empêcher la traversée
     for (const char *ptr = filename; *ptr != '\0'; ++ptr) {
         if (*ptr == '/' || *ptr == '\\') {
             return ESP_ERR_INVALID_ARG;
         }
     }
 
+    // Bloquer les séquences ".." pour empêcher la remontée de répertoire
     if (strstr(filename, "..") != NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -569,6 +578,13 @@ static bool history_logger_is_history_file(const struct dirent *entry)
     return strncmp(name, "history-", 8) == 0;
 }
 
+/**
+ * @brief Lister tous les fichiers d'historique.
+ *
+ * NOTE PERFORMANCE : Cette fonction recalcule la liste complète à chaque appel
+ * (lecture du répertoire + stat + tri). Avec beaucoup d'archives, cela peut
+ * être coûteux. Éviter d'appeler fréquemment depuis des boucles.
+ */
 esp_err_t history_logger_list_files(history_logger_file_info_t **out_files,
                                     size_t *out_count,
                                     bool *out_mounted)
