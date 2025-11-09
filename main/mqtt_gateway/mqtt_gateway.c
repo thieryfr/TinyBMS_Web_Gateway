@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "app_events.h"
+#include "alert_manager.h"
 #include "can_publisher.h"
 #include "config_manager.h"
 #include "event_bus.h"
@@ -61,6 +62,7 @@ typedef struct {
     char can_decoded_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     char can_ready_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     char config_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char alerts_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
 } mqtt_gateway_ctx_t;
 
 static mqtt_gateway_ctx_t s_gateway = {0};
@@ -139,6 +141,7 @@ static void mqtt_gateway_format_topics(const char *device_id)
     (void)snprintf(s_gateway.can_decoded_topic, sizeof(s_gateway.can_decoded_topic), MQTT_TOPIC_FMT_CAN_STREAM, device_id, "decoded");
     (void)snprintf(s_gateway.can_ready_topic, sizeof(s_gateway.can_ready_topic), MQTT_TOPIC_FMT_CAN_STREAM, device_id, "ready");
     (void)snprintf(s_gateway.config_topic, sizeof(s_gateway.config_topic), MQTT_TOPIC_FMT_CONFIG, device_id);
+    (void)snprintf(s_gateway.alerts_topic, sizeof(s_gateway.alerts_topic), "%s/alerts", device_id);
 }
 
 static size_t mqtt_gateway_string_length(const void *payload, size_t length)
@@ -304,6 +307,30 @@ static void mqtt_gateway_publish_can_ready(const can_publisher_frame_t *frame)
                          MQTT_TOPIC_CAN_QOS,
                          MQTT_TOPIC_CAN_RETAIN);
 }
+
+static void mqtt_gateway_publish_alert(const event_bus_event_t *event)
+{
+    if (event == NULL || event->payload == NULL) {
+        return;
+    }
+
+    // Parse alert entry from JSON payload
+    const char *json_payload = (const char *)event->payload;
+    size_t length = mqtt_gateway_string_length(event->payload, event->payload_size);
+
+    if (length == 0U || length > 512U) {
+        return;
+    }
+
+    // Forward the JSON payload directly to MQTT
+    // The payload is already in JSON format from alert_manager
+    mqtt_gateway_publish(s_gateway.alerts_topic,
+                         json_payload,
+                         length,
+                         1,  // QoS 1 for alerts (at least once delivery)
+                         false);  // No retain for alerts
+}
+
 static void mqtt_gateway_load_topics(void)
 {
     const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
@@ -314,6 +341,7 @@ static void mqtt_gateway_load_topics(void)
     char fallback_can_raw[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     char fallback_can_decoded[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     char fallback_can_ready[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+    char fallback_alerts[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
 
     (void)snprintf(fallback_status, sizeof(fallback_status), MQTT_TOPIC_FMT_STATUS, APP_DEVICE_NAME);
     (void)snprintf(fallback_metrics, sizeof(fallback_metrics), MQTT_TOPIC_FMT_METRICS, APP_DEVICE_NAME);
@@ -321,6 +349,7 @@ static void mqtt_gateway_load_topics(void)
     (void)snprintf(fallback_can_raw, sizeof(fallback_can_raw), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "raw");
     (void)snprintf(fallback_can_decoded, sizeof(fallback_can_decoded), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "decoded");
     (void)snprintf(fallback_can_ready, sizeof(fallback_can_ready), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "ready");
+    (void)snprintf(fallback_alerts, sizeof(fallback_alerts), "%s/alerts", APP_DEVICE_NAME);
 
     if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
         return;
@@ -420,6 +449,10 @@ static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *c
                            sizeof(s_gateway.can_ready_topic),
                            topics != NULL ? topics->can_ready : NULL,
                            fallback_can_ready);
+    mqtt_gateway_set_topic(s_gateway.alerts_topic,
+                           sizeof(s_gateway.alerts_topic),
+                           NULL,
+                           fallback_alerts);
 
     mqtt_gateway_unlock_ctx();
 }
@@ -570,6 +603,9 @@ static void mqtt_gateway_handle_event(const event_bus_event_t *event)
         case APP_EVENT_ID_WIFI_STA_DISCONNECTED:
         case APP_EVENT_ID_WIFI_STA_LOST_IP:
             mqtt_gateway_handle_wifi_event((app_event_id_t)event->id);
+            break;
+        case APP_EVENT_ID_ALERT_TRIGGERED:
+            mqtt_gateway_publish_alert(event);
             break;
         default:
             break;
