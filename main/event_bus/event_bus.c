@@ -173,18 +173,29 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
     }
 
     bool success = true;
-    (void)timeout;
     event_bus_subscription_t *subscriber = s_subscribers;
     while (subscriber != NULL) {
-        if (xQueueSend(subscriber->queue, event, 0) != pdTRUE) {
+        if (xQueueSend(subscriber->queue, event, timeout) != pdTRUE) {
             success = false;
             subscriber->dropped_events++;
+
+            // Log at power-of-2 milestones for visibility without flooding
             if ((subscriber->dropped_events & (subscriber->dropped_events - 1U)) == 0U) {
-                ESP_LOGW(TAG,
-                         "Dropped event 0x%08" PRIx32 " for subscriber %p (%" PRIu32 " total)",
-                         (uint32_t)event->id,
-                         (void *)subscriber,
-                         subscriber->dropped_events);
+                // Critical threshold: escalate to ERROR level
+                if (subscriber->dropped_events >= 256U) {
+                    ESP_LOGE(TAG,
+                             "CRITICAL: Subscriber %p queue saturated - event 0x%08" PRIx32 " dropped (%" PRIu32 " total drops). "
+                             "Consumer may be stalled or queue undersized.",
+                             (void *)subscriber,
+                             (uint32_t)event->id,
+                             subscriber->dropped_events);
+                } else {
+                    ESP_LOGW(TAG,
+                             "Event 0x%08" PRIx32 " dropped for subscriber %p (%" PRIu32 " total drops) - queue full after timeout",
+                             (uint32_t)event->id,
+                             (void *)subscriber,
+                             subscriber->dropped_events);
+                }
             }
         }
         subscriber = subscriber->next;
@@ -218,4 +229,12 @@ bool event_bus_dispatch(event_bus_subscription_handle_t handle, TickType_t timeo
 
     handle->callback(&event, handle->context);
     return true;
+}
+
+uint32_t event_bus_get_dropped_events(event_bus_subscription_handle_t handle)
+{
+    if (handle == NULL) {
+        return 0;
+    }
+    return handle->dropped_events;
 }
