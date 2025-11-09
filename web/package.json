@@ -1,12 +1,31 @@
 {
   "name": "tinybms-web-gateway",
-  "version": "0.1.0",
-  "description": "Frontend assets for the TinyBMS Web Gateway dashboard.",
+  "version": "3.0.0",
+  "description": "TinyBMS Gateway Web Interface - Frontend assets with automated testing",
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "echo \"No lint command configured\"",
-    "test": "node --test"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:verbose": "node --experimental-vm-modules node_modules/jest/bin/jest.js --verbose",
+    "dev": "http-server -p 8080 -c-1",
+    "lint": "eslint src/js/**/*.js"
   },
-  "devDependencies": {}
+  "keywords": [
+    "tinybms",
+    "esp32",
+    "battery-management",
+    "iot",
+    "web-interface"
+  ],
+  "author": "TinyBMS Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "eslint": "^8.56.0",
+    "http-server": "^14.1.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  }
 }
