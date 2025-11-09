@@ -1613,6 +1613,7 @@ static void web_server_event_task(void *context)
         case APP_EVENT_ID_UI_NOTIFICATION:
         case APP_EVENT_ID_CONFIG_UPDATED:
         case APP_EVENT_ID_OTA_UPLOAD_READY:
+        case APP_EVENT_ID_MONITORING_DIAGNOSTICS:
             ws_client_list_broadcast(&s_event_clients, payload, length);
             break;
         case APP_EVENT_ID_UART_FRAME_RAW:
