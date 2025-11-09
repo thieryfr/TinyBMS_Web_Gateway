@@ -9,6 +9,18 @@ import { ConfigRegistersManager } from '/src/components/configuration/config-reg
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
 
+/**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML-safe text
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const UART_STATUS_POLL_INTERVAL_MS = 5000;
 const CAN_STATUS_POLL_INTERVAL_MS = 5000;
@@ -731,7 +743,7 @@ function updateMqttDashboardTopics(status) {
             const lastUpdate = new Date(data.lastUpdate).toLocaleTimeString();
             return `
                 <tr>
-                    <td><code class="text-muted">${name}</code></td>
+                    <td><code class="text-muted">${escapeHtml(name)}</code></td>
                     <td class="text-end">${data.count.toLocaleString()}</td>
                     <td class="text-end text-muted small">${lastUpdate}</td>
                 </tr>
@@ -764,7 +776,7 @@ function updateMqttDashboardEvents() {
                     <div class="d-flex align-items-center gap-2">
                         <span class="${iconClass}">${icon}</span>
                         <div class="flex-grow-1">
-                            <div class="text-truncate">${event.message}</div>
+                            <div class="text-truncate">${escapeHtml(event.message)}</div>
                             <small class="text-muted">${time}</small>
                         </div>
                     </div>
@@ -1794,13 +1806,36 @@ async function setupConfigTab() {
 
 // === WEB SOCKETS ===
 
+// Track active WebSocket connections
+const activeWebSockets = new Map();
+const reconnectTimeouts = new Map();
+let shouldReconnectWebSockets = true;
+
 function connectWebSocket(path, onMessage) {
+    // Close existing WebSocket for this path if any
+    if (activeWebSockets.has(path)) {
+        const existingWs = activeWebSockets.get(path);
+        try {
+            existingWs.close();
+        } catch (e) {
+            console.warn(`[WebSocket ${path}] Error closing previous connection:`, e);
+        }
+        activeWebSockets.delete(path);
+    }
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeouts.has(path)) {
+        clearTimeout(reconnectTimeouts.get(path));
+        reconnectTimeouts.delete(path);
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${protocol}//${window.location.host}${path}`;
 
     console.log(`[WebSocket] Connecting to ${url}...`);
 
     const ws = new WebSocket(url);
+    activeWebSockets.set(path, ws);
 
     ws.onopen = () => {
         console.log(`[WebSocket] Connected to ${path}`);
@@ -1820,11 +1855,42 @@ function connectWebSocket(path, onMessage) {
     };
 
     ws.onclose = () => {
-        console.log(`[WebSocket ${path}] Disconnected. Reconnecting in 3s...`);
-        setTimeout(() => connectWebSocket(path, onMessage), 3000);
+        console.log(`[WebSocket ${path}] Disconnected`);
+        activeWebSockets.delete(path);
+
+        // Only reconnect if we should
+        if (shouldReconnectWebSockets) {
+            console.log(`[WebSocket ${path}] Reconnecting in 3s...`);
+            const timeoutId = setTimeout(() => {
+                reconnectTimeouts.delete(path);
+                connectWebSocket(path, onMessage);
+            }, 3000);
+            reconnectTimeouts.set(path, timeoutId);
+        }
     };
 
     return ws;
+}
+
+function disconnectAllWebSockets() {
+    shouldReconnectWebSockets = false;
+
+    // Clear all reconnect timeouts
+    reconnectTimeouts.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+    });
+    reconnectTimeouts.clear();
+
+    // Close all active WebSockets
+    activeWebSockets.forEach((ws, path) => {
+        try {
+            console.log(`[WebSocket] Closing ${path}...`);
+            ws.close();
+        } catch (e) {
+            console.warn(`[WebSocket ${path}] Error closing:`, e);
+        }
+    });
+    activeWebSockets.clear();
 }
 
 function handleTelemetryMessage(data) {
@@ -2302,4 +2368,5 @@ window.addEventListener('beforeunload', () => {
     stopMqttStatusPolling();
     stopUartStatusPolling();
     stopCanStatusPolling();
+    disconnectAllWebSockets();
 });

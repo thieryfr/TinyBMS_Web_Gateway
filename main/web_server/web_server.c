@@ -63,6 +63,25 @@ typedef struct ws_client {
     struct ws_client *next;
 } ws_client_t;
 
+/**
+ * Free all clients in a WebSocket client list
+ * @param list Pointer to the list head pointer
+ */
+static void ws_client_list_free(ws_client_t **list)
+{
+    if (list == NULL) {
+        return;
+    }
+
+    ws_client_t *current = *list;
+    while (current != NULL) {
+        ws_client_t *next = current->next;
+        free(current);
+        current = next;
+    }
+    *list = NULL;
+}
+
 static const char *TAG = "web_server";
 
 static const char *web_server_twai_state_to_string(twai_state_t state)
@@ -92,6 +111,42 @@ static ws_client_t *s_alert_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
 static volatile bool s_event_task_should_stop = false;
+
+/**
+ * Set security headers on HTTP response to prevent common web vulnerabilities
+ * @param req HTTP request handle
+ */
+static void web_server_set_security_headers(httpd_req_t *req)
+{
+    // Content Security Policy - restrict resource loading to prevent XSS
+    httpd_resp_set_hdr(req, "Content-Security-Policy",
+                      "default-src 'self'; "
+                      "script-src 'self' 'unsafe-inline'; "
+                      "style-src 'self' 'unsafe-inline'; "
+                      "img-src 'self' data:; "
+                      "connect-src 'self' ws: wss:; "
+                      "font-src 'self'; "
+                      "object-src 'none'; "
+                      "base-uri 'self'; "
+                      "form-action 'self'");
+
+    // Prevent clickjacking attacks
+    httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
+
+    // Prevent MIME sniffing
+    httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
+
+    // Enable XSS protection in older browsers
+    httpd_resp_set_hdr(req, "X-XSS-Protection", "1; mode=block");
+
+    // Referrer policy - don't leak URLs
+    httpd_resp_set_hdr(req, "Referrer-Policy", "strict-origin-when-cross-origin");
+
+    // Permissions policy - disable unnecessary features
+    httpd_resp_set_hdr(req, "Permissions-Policy",
+                      "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
+                      "magnetometer=(), microphone=(), payment=(), usb=()");
+}
 
 static bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t size)
 {
@@ -125,6 +180,7 @@ static esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size
         return ESP_ERR_INVALID_ARG;
     }
 
+    web_server_set_security_headers(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, buffer, length);
@@ -415,6 +471,7 @@ static esp_err_t web_server_send_file(httpd_req_t *req, const char *path)
         return ESP_FAIL;
     }
 
+    web_server_set_security_headers(req);
     httpd_resp_set_type(req, web_server_content_type(path));
     httpd_resp_set_hdr(req, "Cache-Control", "max-age=60, public");
 
@@ -743,7 +800,7 @@ static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
     size_t received = 0;
     while (received < req->content_len) {
         int ret = httpd_req_recv(req, buffer + received, req->content_len - received);
-        if (ret < 0) {
+        if (ret <= 0) {
             if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
                 continue;
             }
@@ -780,6 +837,9 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
     uint16_t port = 0U;
     web_server_parse_mqtt_uri(config->broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
 
+    // Mask password for security - never send actual password in GET response
+    const char *masked_password = (config->password && config->password[0] != '\0') ? "********" : "";
+
     char buffer[WEB_SERVER_MQTT_JSON_SIZE];
     int written = snprintf(buffer,
                            sizeof(buffer),
@@ -793,7 +853,7 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
                            host,
                            (unsigned)port,
                            config->username,
-                           config->password,
+                           masked_password,
                            config->client_cert_path,
                            config->ca_cert_path,
                            config->verify_hostname ? "true" : "false",
@@ -1429,7 +1489,7 @@ static esp_err_t web_server_api_registers_post_handler(httpd_req_t *req)
     size_t received = 0;
     while (received < req->content_len) {
         int ret = httpd_req_recv(req, buffer + received, req->content_len - received);
-        if (ret < 0) {
+        if (ret <= 0) {
             if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
                 continue;
             }
@@ -1660,9 +1720,13 @@ static esp_err_t web_server_can_ws_handler(httpd_req_t *req)
 
 static void web_server_event_task(void *context)
 {
-    (void)context;
+    TaskHandle_t parent_task = (TaskHandle_t)context;
+
     if (s_event_subscription == NULL) {
         s_event_task_handle = NULL;
+        if (parent_task != NULL) {
+            xTaskNotifyGive(parent_task);
+        }
         vTaskDelete(NULL);
         return;
     }
@@ -1709,6 +1773,12 @@ static void web_server_event_task(void *context)
 
     ESP_LOGI(TAG, "Event task shutting down cleanly");
     s_event_task_handle = NULL;
+
+    // Notify parent task that we're done
+    if (parent_task != NULL) {
+        xTaskNotifyGive(parent_task);
+    }
+
     vTaskDelete(NULL);
 }
 
@@ -2026,7 +2096,9 @@ void web_server_init(void)
         return;
     }
 
-    if (xTaskCreate(web_server_event_task, "ws_event", 4096, NULL, 5, &s_event_task_handle) != pdPASS) {
+    // Pass current task handle so event task can notify us when it exits
+    TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
+    if (xTaskCreate(web_server_event_task, "ws_event", 4096, (void *)current_task, 5, &s_event_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to start event dispatcher task");
     }
 }
@@ -2038,15 +2110,33 @@ void web_server_deinit(void)
     // Signal event task to exit
     s_event_task_should_stop = true;
 
-    // Stop HTTP server
+    // Wait for event task to exit cleanly (max 5 seconds)
+    if (s_event_task_handle != NULL) {
+        ESP_LOGI(TAG, "Waiting for event task to exit...");
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000)) == 0) {
+            ESP_LOGW(TAG, "Event task did not exit within timeout");
+        } else {
+            ESP_LOGI(TAG, "Event task exited cleanly");
+        }
+    }
+
+    // Now safe to stop HTTP server
     if (s_httpd != NULL) {
         httpd_stop(s_httpd);
         s_httpd = NULL;
         ESP_LOGI(TAG, "HTTP server stopped");
     }
 
-    // Give task time to exit cleanly
-    vTaskDelay(pdMS_TO_TICKS(200));
+    // Free all WebSocket client lists
+    if (s_ws_mutex != NULL) {
+        xSemaphoreTake(s_ws_mutex, portMAX_DELAY);
+        ws_client_list_free(&s_telemetry_clients);
+        ws_client_list_free(&s_event_clients);
+        ws_client_list_free(&s_uart_clients);
+        ws_client_list_free(&s_can_clients);
+        ws_client_list_free(&s_alert_clients);
+        xSemaphoreGive(s_ws_mutex);
+    }
 
     // Unsubscribe from event bus
     if (s_event_subscription != NULL) {
@@ -2070,10 +2160,5 @@ void web_server_deinit(void)
     s_event_task_handle = NULL;
     s_event_task_should_stop = false;
     s_event_publisher = NULL;
-    s_telemetry_clients = NULL;
-    s_event_clients = NULL;
-    s_uart_clients = NULL;
-    s_can_clients = NULL;
-    s_alert_clients = NULL;
 
     ESP_LOGI(TAG, "Web server deinitialized");
