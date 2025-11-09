@@ -32,6 +32,110 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function resolveFrameTimestamp(frame) {
+  if (!frame || typeof frame !== 'object') {
+    return Number.NaN;
+  }
+
+  const timestampMs = Number(frame.timestamp_ms ?? frame.timestampMs ?? frame.time_ms);
+  if (Number.isFinite(timestampMs)) {
+    return timestampMs;
+  }
+
+  const timestamp = Number(frame.timestamp ?? frame.time);
+  if (Number.isFinite(timestamp)) {
+    return timestamp;
+  }
+
+  if (typeof frame.timestamp_iso === 'string' && frame.timestamp_iso) {
+    const parsed = Date.parse(frame.timestamp_iso);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return Number.NaN;
+}
+
+function resolveFrameLength(frame) {
+  if (!frame || typeof frame !== 'object') {
+    return 0;
+  }
+
+  const direct = Number(frame.length ?? frame.dlc ?? frame.payload_length);
+  if (Number.isFinite(direct) && direct >= 0) {
+    return direct;
+  }
+
+  if (Array.isArray(frame.data)) {
+    return frame.data.length;
+  }
+
+  if (Array.isArray(frame.bytes)) {
+    return frame.bytes.length;
+  }
+
+  const payload = frame.data ?? frame.payload ?? frame.raw;
+  if (typeof payload === 'string') {
+    const sanitized = payload.trim().replace(/^0x/i, '').replace(/\s+/g, '');
+    if (sanitized.length === 0) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(sanitized.length / 2));
+  }
+
+  return 0;
+}
+
+export function estimateCanBusOccupancy(frames, { bitrate = 250000, windowSeconds = 60 } = {}) {
+  const safeBitrate = Number.isFinite(bitrate) && bitrate > 0 ? bitrate : 250000;
+  const safeWindow = Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds : 60;
+
+  if (!Array.isArray(frames) || frames.length === 0) {
+    return {
+      occupancyPct: 0,
+      sampleCount: 0,
+      windowMs: safeWindow * 1000,
+      bitrate: safeBitrate,
+      totalBits: 0,
+    };
+  }
+
+  const now = Date.now();
+  const cutoff = now - safeWindow * 1000;
+  let totalBits = 0;
+  let sampleCount = 0;
+
+  frames.forEach((frame) => {
+    const timestamp = resolveFrameTimestamp(frame);
+    if (!Number.isFinite(timestamp) || timestamp < cutoff) {
+      return;
+    }
+
+    const bitLength = Number(frame.bit_length ?? frame.bitLength);
+    if (Number.isFinite(bitLength) && bitLength > 0) {
+      totalBits += bitLength;
+    } else {
+      const payloadBytes = resolveFrameLength(frame);
+      const estimatedBits = 47 + Math.max(0, payloadBytes) * 8;
+      totalBits += estimatedBits;
+    }
+    sampleCount += 1;
+  });
+
+  const capacity = safeBitrate * safeWindow;
+  const rawOccupancy = capacity > 0 ? (totalBits / capacity) * 100 : 0;
+  const occupancyPct = clamp(Number.isFinite(rawOccupancy) ? Number(rawOccupancy.toFixed(2)) : 0, 0, 100);
+
+  return {
+    occupancyPct,
+    sampleCount,
+    windowMs: safeWindow * 1000,
+    bitrate: safeBitrate,
+    totalBits,
+  };
+}
+
 function buildBucketContext(windowSeconds) {
   const safeWindow = Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds : 300;
   const bucketCount = Math.max(4, Math.min(DEFAULT_BUCKET_COUNT, safeWindow));

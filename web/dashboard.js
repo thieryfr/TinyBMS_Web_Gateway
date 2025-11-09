@@ -2,7 +2,7 @@
 import { BatteryRealtimeCharts } from '/src/js/charts/batteryCharts.js';
 import { EnergyCharts } from '/src/js/charts/energyCharts.js';
 import { UartCharts, UartTrafficChart, UartCommandDistributionChart } from '/src/js/charts/uartCharts.js';
-import { CanCharts } from '/src/js/charts/canCharts.js';
+import { CanCharts, estimateCanBusOccupancy } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
@@ -11,6 +11,7 @@ import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/cha
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const UART_STATUS_POLL_INTERVAL_MS = 5000;
+const CAN_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
 const MAX_STORED_FRAMES = 300;
 
@@ -55,6 +56,14 @@ const state = {
         commandStats: new Map(),
         errorStats: new Map(),
         previousStats: { frames: 0, bytes: 0, decoded: 0, errors: 0 },
+        lastUpdate: null,
+        lastStatus: null,
+    },
+    canDashboard: {
+        statusInterval: null,
+        events: [],
+        errorStats: new Map(),
+        previousStats: { txFrames: 0, rxFrames: 0, txBytes: 0, rxBytes: 0, initialized: false },
         lastUpdate: null,
         lastStatus: null,
     },
@@ -567,6 +576,14 @@ async function fetchUartStatus() {
     if (!res.ok) throw new Error('UART status failed');
     const status = await res.json();
     updateUartDashboard(status);
+    return status;
+}
+
+async function fetchCanStatus() {
+    const res = await fetch('/api/can/status', { cache: 'no-store' });
+    if (!res.ok) throw new Error('CAN status failed');
+    const status = await res.json();
+    updateCanDashboard(status);
     return status;
 }
 
@@ -1142,10 +1159,392 @@ function stopUartStatusPolling() {
     }
 }
 
+// === CAN DASHBOARD ===
+
+const CAN_ERROR_LABELS = {
+    tx_error_counter: 'Compteur erreurs TX',
+    rx_error_counter: 'Compteur erreurs RX',
+    tx_failed_count: 'Transmissions échouées',
+    rx_missed_count: 'Réceptions manquées',
+    arbitration_lost_count: 'Arbitrages perdus',
+    bus_error_count: 'Erreurs bus',
+    bus_off_count: 'Bus-off',
+};
+
+const CAN_ERROR_SEVERITY = {
+    tx_error_counter: 'warning',
+    rx_error_counter: 'warning',
+    tx_failed_count: 'warning',
+    rx_missed_count: 'warning',
+    arbitration_lost_count: 'info',
+    bus_error_count: 'warning',
+    bus_off_count: 'error',
+};
+
+function setupCanDashboard() {
+    const refreshBtn = document.getElementById('can-dash-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => refreshCanDashboard(true));
+    }
+
+    const clearBtn = document.getElementById('can-dash-events-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            state.canDashboard.events = [];
+            updateCanDashboardEvents();
+        });
+    }
+
+    updateCanDashboardEvents();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopCanStatusPolling();
+        } else {
+            fetchCanStatus().catch(() => {});
+            startCanStatusPolling();
+        }
+    });
+}
+
+function updateCanDashboard(status) {
+    if (!status) return;
+
+    const previous = state.canDashboard.lastStatus;
+    state.canDashboard.lastStatus = status;
+
+    updateCanDashboardKPIs(status);
+    updateCanDashboardBusStatus(status);
+    updateCanDashboardTraffic(status);
+    updateCanDashboardKeepalive(status);
+    updateCanDashboardErrors(status);
+
+    const timestamp = Number(status.timestamp_ms ?? status.timestamp ?? Date.now());
+
+    if (previous && Boolean(previous.keepalive?.ok) !== Boolean(status.keepalive?.ok)) {
+        const keepaliveOk = Boolean(status.keepalive?.ok);
+        const message = keepaliveOk ? 'Keepalive CAN restauré' : 'Keepalive CAN perdu';
+        addCanDashboardEvent(message, keepaliveOk ? 'success' : 'warning', timestamp);
+    }
+
+    if (previous && Boolean(previous.driver_started) !== Boolean(status.driver_started)) {
+        const message = status.driver_started ? 'Driver CAN démarré' : 'Driver CAN arrêté';
+        addCanDashboardEvent(message, status.driver_started ? 'success' : 'warning', timestamp);
+    }
+
+    const prevBusState = previous?.bus?.state ?? previous?.bus?.state_label;
+    const currentBusState = status.bus?.state ?? status.bus?.state_label;
+    if (previous && prevBusState !== currentBusState) {
+        const label = status.bus?.state_label || (Number(status.bus?.state) === 1 ? 'En marche' : 'État mis à jour');
+        const type = Number(status.bus?.state) === 1 ? 'success' : 'warning';
+        addCanDashboardEvent(`Bus CAN: ${label}`, type, timestamp);
+    }
+
+    updateCanDashboardEvents();
+}
+
+function updateCanDashboardKPIs(status) {
+    const now = Date.now();
+    const timeDeltaSeconds = state.canDashboard.lastUpdate ? Math.max((now - state.canDashboard.lastUpdate) / 1000, 1) : 1;
+    state.canDashboard.lastUpdate = now;
+
+    const frames = status.frames ?? {};
+    const txCount = Number(frames.tx_count ?? frames.tx ?? frames.sent ?? 0);
+    const rxCount = Number(frames.rx_count ?? frames.rx ?? frames.received ?? 0);
+    const txBytes = Number(frames.tx_bytes ?? frames.bytes_tx ?? frames.bytes_sent ?? 0);
+    const rxBytes = Number(frames.rx_bytes ?? frames.bytes_rx ?? frames.bytes_received ?? 0);
+
+    const prev = state.canDashboard.previousStats || { txFrames: 0, rxFrames: 0, txBytes: 0, rxBytes: 0, initialized: false };
+    const firstUpdate = !prev.initialized;
+
+    const txRate = firstUpdate ? 0 : Math.max(0, (txCount - prev.txFrames) / timeDeltaSeconds);
+    const rxRate = firstUpdate ? 0 : Math.max(0, (rxCount - prev.rxFrames) / timeDeltaSeconds);
+
+    state.canDashboard.previousStats = {
+        txFrames: txCount,
+        rxFrames: rxCount,
+        txBytes,
+        rxBytes,
+        initialized: true,
+    };
+
+    set('can-dash-tx-rate', txRate.toFixed(1));
+    set('can-dash-tx-total', txCount.toLocaleString());
+    set('can-dash-tx-bytes', formatBytes(txBytes));
+    set('can-dash-rx-rate', rxRate.toFixed(1));
+    set('can-dash-rx-total', rxCount.toLocaleString());
+    set('can-dash-rx-bytes', formatBytes(rxBytes));
+
+    let occupancy = Number(status.bus?.occupancy_pct);
+    let windowMs = Number(status.bus?.window_ms);
+    if (!Number.isFinite(occupancy)) {
+        const estimate = estimateCanBusOccupancy(state.canRealtime.frames.raw, {
+            windowSeconds: Number(state.canRealtime.filters?.windowSeconds) || undefined,
+        });
+        occupancy = estimate.occupancyPct;
+        if (!Number.isFinite(windowMs) || windowMs <= 0) {
+            windowMs = estimate.windowMs;
+        }
+    }
+
+    if (!Number.isFinite(windowMs) || windowMs <= 0) {
+        windowMs = Number(status.keepalive?.interval_ms);
+    }
+
+    set('can-dash-occupancy', Number.isFinite(occupancy) ? occupancy.toFixed(1) : '0.0');
+    set('can-dash-occupancy-window', Number.isFinite(windowMs) && windowMs > 0 ? formatDuration(windowMs) : '--');
+
+    const driverStarted = Boolean(status.driver_started);
+    const keepaliveOk = Boolean(status.keepalive?.ok);
+    const busState = Number(status.bus?.state);
+
+    if (state.systemStatus) {
+        let moduleStatus = 'ok';
+        if (!driverStarted || !keepaliveOk) {
+            moduleStatus = 'warning';
+        }
+        if (Number.isFinite(busState) && busState >= 2) {
+            moduleStatus = 'error';
+        }
+        state.systemStatus.setModuleStatus('can', moduleStatus);
+    }
+}
+
+function updateCanDashboardBusStatus(status) {
+    const timestamp = Number(status.timestamp_ms ?? status.timestamp ?? 0);
+    set('can-dash-last-update', formatTimestampValue(timestamp));
+
+    const driverStarted = Boolean(status.driver_started);
+    set('can-dash-driver-state', driverStarted ? 'Actif' : 'Arrêté');
+
+    const busStateValue = Number(status.bus?.state);
+    const busStateLabel = status.bus?.state_label || (busStateValue === 1 ? 'En marche' : busStateValue === 2 ? 'Bus-off' : '--');
+    set('can-dash-bus-state-text', busStateLabel || '--');
+
+    const badge = document.getElementById('can-dash-bus-state-badge');
+    if (badge) {
+        badge.className = 'badge status-badge';
+        if (busStateValue === 1) {
+            badge.textContent = busStateLabel;
+            badge.classList.add('status-badge--connected');
+        } else if (busStateValue === 2) {
+            badge.textContent = busStateLabel;
+            badge.classList.add('status-badge--disconnected');
+        } else if (busStateLabel && busStateLabel !== '--') {
+            badge.textContent = busStateLabel;
+            badge.classList.add('status-badge--warning');
+        } else {
+            badge.textContent = 'Inconnu';
+            badge.classList.add('status-badge--unknown');
+        }
+    }
+
+    const windowMs = Number(status.bus?.window_ms);
+    if (Number.isFinite(windowMs) && windowMs > 0) {
+        set('can-dash-bus-window', formatDuration(windowMs));
+    } else {
+        set('can-dash-bus-window', '--');
+    }
+
+    const errors = status.errors ?? {};
+    set('can-dash-bus-off-count', Number(errors.bus_off_count ?? 0).toLocaleString());
+    set('can-dash-bus-error-count', Number(errors.bus_error_count ?? 0).toLocaleString());
+    set('can-dash-arbitration-count', Number(errors.arbitration_lost_count ?? 0).toLocaleString());
+    set('can-dash-rx-missed-count', Number(errors.rx_missed_count ?? 0).toLocaleString());
+}
+
+function updateCanDashboardTraffic(status) {
+    const tbody = document.getElementById('can-dash-traffic-table');
+    if (!tbody) return;
+
+    const frames = status.frames ?? {};
+    const txCount = Number(frames.tx_count ?? frames.tx ?? frames.sent ?? 0);
+    const rxCount = Number(frames.rx_count ?? frames.rx ?? frames.received ?? 0);
+    const txBytes = Number(frames.tx_bytes ?? frames.bytes_tx ?? frames.bytes_sent ?? 0);
+    const rxBytes = Number(frames.rx_bytes ?? frames.bytes_rx ?? frames.bytes_received ?? 0);
+
+    const rows = [
+        { label: 'Trames TX', value: txCount.toLocaleString() },
+        { label: 'Trames RX', value: rxCount.toLocaleString() },
+        { label: 'Octets TX', value: formatBytes(txBytes) },
+        { label: 'Octets RX', value: formatBytes(rxBytes) },
+    ];
+
+    tbody.innerHTML = rows
+        .map((row) => `<tr><td>${row.label}</td><td class="text-end">${row.value}</td></tr>`)
+        .join('');
+}
+
+function updateCanDashboardKeepalive(status) {
+    const keepalive = status.keepalive ?? {};
+    const timestamp = Number(status.timestamp_ms ?? status.timestamp ?? Date.now());
+
+    const lastTx = Number(keepalive.last_tx_ms ?? keepalive.last_tx);
+    const lastRx = Number(keepalive.last_rx_ms ?? keepalive.last_rx);
+    const intervalMs = Number(keepalive.interval_ms ?? keepalive.interval);
+    const timeoutMs = Number(keepalive.timeout_ms ?? keepalive.timeout);
+    const retryMs = Number(keepalive.retry_ms ?? keepalive.retry);
+    const keepaliveOk = Boolean(keepalive.ok);
+
+    const badge = document.getElementById('can-dash-keepalive-badge');
+    if (badge) {
+        badge.className = 'badge status-badge';
+        if (keepaliveOk) {
+            badge.textContent = 'OK';
+            badge.classList.add('status-badge--connected');
+        } else {
+            badge.textContent = 'Inactif';
+            badge.classList.add('status-badge--disconnected');
+        }
+    }
+
+    const latencyLabel = Number.isFinite(lastRx) ? formatRelativeTime(lastRx, timestamp) : '--';
+    set('can-dash-keepalive-latency', latencyLabel);
+
+    set('can-dash-keepalive-last-tx', formatTimestampValue(lastTx));
+    set('can-dash-keepalive-last-rx', formatTimestampValue(lastRx));
+    set('can-dash-keepalive-interval', Number.isFinite(intervalMs) && intervalMs > 0 ? formatDuration(intervalMs) : '--');
+    set('can-dash-keepalive-timeout', Number.isFinite(timeoutMs) && timeoutMs > 0 ? formatDuration(timeoutMs) : '--');
+    set('can-dash-keepalive-retry', Number.isFinite(retryMs) && retryMs > 0 ? formatDuration(retryMs) : '--');
+
+    if (Number.isFinite(lastTx)) {
+        set('can-dash-last-tx', formatTimestampValue(lastTx));
+    }
+    if (Number.isFinite(lastRx)) {
+        set('can-dash-last-rx', formatTimestampValue(lastRx));
+    }
+}
+
+function updateCanDashboardErrors(status) {
+    const errors = status.errors ?? {};
+    const timestamp = Number(status.timestamp_ms ?? status.timestamp ?? Date.now());
+
+    Object.entries(CAN_ERROR_LABELS).forEach(([key, label]) => {
+        const count = Number(errors[key] ?? 0);
+        const existing = state.canDashboard.errorStats.get(label);
+        const changed = !existing || existing.count !== count;
+        const lastSeen = count > 0
+            ? (changed ? timestamp : existing?.lastSeen ?? timestamp)
+            : existing?.lastSeen ?? null;
+
+        if (existing && count > existing.count) {
+            const diff = count - existing.count;
+            const severity = CAN_ERROR_SEVERITY[key] || 'info';
+            const message = diff === 1 ? `${label}: +1` : `${label}: +${diff}`;
+            addCanDashboardEvent(message, severity, timestamp);
+            if (severity === 'error') {
+                set('can-dash-last-error', message);
+                set('can-dash-last-error-time', formatTimestampValue(timestamp));
+            }
+        }
+
+        state.canDashboard.errorStats.set(label, { count, lastSeen });
+    });
+
+    renderCanErrorTable();
+}
+
+function renderCanErrorTable() {
+    const tbody = document.getElementById('can-dash-errors-table');
+    if (!tbody) return;
+
+    const rows = Array.from(state.canDashboard.errorStats.entries())
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([label, data]) => {
+            const relative = data.lastSeen ? formatRelativeTime(data.lastSeen) : '--';
+            return `
+                <tr>
+                    <td>${label}</td>
+                    <td class="text-end">${Number(data.count || 0).toLocaleString()}</td>
+                    <td class="text-end text-muted small">${relative}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    tbody.innerHTML = rows || '<tr><td colspan="3" class="text-muted text-center">Aucun compteur disponible</td></tr>';
+}
+
+function updateCanDashboardEvents() {
+    const container = document.getElementById('can-dash-events');
+    if (!container) return;
+
+    if (!state.canDashboard.events.length) {
+        container.innerHTML = '<div class="list-group-item text-muted text-center">Aucun événement</div>';
+        return;
+    }
+
+    const html = state.canDashboard.events
+        .slice(-50)
+        .reverse()
+        .map((event) => {
+            const type = event.type === 'error' ? 'danger' : event.type === 'warning' ? 'warning' : event.type === 'success' ? 'success' : 'info';
+            const icon = event.type === 'error' ? 'ti ti-alert-triangle' : event.type === 'warning' ? 'ti ti-alert-circle' : event.type === 'success' ? 'ti ti-check' : 'ti ti-info-circle';
+            const date = new Date(event.timestamp);
+            const time = Number.isNaN(date.getTime()) ? '--' : date.toLocaleTimeString();
+            return `
+                <div class="list-group-item">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-${type}"><i class="${icon}"></i></span>
+                        <div class="flex-grow-1">
+                            <div class="text-truncate">${event.message}</div>
+                            <small class="text-muted">${time}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+
+    container.innerHTML = html;
+}
+
+function addCanDashboardEvent(message, type = 'info', timestamp = Date.now()) {
+    state.canDashboard.events.push({ message, type, timestamp });
+    state.canDashboard.events = state.canDashboard.events.slice(-50);
+    updateCanDashboardEvents();
+
+    if (type === 'error') {
+        set('can-dash-last-error', message);
+        set('can-dash-last-error-time', formatTimestampValue(timestamp));
+    }
+}
+
+function refreshCanDashboard() {
+    fetchCanStatus().catch((err) => {
+        console.error('CAN dashboard refresh failed', err);
+        addCanDashboardEvent('Échec de la mise à jour CAN: ' + err.message, 'error');
+    });
+}
+
+function startCanStatusPolling() {
+    if (state.canDashboard.statusInterval) return;
+    state.canDashboard.statusInterval = setInterval(() => {
+        fetchCanStatus().catch((err) => {
+            console.warn('CAN status polling error', err);
+        });
+    }, CAN_STATUS_POLL_INTERVAL_MS);
+}
+
+function stopCanStatusPolling() {
+    if (state.canDashboard.statusInterval) {
+        clearInterval(state.canDashboard.statusInterval);
+        state.canDashboard.statusInterval = null;
+    }
+}
+
 // === INITIALISATION ===
 
 async function initialise() {
-    const required = ['history-chart', 'battery-soc-gauge', 'uart-frames-chart', 'history-table-body', 'mqtt-messages-chart', 'uart-dash-traffic-chart'];
+    const required = [
+        'history-chart',
+        'battery-soc-gauge',
+        'uart-frames-chart',
+        'history-table-body',
+        'mqtt-messages-chart',
+        'uart-dash-traffic-chart',
+        'can-heatmap-chart',
+    ];
     const missing = required.filter(id => !document.getElementById(id));
     if (missing.length > 0) {
         console.warn('Partials manquants:', missing);
@@ -1161,6 +1560,7 @@ async function initialise() {
     setupMqttTab();
     setupMqttDashboard();
     setupUartDashboard();
+    setupCanDashboard();
     setupConfigTab();
 
     state.historyChart = new HistoryChart(document.getElementById('history-chart'));
@@ -1204,12 +1604,14 @@ async function initialise() {
             fetchConfig().catch(() => {}),
             fetchMqttStatus().catch(() => {}),
             fetchUartStatus().catch(() => {}),
+            fetchCanStatus().catch(() => {}),
         ]);
     } catch (e) { console.error('Init failed', e); }
 
     fetchHistoryArchives().finally(updateArchiveControls);
     startMqttStatusPolling();
     startUartStatusPolling();
+    startCanStatusPolling();
 
     connectWebSocket('/ws/telemetry', handleTelemetryMessage);
     connectWebSocket('/ws/events', handleEventMessage);
@@ -1240,6 +1642,25 @@ function formatDuration(ms) {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
+}
+
+function formatTimestampValue(timestamp) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || value <= 0) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString();
+}
+
+function formatRelativeTime(timestamp, reference = Date.now()) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || value <= 0) return '--';
+    const delta = Math.max(0, reference - value);
+    if (delta < 1000) return 'À l’instant';
+    if (delta < 60_000) return `il y a ${Math.round(delta / 1000)} s`;
+    if (delta < 3_600_000) return `il y a ${Math.round(delta / 60_000)} min`;
+    if (delta < 86_400_000) return `il y a ${Math.round(delta / 3_600_000)} h`;
+    return `il y a ${Math.round(delta / 86_400_000)} j`;
 }
 
 function formatBytes(value) {
@@ -1877,4 +2298,8 @@ function waitForPartials() {
 }
 
 waitForPartials();
-window.addEventListener('beforeunload', stopMqttStatusPolling);
+window.addEventListener('beforeunload', () => {
+    stopMqttStatusPolling();
+    stopUartStatusPolling();
+    stopCanStatusPolling();
+});
