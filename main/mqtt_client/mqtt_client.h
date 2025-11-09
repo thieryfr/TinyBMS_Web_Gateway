@@ -139,6 +139,25 @@ bool mqtt_client_publish(const char *topic,
                          TickType_t timeout);
 
 /**
+ * @brief Attempt a one-shot MQTT connection using the provided configuration.
+ *
+ * @param[in]  config        Configuration describing the broker connection.
+ * @param[in]  timeout       Maximum time to wait for a connection result.
+ * @param[out] connected     Set to true when the connection succeeds.
+ * @param[out] error_message Optional buffer receiving a human-readable status.
+ * @param[in]  error_size    Size of @p error_message in bytes.
+ *
+ * @return ESP_OK on successful connection, ESP_ERR_TIMEOUT on timeout,
+ *         ESP_ERR_NOT_SUPPORTED when not available on the current platform, or
+ *         another esp_err_t value describing the failure.
+ */
+esp_err_t mqtt_client_test_connection(const mqtt_client_config_t *config,
+                                      TickType_t timeout,
+                                      bool *connected,
+                                      char *error_message,
+                                      size_t error_size);
+
+/**
  * @brief Copy the internal MQTT client state into @p state for diagnostics and testing.
  */
 void mqtt_client_get_state(mqtt_client_state_t *state);
