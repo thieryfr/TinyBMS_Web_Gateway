@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "echo \"No lint command configured\""
+    "lint": "echo \"No lint command configured\"",
+    "test": "node --test"
   },
   "devDependencies": {}
 }
