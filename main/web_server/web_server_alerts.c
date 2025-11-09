@@ -8,6 +8,7 @@
 #include "esp_log.h"
 
 #include "alert_manager.h"
+#include "web_server.h"
 
 #include <string.h>
 
@@ -323,6 +324,13 @@ esp_err_t web_server_ws_alerts_handler(httpd_req_t *req)
 
     if (frame.len == 0) {
         return ESP_OK;
+    }
+
+    // Validate incoming payload size to prevent DoS attacks
+    if (frame.len > WEB_SERVER_WS_MAX_PAYLOAD_SIZE) {
+        ESP_LOGW(TAG, "WebSocket /ws/alerts: payload too large (%zu bytes > %d max), rejecting",
+                 frame.len, WEB_SERVER_WS_MAX_PAYLOAD_SIZE);
+        return ESP_ERR_INVALID_SIZE;
     }
 
     // Allocate buffer for payload
