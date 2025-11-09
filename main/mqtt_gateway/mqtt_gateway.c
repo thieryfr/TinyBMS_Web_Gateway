@@ -354,76 +354,6 @@ static void mqtt_gateway_load_topics(void)
     if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
         return;
     }
-static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error)
-{
-    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
-        return;
-    }
-
-    s_gateway.last_event = id;
-#if defined(ESP_PLATFORM)
-    s_gateway.last_event_timestamp_us = esp_timer_get_time();
-#else
-    s_gateway.last_event_timestamp_us = 0;
-#endif
-
-    switch (id) {
-        case MQTT_CLIENT_EVENT_CONNECTED:
-            s_gateway.connected = true;
-            s_gateway.reconnect_count += 1U;
-            if (error == NULL) {
-                s_gateway.last_error[0] = ' ';
-            }
-            break;
-        case MQTT_CLIENT_EVENT_DISCONNECTED:
-            s_gateway.connected = false;
-            s_gateway.disconnect_count += 1U;
-            break;
-        case MQTT_CLIENT_EVENT_ERROR:
-            s_gateway.error_count += 1U;
-            break;
-        default:
-            break;
-    }
-
-    if (error != NULL) {
-        size_t len = strlen(error);
-        if (len >= sizeof(s_gateway.last_error)) {
-            len = sizeof(s_gateway.last_error) - 1U;
-        }
-        memcpy(s_gateway.last_error, error, len);
-        s_gateway.last_error[len] = ' ';
-    }
-
-    mqtt_gateway_unlock_ctx();
-}
-
-static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *context)
-{
-    (void)context;
-    if (event == NULL) {
-        return;
-    }
-
-    const char *message = NULL;
-    switch (event->id) {
-        case MQTT_CLIENT_EVENT_CONNECTED:
-            message = NULL;
-            break;
-        case MQTT_CLIENT_EVENT_DISCONNECTED:
-            message = "MQTT client disconnected";
-            break;
-        case MQTT_CLIENT_EVENT_ERROR:
-            message = "MQTT client error";
-            break;
-        default:
-            message = NULL;
-            break;
-    }
-
-    mqtt_gateway_record_event(event->id, message);
-}
-
 
     mqtt_gateway_set_topic(s_gateway.status_topic,
                            sizeof(s_gateway.status_topic),
@@ -457,6 +387,75 @@ static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *c
     mqtt_gateway_unlock_ctx();
 }
 
+static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error)
+{
+    if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        return;
+    }
+
+    s_gateway.last_event = id;
+#if defined(ESP_PLATFORM)
+    s_gateway.last_event_timestamp_us = esp_timer_get_time();
+#else
+    s_gateway.last_event_timestamp_us = 0;
+#endif
+
+    switch (id) {
+        case MQTT_CLIENT_EVENT_CONNECTED:
+            s_gateway.connected = true;
+            s_gateway.reconnect_count += 1U;
+            if (error == NULL) {
+                s_gateway.last_error[0] = '\0';
+            }
+            break;
+        case MQTT_CLIENT_EVENT_DISCONNECTED:
+            s_gateway.connected = false;
+            s_gateway.disconnect_count += 1U;
+            break;
+        case MQTT_CLIENT_EVENT_ERROR:
+            s_gateway.error_count += 1U;
+            break;
+        default:
+            break;
+    }
+
+    if (error != NULL) {
+        size_t len = strlen(error);
+        if (len >= sizeof(s_gateway.last_error)) {
+            len = sizeof(s_gateway.last_error) - 1U;
+        }
+        memcpy(s_gateway.last_error, error, len);
+        s_gateway.last_error[len] = '\0';
+    }
+
+    mqtt_gateway_unlock_ctx();
+}
+
+static void mqtt_gateway_on_mqtt_event(const mqtt_client_event_t *event, void *context)
+{
+    (void)context;
+    if (event == NULL) {
+        return;
+    }
+
+    const char *message = NULL;
+    switch (event->id) {
+        case MQTT_CLIENT_EVENT_CONNECTED:
+            message = NULL;
+            break;
+        case MQTT_CLIENT_EVENT_DISCONNECTED:
+            message = "MQTT client disconnected";
+            break;
+        case MQTT_CLIENT_EVENT_ERROR:
+            message = "MQTT client error";
+            break;
+        default:
+            message = NULL;
+            break;
+    }
+
+    mqtt_gateway_record_event(event->id, message);
+}
 
 static void mqtt_gateway_stop_client(void)
 {
