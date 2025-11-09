@@ -1,0 +1,230 @@
+<section id="tab-uart-dashboard" class="tab-panel" aria-labelledby="tab-uart-dashboard-label">
+  <!-- KPIs Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Trames traitées</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="uart-dash-frame-rate">0</div>
+            <div class="text-secondary">/s</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Total:</span>
+            <span class="text-secondary small" id="uart-dash-frame-total">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Débit octets</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="uart-dash-byte-rate">0</div>
+            <div class="text-secondary">/s</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Total:</span>
+            <span class="text-secondary small" id="uart-dash-byte-total">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Décodages réussis</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="uart-dash-decoded-rate">0</div>
+            <div class="text-secondary">/s</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Total:</span>
+            <span class="text-secondary small" id="uart-dash-decoded-total">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Erreurs</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="uart-dash-error-rate">0</div>
+            <div class="text-secondary">/min</div>
+          </div>
+          <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
+            <span class="text-muted small">Total:</span>
+            <span class="text-secondary small" id="uart-dash-error-total">0</span>
+            <span class="badge status-badge status-badge--disconnected" id="uart-dash-connection-badge">Hors ligne</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title mb-0">Flux UART en temps réel</h3>
+          <div class="ms-auto">
+            <button id="uart-dash-refresh" class="btn btn-sm btn-outline-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+              Actualiser
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="uart-dash-traffic-chart" class="echart-container" style="height: 300px;" role="img" aria-label="Flux UART"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Répartition des commandes</h3>
+        </div>
+        <div class="card-body">
+          <div id="uart-dash-command-chart" class="echart-container" style="height: 300px;" role="img" aria-label="Distribution des commandes UART"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Distribution & Diagnostics Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Distribution des longueurs</h3>
+        </div>
+        <div class="card-body">
+          <div id="uart-dash-length-chart" class="echart-container" style="height: 260px;" role="img" aria-label="Répartition des longueurs de trames UART"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Erreurs et diagnostics</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+            <table class="table table-vcenter card-table table-striped">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th class="text-end">Occurrences</th>
+                  <th class="text-end">Dernier</th>
+                </tr>
+              </thead>
+              <tbody id="uart-dash-errors-table">
+                <tr>
+                  <td colspan="3" class="text-muted text-center">Aucune erreur détectée</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Commandes & Événements Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Commandes les plus actives</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-vcenter card-table table-striped">
+              <thead>
+                <tr>
+                  <th>Commande</th>
+                  <th class="text-end">Trames</th>
+                  <th class="text-end">Dernière activité</th>
+                </tr>
+              </thead>
+              <tbody id="uart-dash-commands-table">
+                <tr>
+                  <td colspan="3" class="text-muted text-center">Aucune commande récente</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-6">
+      <div class="card h-100">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title mb-0">Événements récents</h3>
+          <button id="uart-dash-events-clear" class="btn btn-sm btn-outline-danger ms-auto">Effacer</button>
+        </div>
+        <div class="card-body p-0">
+          <div style="max-height: 300px; overflow-y: auto;">
+            <div id="uart-dash-events-timeline" class="list-group list-group-flush">
+              <div class="list-group-item text-muted text-center">Aucun événement</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Stats Row -->
+  <div class="row g-3">
+    <div class="col-xl-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Statistiques détaillées</h3>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Uptime</dt><dd id="uart-dash-uptime">--</dd></div>
+                <div><dt>Dernière trame</dt><dd id="uart-dash-last-frame">--</dd></div>
+                <div><dt>Longueur</dt><dd id="uart-dash-last-length">--</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Total trames</dt><dd id="uart-dash-total-frames">0</dd></div>
+                <div><dt>Total octets</dt><dd id="uart-dash-total-bytes">0</dd></div>
+                <div><dt>Décodées</dt><dd id="uart-dash-total-decoded">0</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Succès</dt><dd id="uart-dash-success-rate">--</dd></div>
+                <div><dt>Erreurs</dt><dd id="uart-dash-total-errors">0</dd></div>
+                <div><dt>Dernière erreur</dt><dd id="uart-dash-last-error">--</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Horodatage erreur</dt><dd id="uart-dash-last-error-time">--</dd></div>
+                <div><dt>Commande récente</dt><dd id="uart-dash-last-command">--</dd></div>
+                <div><dt>Adresse</dt><dd id="uart-dash-last-address">--</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

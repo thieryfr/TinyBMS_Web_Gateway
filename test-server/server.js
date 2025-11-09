@@ -14,6 +14,7 @@ const telemetry = require('./mock-data/telemetry');
 const config = require('./mock-data/config');
 const history = require('./mock-data/history');
 const registers = require('./mock-data/registers');
+const uart = require('./mock-data/uart');
 
 // Configuration
 const PORT = 3000;
@@ -103,6 +104,15 @@ app.post('/api/mqtt/config', (req, res) => {
  */
 app.get('/api/mqtt/status', (req, res) => {
   const status = config.getMqttStatus();
+  res.json(status);
+});
+
+/**
+ * GET /api/uart/status
+ * Get UART link statistics
+ */
+app.get('/api/uart/status', (req, res) => {
+  const status = uart.getStatus();
   res.json(status);
 });
 
@@ -365,20 +375,16 @@ function broadcastTelemetry() {
  * Broadcast UART frame to UART clients
  */
 function broadcastUartFrame() {
-  // Simulate UART frame
-  const frame = {
-    timestamp_ms: Date.now(),
-    raw: Array.from({ length: 8 }, () => Math.floor(Math.random() * 256)),
-    decoded: {
-      command: '0x03',
-      address: Math.floor(Math.random() * 256),
-      data: Array.from({ length: 4 }, () => Math.floor(Math.random() * 256))
-    }
-  };
+  const frame = uart.generateFrame();
 
   uartClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(frame));
+      if (frame.raw) {
+        client.send(JSON.stringify(frame.raw));
+      }
+      if (frame.decoded) {
+        client.send(JSON.stringify(frame.decoded));
+      }
     }
   });
 }
@@ -477,6 +483,7 @@ server.listen(PORT, () => {
   console.log('    GET  /api/mqtt/config       - MQTT config');
   console.log('    POST /api/mqtt/config       - Update MQTT');
   console.log('    GET  /api/mqtt/status       - MQTT status');
+  console.log('    GET  /api/uart/status       - UART stats');
   console.log('    GET  /api/history           - History data');
   console.log('    GET  /api/history/files     - Archive files');
   console.log('    GET  /api/history/download  - Download CSV');

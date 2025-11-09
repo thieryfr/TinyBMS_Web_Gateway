@@ -1,7 +1,7 @@
 // dashboard.js
 import { BatteryRealtimeCharts } from '/src/js/charts/batteryCharts.js';
 import { EnergyCharts } from '/src/js/charts/energyCharts.js';
-import { UartCharts } from '/src/js/charts/uartCharts.js';
+import { UartCharts, UartTrafficChart, UartCommandDistributionChart } from '/src/js/charts/uartCharts.js';
 import { CanCharts } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
@@ -10,6 +10,7 @@ import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
+const UART_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
 const MAX_STORED_FRAMES = 300;
 
@@ -44,6 +45,18 @@ const state = {
         lastUpdate: null,
         previousStats: { published: 0, received: 0, bytesIn: 0, bytesOut: 0 },
         startTime: Date.now(),
+    },
+    uartDashboard: {
+        statusInterval: null,
+        trafficChart: null,
+        commandChart: null,
+        lengthChart: null,
+        events: [],
+        commandStats: new Map(),
+        errorStats: new Map(),
+        previousStats: { frames: 0, bytes: 0, decoded: 0, errors: 0 },
+        lastUpdate: null,
+        lastStatus: null,
     },
     configRegisters: null,
     batteryCharts: null,
@@ -549,6 +562,14 @@ async function fetchMqttStatus() {
     return status;
 }
 
+async function fetchUartStatus() {
+    const res = await fetch('/api/uart/status', { cache: 'no-store' });
+    if (!res.ok) throw new Error('UART status failed');
+    const status = await res.json();
+    updateUartDashboard(status);
+    return status;
+}
+
 
 // === MQTT DASHBOARD ===
 
@@ -793,10 +814,338 @@ function refreshMqttDashboard(force = false) {
         });
 }
 
+// === UART DASHBOARD ===
+
+function setupUartDashboard() {
+    const trafficEl = document.getElementById('uart-dash-traffic-chart');
+    if (trafficEl) {
+        state.uartDashboard.trafficChart = new UartTrafficChart(trafficEl);
+    }
+
+    const commandEl = document.getElementById('uart-dash-command-chart');
+    if (commandEl) {
+        state.uartDashboard.commandChart = new UartCommandDistributionChart(commandEl);
+    }
+
+    const lengthEl = document.getElementById('uart-dash-length-chart');
+    if (lengthEl) {
+        state.uartDashboard.lengthChart = new UartCharts({
+            distributionElement: lengthEl,
+            emptyTitle: 'En attente de données UART…',
+        });
+    }
+
+    const refreshBtn = document.getElementById('uart-dash-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => refreshUartDashboard(true));
+    }
+
+    const clearBtn = document.getElementById('uart-dash-events-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            state.uartDashboard.events = [];
+            updateUartDashboardEvents();
+        });
+    }
+
+    updateUartDashboardEvents();
+    renderUartCommandTable();
+    renderUartErrorTable();
+}
+
+function updateUartDashboard(status) {
+    if (!status) {
+        return;
+    }
+
+    state.uartDashboard.lastStatus = status;
+
+    updateUartDashboardKPIs(status);
+    updateUartDashboardCharts(status);
+    updateUartDashboardTables(status);
+    updateUartDashboardStats(status);
+
+    if (Array.isArray(status.events)) {
+        const incoming = status.events
+            .map((event) => ({
+                message: event.message || event.description || event.summary || 'Événement UART',
+                type: event.type || event.level || 'info',
+                timestamp: Number(event.timestamp_ms ?? event.timestamp ?? Date.now()),
+            }))
+            .filter((event) => event.message);
+
+        if (incoming.length > 0) {
+            const existingKeys = new Set(state.uartDashboard.events.map((evt) => `${evt.timestamp}|${evt.message}`));
+            incoming.forEach((event) => {
+                const key = `${event.timestamp}|${event.message}`;
+                if (!existingKeys.has(key)) {
+                    state.uartDashboard.events.push(event);
+                    existingKeys.add(key);
+                }
+            });
+            state.uartDashboard.events = state.uartDashboard.events.slice(-50);
+            updateUartDashboardEvents();
+        }
+    }
+}
+
+function updateUartDashboardKPIs(status) {
+    if (!status) return;
+
+    const now = Date.now();
+    const timeDeltaSeconds = state.uartDashboard.lastUpdate ? Math.max((now - state.uartDashboard.lastUpdate) / 1000, 1) : 1;
+    state.uartDashboard.lastUpdate = now;
+
+    const framesTotal = Number(status.frame_counts?.total ?? status.total_frames ?? 0);
+    const bytesTotal = Number(status.byte_counts?.total ?? status.total_bytes ?? 0);
+    const decodedTotal = Number(status.frame_counts?.decoded ?? status.total_decoded ?? status.decoded_frames ?? 0);
+    const errorsTotal = Number(status.frame_counts?.errors ?? status.total_errors ?? status.error_count ?? 0);
+
+    const prev = state.uartDashboard.previousStats;
+    const firstUpdate = prev.frames === 0 && prev.bytes === 0 && prev.decoded === 0 && prev.errors === 0;
+    const frameRate = firstUpdate ? 0 : Math.max(0, (framesTotal - prev.frames) / timeDeltaSeconds);
+    const byteRate = firstUpdate ? 0 : Math.max(0, (bytesTotal - prev.bytes) / timeDeltaSeconds);
+    const decodedRate = firstUpdate ? 0 : Math.max(0, (decodedTotal - prev.decoded) / timeDeltaSeconds);
+    const errorRatePerMinute = firstUpdate ? 0 : Math.max(0, ((errorsTotal - prev.errors) / timeDeltaSeconds) * 60);
+
+    state.uartDashboard.previousStats = {
+        frames: framesTotal,
+        bytes: bytesTotal,
+        decoded: decodedTotal,
+        errors: errorsTotal,
+    };
+
+    set('uart-dash-frame-rate', frameRate.toFixed(1));
+    set('uart-dash-frame-total', framesTotal.toLocaleString());
+    set('uart-dash-byte-rate', formatBytes(byteRate));
+    set('uart-dash-byte-total', formatBytes(bytesTotal));
+    set('uart-dash-decoded-rate', decodedRate.toFixed(1));
+    set('uart-dash-decoded-total', decodedTotal.toLocaleString());
+    set('uart-dash-error-rate', errorRatePerMinute.toFixed(2));
+    set('uart-dash-error-total', errorsTotal.toLocaleString());
+
+    const isConnected = status.connected ?? status.online ?? false;
+
+    const badge = document.getElementById('uart-dash-connection-badge');
+    if (badge) {
+        badge.className = 'badge status-badge';
+        if (isConnected) {
+            badge.textContent = 'En ligne';
+            badge.classList.add('status-badge--connected');
+        } else {
+            badge.textContent = 'Hors ligne';
+            badge.classList.add('status-badge--disconnected');
+        }
+    }
+
+    if (state.systemStatus) {
+        state.systemStatus.setModuleStatus('uart', isConnected ? 'ok' : 'warning');
+    }
+}
+
+function updateUartDashboardCharts(status) {
+    if (!status) return;
+
+    if (state.uartDashboard.trafficChart) {
+        if (Array.isArray(status.traffic_history) && status.traffic_history.length > 0) {
+            state.uartDashboard.trafficChart.setData(status.traffic_history);
+        } else {
+            state.uartDashboard.trafficChart.clear();
+        }
+    }
+
+    const commandDataset = Array.isArray(status.command_distribution)
+        ? status.command_distribution
+        : Array.isArray(status.command_stats)
+            ? status.command_stats
+            : [];
+    if (state.uartDashboard.commandChart) {
+        if (commandDataset.length > 0) {
+            state.uartDashboard.commandChart.setData(commandDataset);
+        } else {
+            state.uartDashboard.commandChart.clear();
+        }
+    }
+
+    if (state.uartDashboard.lengthChart) {
+        state.uartDashboard.lengthChart.update({ lengthDistribution: status.length_distribution });
+    }
+}
+
+function updateUartDashboardTables(status) {
+    if (!status) {
+        return;
+    }
+
+    state.uartDashboard.commandStats.clear();
+    const commands = Array.isArray(status.command_stats) ? status.command_stats : [];
+    commands.forEach((item) => {
+        if (!item) return;
+        const command = String(item.command ?? item.name ?? item.id ?? '').toUpperCase();
+        if (!command) return;
+        const count = Number(item.count ?? item.value ?? 0) || 0;
+        const lastSeen = Number(item.last_seen_ms ?? item.last_seen ?? item.timestamp ?? Date.now());
+        state.uartDashboard.commandStats.set(command, { count, lastSeen });
+    });
+    renderUartCommandTable();
+
+    state.uartDashboard.errorStats.clear();
+    const errors = Array.isArray(status.error_breakdown) ? status.error_breakdown : [];
+    errors.forEach((item) => {
+        if (!item) return;
+        const type = String(item.type ?? item.code ?? item.error ?? 'Erreur');
+        const count = Number(item.count ?? item.value ?? 0) || 0;
+        const lastSeen = Number(item.last_seen_ms ?? item.last_seen ?? item.timestamp ?? Date.now());
+        state.uartDashboard.errorStats.set(type, { count, lastSeen });
+    });
+    renderUartErrorTable();
+}
+
+function renderUartCommandTable() {
+    const tbody = document.getElementById('uart-dash-commands-table');
+    if (!tbody) return;
+
+    const rows = Array.from(state.uartDashboard.commandStats.entries())
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, 20)
+        .map(([command, data]) => {
+            const lastSeen = Number(data.lastSeen) ? new Date(data.lastSeen).toLocaleTimeString() : '--';
+            return `
+                <tr>
+                    <td><code class="text-muted">${command}</code></td>
+                    <td class="text-end">${data.count.toLocaleString()}</td>
+                    <td class="text-end text-muted small">${lastSeen}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    tbody.innerHTML = rows || '<tr><td colspan="3" class="text-muted text-center">Aucune commande récente</td></tr>';
+}
+
+function renderUartErrorTable() {
+    const tbody = document.getElementById('uart-dash-errors-table');
+    if (!tbody) return;
+
+    const rows = Array.from(state.uartDashboard.errorStats.entries())
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([type, data]) => {
+            const lastSeen = Number(data.lastSeen) ? new Date(data.lastSeen).toLocaleTimeString() : '--';
+            return `
+                <tr>
+                    <td>${type}</td>
+                    <td class="text-end">${data.count.toLocaleString()}</td>
+                    <td class="text-end text-muted small">${lastSeen}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    tbody.innerHTML = rows || '<tr><td colspan="3" class="text-muted text-center">Aucune erreur détectée</td></tr>';
+}
+
+function updateUartDashboardEvents() {
+    const container = document.getElementById('uart-dash-events-timeline');
+    if (!container) return;
+
+    if (!state.uartDashboard.events.length) {
+        container.innerHTML = '<div class="list-group-item text-muted text-center">Aucun événement</div>';
+        return;
+    }
+
+    const html = state.uartDashboard.events
+        .slice(-50)
+        .reverse()
+        .map((event) => {
+            const time = new Date(event.timestamp).toLocaleTimeString();
+            const type = event.type === 'error' ? 'danger' : event.type === 'warning' ? 'warning' : 'success';
+            const icon = event.type === 'error' ? 'ti ti-alert-triangle' : event.type === 'warning' ? 'ti ti-alert-circle' : 'ti ti-check';
+            return `
+                <div class="list-group-item">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-${type}"><i class="${icon}"></i></span>
+                        <div class="flex-grow-1">
+                            <div class="text-truncate">${event.message}</div>
+                            <small class="text-muted">${time}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+
+    container.innerHTML = html;
+}
+
+function addUartDashboardEvent(message, type = 'info', timestamp = Date.now()) {
+    state.uartDashboard.events.push({ message, type, timestamp });
+    state.uartDashboard.events = state.uartDashboard.events.slice(-50);
+    updateUartDashboardEvents();
+}
+
+function updateUartDashboardStats(status) {
+    const uptime = Number(status.uptime_ms ?? status.uptime ?? 0);
+    set('uart-dash-uptime', formatDuration(uptime));
+
+    const lastFrameTs = Number(status.last_frame_timestamp_ms ?? status.last_frame_ts ?? 0);
+    set('uart-dash-last-frame', lastFrameTs ? new Date(lastFrameTs).toLocaleTimeString() : '--');
+    const lastLength = Number(status.last_frame_length ?? status.last_length ?? 0);
+    set('uart-dash-last-length', lastLength > 0 ? `${lastLength} B` : '--');
+
+    const framesTotal = Number(status.frame_counts?.total ?? status.total_frames ?? 0);
+    set('uart-dash-total-frames', framesTotal.toLocaleString());
+    const bytesTotal = Number(status.byte_counts?.total ?? status.total_bytes ?? 0);
+    set('uart-dash-total-bytes', formatBytes(bytesTotal));
+    const decodedTotal = Number(status.frame_counts?.decoded ?? status.total_decoded ?? status.decoded_frames ?? 0);
+    set('uart-dash-total-decoded', decodedTotal.toLocaleString());
+
+    const errorsTotal = Number(status.frame_counts?.errors ?? status.total_errors ?? status.error_count ?? 0);
+    set('uart-dash-total-errors', errorsTotal.toLocaleString());
+
+    const successRate = framesTotal > 0 ? ((framesTotal - errorsTotal) / framesTotal) * 100 : 0;
+    set('uart-dash-success-rate', framesTotal > 0 ? `${successRate.toFixed(1)} %` : '--');
+
+    const lastError = status.last_error || 'Aucune';
+    set('uart-dash-last-error', lastError);
+
+    const lastErrorTs = Number(status.last_error_timestamp_ms ?? status.last_error_ts ?? 0);
+    set('uart-dash-last-error-time', lastErrorTs ? new Date(lastErrorTs).toLocaleString() : '--');
+
+    const lastCommand = status.last_command ? String(status.last_command).toUpperCase() : '--';
+    set('uart-dash-last-command', lastCommand);
+
+    const lastAddress = status.last_address ?? status.last_node;
+    set('uart-dash-last-address', lastAddress !== undefined && lastAddress !== null ? String(lastAddress) : '--');
+}
+
+function refreshUartDashboard(force = false) {
+    fetchUartStatus()
+        .catch((err) => {
+            console.error('UART dashboard refresh failed', err);
+            addUartDashboardEvent('Échec de la mise à jour: ' + err.message, 'error');
+        });
+}
+
+function startUartStatusPolling() {
+    if (state.uartDashboard.statusInterval) return;
+    state.uartDashboard.statusInterval = setInterval(() => {
+        fetchUartStatus().catch((err) => {
+            console.warn('UART status polling error', err);
+        });
+    }, UART_STATUS_POLL_INTERVAL_MS);
+}
+
+function stopUartStatusPolling() {
+    if (state.uartDashboard.statusInterval) {
+        clearInterval(state.uartDashboard.statusInterval);
+        state.uartDashboard.statusInterval = null;
+    }
+}
+
 // === INITIALISATION ===
 
 async function initialise() {
-    const required = ['history-chart', 'battery-soc-gauge', 'uart-frames-chart', 'history-table-body', 'mqtt-messages-chart'];
+    const required = ['history-chart', 'battery-soc-gauge', 'uart-frames-chart', 'history-table-body', 'mqtt-messages-chart', 'uart-dash-traffic-chart'];
     const missing = required.filter(id => !document.getElementById(id));
     if (missing.length > 0) {
         console.warn('Partials manquants:', missing);
@@ -811,6 +1160,7 @@ async function initialise() {
     updateArchiveControls();
     setupMqttTab();
     setupMqttDashboard();
+    setupUartDashboard();
     setupConfigTab();
 
     state.historyChart = new HistoryChart(document.getElementById('history-chart'));
@@ -853,11 +1203,13 @@ async function initialise() {
             fetchRegisters(),
             fetchConfig().catch(() => {}),
             fetchMqttStatus().catch(() => {}),
+            fetchUartStatus().catch(() => {}),
         ]);
     } catch (e) { console.error('Init failed', e); }
 
     fetchHistoryArchives().finally(updateArchiveControls);
     startMqttStatusPolling();
+    startUartStatusPolling();
 
     connectWebSocket('/ws/telemetry', handleTelemetryMessage);
     connectWebSocket('/ws/events', handleEventMessage);
@@ -888,6 +1240,25 @@ function formatDuration(ms) {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
+}
+
+function formatBytes(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+        return '--';
+    }
+
+    const units = ['B', 'kB', 'MB', 'GB'];
+    let unitIndex = 0;
+    let scaled = number;
+
+    while (scaled >= 1024 && unitIndex < units.length - 1) {
+        scaled /= 1024;
+        unitIndex += 1;
+    }
+
+    const decimals = unitIndex === 0 ? (scaled >= 10 ? 0 : 2) : scaled >= 10 ? 1 : 2;
+    return `${scaled.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
 // === API FUNCTIONS ===
@@ -1090,8 +1461,10 @@ function handleEventMessage(data) {
 }
 
 function handleUartMessage(data) {
+    if (!data) return;
+
     // Distinguish between raw and decoded frames based on the 'type' field
-    const isDecoded = data.type === 'uart_decoded';
+    const isDecoded = data.type === 'uart_decoded' || data.type === 'decoded';
     const frameArray = isDecoded ? state.uartRealtime.frames.decoded : state.uartRealtime.frames.raw;
     const timeline = isDecoded ? state.uartRealtime.timeline.decoded : state.uartRealtime.timeline.raw;
 
@@ -1106,9 +1479,70 @@ function handleUartMessage(data) {
         addTimelineItem(timeline, data, isDecoded ? 'decoded' : 'raw');
     }
 
-    // Update charts (only raw frames are used in charts)
-    if (state.uartRealtime.charts && !isDecoded) {
-        state.uartRealtime.charts.update({ rawFrames: state.uartRealtime.frames.raw });
+    if (!isDecoded) {
+        if (state.uartRealtime.charts) {
+            state.uartRealtime.charts.update({ rawFrames: state.uartRealtime.frames.raw });
+        }
+
+        if (state.uartDashboard.lengthChart) {
+            state.uartDashboard.lengthChart.update({ rawFrames: state.uartRealtime.frames.raw });
+        }
+
+        if (state.uartDashboard.trafficChart) {
+            const length = Number(data.length ?? data.raw?.length ?? data.bytes?.length ?? 0) || 0;
+            state.uartDashboard.trafficChart.addPoint({
+                timestamp_ms: data.timestamp_ms ?? Date.now(),
+                frames: 1,
+                bytes: length,
+            });
+        }
+
+        if (Number(data.timestamp_ms)) {
+            set('uart-dash-last-frame', new Date(Number(data.timestamp_ms)).toLocaleTimeString());
+        }
+
+        if (Number(data.length)) {
+            set('uart-dash-last-length', `${Number(data.length)} B`);
+        }
+    } else {
+        const command = data.command ?? data.opcode ?? data.decoded?.command;
+        if (command && state.uartDashboard.commandChart) {
+            state.uartDashboard.commandChart.increment(command);
+        }
+
+        if (command) {
+            const normalized = String(command).toUpperCase();
+            const existing = state.uartDashboard.commandStats.get(normalized) || { count: 0, lastSeen: 0 };
+            state.uartDashboard.commandStats.set(normalized, {
+                count: (existing.count || 0) + 1,
+                lastSeen: Date.now(),
+            });
+            renderUartCommandTable();
+            set('uart-dash-last-command', normalized);
+        }
+
+        const address = data.address ?? data.node ?? data.decoded?.address;
+        if (address !== undefined && address !== null) {
+            set('uart-dash-last-address', String(address));
+        }
+
+        const status = data.status ?? data.result ?? data.decoded?.status;
+        const errorType = data.error_type ?? data.error ?? (status === 'error' ? 'Erreur' : null);
+        if (status === 'error' || data.level === 'error' || errorType) {
+            const typeLabel = errorType || 'Erreur';
+            const existingError = state.uartDashboard.errorStats.get(typeLabel) || { count: 0, lastSeen: 0 };
+            state.uartDashboard.errorStats.set(typeLabel, {
+                count: (existingError.count || 0) + 1,
+                lastSeen: Date.now(),
+            });
+            renderUartErrorTable();
+
+            const timestamp = Number(data.timestamp_ms) || Date.now();
+            const message = data.message || data.description || `Erreur UART (${typeLabel})`;
+            addUartDashboardEvent(message, 'error', timestamp);
+            set('uart-dash-last-error', message);
+            set('uart-dash-last-error-time', new Date(timestamp).toLocaleString());
+        }
     }
 }
 
