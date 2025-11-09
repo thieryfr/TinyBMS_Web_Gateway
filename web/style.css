@@ -1022,6 +1022,16 @@ main {
     z-index: 1;
 }
 
+.status-link-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-tertiary);
+    transition: color var(--transition-base);
+    font-size: 0.875rem;
+    position: relative;
+    z-index: 1;
+}
+
 .status-module:hover .status-label {
     color: var(--text-secondary);
 }
@@ -1029,6 +1039,10 @@ main {
 .status-module.active .status-label {
     color: var(--accent);
     font-weight: 700;
+}
+
+.status-module:hover .status-link-icon {
+    color: var(--text-secondary);
 }
 
 .status-led {
@@ -1060,6 +1074,11 @@ main {
     background-color: #ffa500;
     box-shadow: 0 0 12px #ffa500, 0 0 4px #ffa500 inset;
     animation: pulse-orange 1.5s ease-in-out infinite;
+}
+
+.status-led-info {
+    background-color: #3fb1ff;
+    box-shadow: 0 0 12px rgba(63, 177, 255, 0.9), 0 0 4px rgba(63, 177, 255, 0.9) inset;
 }
 
 .status-led-unknown {
