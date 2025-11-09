@@ -1,6 +1,6 @@
 <section id="tab-mqtt" class="tab-panel" aria-labelledby="tab-mqtt-label">
   <div class="row g-3">
-    <div class="col-xl-4">
+    <div class="col-xl-6">
       <div class="card h-100">
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
           <h3 class="card-title mb-0">État du broker</h3>
@@ -23,7 +23,7 @@
         </div>
       </div>
     </div>
-    <div class="col-xl-4">
+    <div class="col-xl-6">
       <div class="card h-100">
         <div class="card-header">
           <h3 class="card-title mb-0">Répartition des messages</h3>
@@ -33,86 +33,26 @@
         </div>
       </div>
     </div>
-    <div class="col-xl-4">
-      <form id="mqtt-config-form" class="card h-100">
-        <div class="card-header">
-          <h3 class="card-title mb-0">Configuration de la passerelle</h3>
-        </div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-6">
-              <label for="mqtt-scheme" class="form-label">Schéma</label>
-              <select id="mqtt-scheme" name="scheme" class="form-select">
-                <option value="mqtt">mqtt</option>
-                <option value="mqtts">mqtts</option>
-              </select>
-            </div>
-            <div class="col-6">
-              <label for="mqtt-port" class="form-label">Port</label>
-              <input id="mqtt-port" name="port" type="number" class="form-control" min="1" max="65535" required>
-            </div>
-            <div class="col-12">
-              <label for="mqtt-host" class="form-label">Hôte</label>
-              <input id="mqtt-host" name="host" type="text" class="form-control" required>
-            </div>
-            <div class="col-6">
-              <label for="mqtt-username" class="form-label">Utilisateur</label>
-              <input id="mqtt-username" name="username" type="text" class="form-control">
-            </div>
-            <div class="col-6">
-              <label for="mqtt-password" class="form-label">Mot de passe</label>
-              <input id="mqtt-password" name="password" type="password" class="form-control">
-            </div>
-            <div class="col-6">
-              <label for="mqtt-keepalive" class="form-label">Keepalive (s)</label>
-              <input id="mqtt-keepalive" name="keepalive" type="number" class="form-control" min="0">
-            </div>
-            <div class="col-6">
-              <label for="mqtt-qos" class="form-label">QoS par défaut</label>
-              <input id="mqtt-qos" name="default_qos" type="number" class="form-control" min="0" max="2">
-            </div>
-            <div class="col-12">
-              <div class="form-check form-switch">
-                <input id="mqtt-retain" name="retain" type="checkbox" class="form-check-input">
-                <label class="form-check-label" for="mqtt-retain">Retenir l’état</label>
-              </div>
-            </div>
+  </div>
+
+  <!-- Configuration Access Card -->
+  <div class="row g-3 mt-3">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body text-center">
+          <div class="mb-3">
+            <i class="ti ti-settings-cog" style="font-size: 3rem; color: var(--tblr-primary);"></i>
           </div>
-          <fieldset class="mt-4">
-            <legend class="small text-uppercase text-secondary">Topics personnalisés</legend>
-            <div class="row g-3">
-              <div class="col-12">
-                <label for="mqtt-status-topic" class="form-label">Statut</label>
-                <input id="mqtt-status-topic" name="status_topic" type="text" class="form-control">
-              </div>
-              <div class="col-12">
-                <label for="mqtt-metrics-topic" class="form-label">Mesures</label>
-                <input id="mqtt-metrics-topic" name="metrics_topic" type="text" class="form-control">
-              </div>
-              <div class="col-12">
-                <label for="mqtt-config-topic" class="form-label">Configuration</label>
-                <input id="mqtt-config-topic" name="config_topic" type="text" class="form-control">
-              </div>
-              <div class="col-12">
-                <label for="mqtt-can-raw-topic" class="form-label">CAN brut</label>
-                <input id="mqtt-can-raw-topic" name="can_raw_topic" type="text" class="form-control">
-              </div>
-              <div class="col-12">
-                <label for="mqtt-can-decoded-topic" class="form-label">CAN décodé</label>
-                <input id="mqtt-can-decoded-topic" name="can_decoded_topic" type="text" class="form-control">
-              </div>
-              <div class="col-12">
-                <label for="mqtt-can-ready-topic" class="form-label">CAN prêts</label>
-                <input id="mqtt-can-ready-topic" name="can_ready_topic" type="text" class="form-control">
-              </div>
-            </div>
-          </fieldset>
+          <h3 class="card-title">Configuration MQTT</h3>
+          <p class="text-secondary mb-4">
+            Configurez votre broker MQTT, les topics personnalisés et les paramètres de connexion.
+          </p>
+          <a href="/mqtt-config.html" class="btn btn-primary btn-lg">
+            <i class="ti ti-settings me-2"></i>
+            Accéder à la configuration
+          </a>
         </div>
-        <div class="card-footer">
-          <button type="submit" class="btn btn-primary w-100">Enregistrer la configuration</button>
-          <p id="mqtt-config-message" class="mt-2 mb-0 small" role="status" aria-live="polite"></p>
-        </div>
-      </form>
+      </div>
     </div>
   </div>
 </section>
