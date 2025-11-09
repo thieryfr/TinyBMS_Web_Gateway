@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Observabilité du code - TinyBMS Gateway</title>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
+
+    <!-- Tabler CSS + Icons -->
+    <link rel="stylesheet" href="/assets/css/tabler.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+
+    <!-- Styles personnalisés -->
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="theme-dark">
+    <div class="page">
+      <header class="navbar navbar-expand-md navbar-dark app-header">
+        <div class="container-xl">
+          <div class="app-logo">
+            <div class="app-logo-icon">
+              <i class="ti ti-activity"></i>
+            </div>
+            <div class="app-logo-text">
+              <div class="app-logo-title">Métriques du code</div>
+              <div class="app-logo-subtitle">Supervision interne TinyBMS Gateway</div>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 ms-auto align-items-center">
+            <div class="live-indicator" id="metrics-mode-indicator">
+              <span class="status-dot"></span>
+              <span>Données en direct</span>
+            </div>
+            <button id="metrics-refresh" class="btn btn-outline-primary btn-sm" type="button">
+              <i class="ti ti-refresh"></i>
+              <span class="ms-2">Rafraîchir</span>
+            </button>
+            <a href="/" class="btn btn-outline-secondary btn-sm">
+              <i class="ti ti-arrow-left"></i>
+              <span class="ms-2">Dashboard principal</span>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-body">
+        <div class="container-xl">
+          <div class="row align-items-center g-3 mb-3">
+            <div class="col-lg-8">
+              <h1 class="page-title mb-1">Observabilité du code</h1>
+              <p class="text-secondary mb-0">
+                Visualisez en un coup d'œil l'état interne du firmware, la charge CPU, la santé des tâches et les flux du bus d'événements.
+              </p>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+              <div class="d-flex flex-wrap justify-content-lg-end gap-3 text-secondary small">
+                <div>
+                  Dernière mise à jour&nbsp;:
+                  <span id="metrics-last-refresh">--</span>
+                </div>
+                <div>
+                  Source&nbsp;:
+                  <span id="metrics-source-label">Live</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-info shadow-sm" role="status">
+            <div class="d-flex align-items-start gap-3">
+              <div class="alert-icon">
+                <i class="ti ti-infosquare-rounded"></i>
+              </div>
+              <div>
+                <h4 class="alert-title">Vue dédiée aux métriques du code</h4>
+                <p class="mb-0">
+                  Cette page regroupe les indicateurs d'exécution essentiels&nbsp;: charge CPU, consommation mémoire, latence de la boucle d'événements, drops par module et état des tâches FreeRTOS. Elle interroge automatiquement les endpoints REST du firmware et bascule en mode démo si aucune donnée n'est disponible.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 metrics-grid" id="metrics-summary">
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="card metric-card" aria-labelledby="metric-uptime-label">
+                <div class="card-body">
+                  <div class="metric-icon bg-accent-soft">
+                    <i class="ti ti-clock-hour-4"></i>
+                  </div>
+                  <div class="metric-content">
+                    <span id="metric-uptime-label" class="metric-label">Uptime</span>
+                    <span id="metric-uptime" class="metric-value">--</span>
+                    <span id="metric-last-boot" class="metric-subtitle">Dernier boot&nbsp;: --</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="card metric-card" aria-labelledby="metric-cycles-label">
+                <div class="card-body">
+                  <div class="metric-icon bg-info-soft">
+                    <i class="ti ti-rotate-clockwise"></i>
+                  </div>
+                  <div class="metric-content">
+                    <span id="metric-cycles-label" class="metric-label">Cycles &amp; resets</span>
+                    <span id="metric-cycle-count" class="metric-value">--</span>
+                    <span id="metric-reset-reason" class="metric-subtitle">Dernier reset&nbsp;: --</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="card metric-card" aria-labelledby="metric-memory-label">
+                <div class="card-body">
+                  <div class="metric-icon bg-success-soft">
+                    <i class="ti ti-stack-2"></i>
+                  </div>
+                  <div class="metric-content">
+                    <span id="metric-memory-label" class="metric-label">Mémoire libre</span>
+                    <span id="metric-heap" class="metric-value">--</span>
+                    <span id="metric-heap-min" class="metric-subtitle">Minimum observé&nbsp;: --</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="card metric-card" aria-labelledby="metric-events-label">
+                <div class="card-body">
+                  <div class="metric-icon bg-warning-soft">
+                    <i class="ti ti-traffic-cone"></i>
+                  </div>
+                  <div class="metric-content">
+                    <span id="metric-events-label" class="metric-label">Événements perdus</span>
+                    <span id="metric-event-drops" class="metric-value">--</span>
+                    <span id="metric-event-latency" class="metric-subtitle">Latence moyenne&nbsp;: --</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-12 col-xl-4">
+              <div class="card chart-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <h3 class="card-title mb-0">Charge CPU</h3>
+                  <span class="metric-chip" id="metric-cpu-avg">--</span>
+                </div>
+                <div class="card-body">
+                  <div id="cpu-usage-chart" class="echart-container" role="img" aria-label="Charge CPU moyenne"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-4">
+              <div class="card chart-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <h3 class="card-title mb-0">Latence de la boucle d'événements</h3>
+                  <span class="metric-chip" id="metric-event-latency-chip">--</span>
+                </div>
+                <div class="card-body">
+                  <div id="event-loop-latency-chart" class="echart-container" role="img" aria-label="Latence de la boucle d'événements"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-4">
+              <div class="card chart-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <h3 class="card-title mb-0">Consommation mémoire</h3>
+                  <span class="metric-chip" id="metric-heap-usage-chip">--</span>
+                </div>
+                <div class="card-body">
+                  <div id="heap-usage-chart" class="echart-container" role="img" aria-label="Consommation mémoire"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-12 col-xl-6">
+              <div class="card chart-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <h3 class="card-title mb-0">Drops par consommateur</h3>
+                  <span class="text-secondary small">Analyse des modules saturés</span>
+                </div>
+                <div class="card-body">
+                  <div id="event-bus-drop-chart" class="echart-container" role="img" aria-label="Drops par module"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-6">
+              <div class="card chart-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                  <h3 class="card-title mb-0">Occupation des files</h3>
+                  <span class="text-secondary small">Profondeur vs capacité</span>
+                </div>
+                <div class="card-body">
+                  <div id="queue-depth-chart" class="echart-container" role="img" aria-label="Occupation des files"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                  <h3 class="card-title mb-0">Tâches FreeRTOS</h3>
+                  <span class="text-secondary small">Charge CPU et marge de pile</span>
+                  <span class="metric-chip" id="metric-task-count">--</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-modern" aria-describedby="metric-task-count">
+                    <thead>
+                      <tr>
+                        <th scope="col">Tâche</th>
+                        <th scope="col">État</th>
+                        <th scope="col">CPU</th>
+                        <th scope="col">Pile libre</th>
+                        <th scope="col">Cœur</th>
+                        <th scope="col">Runtime</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tasks-table-body">
+                      <tr>
+                        <td colspan="6" class="text-center text-secondary">Chargement des données...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1 mb-5">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                  <h3 class="card-title mb-0">Santé des modules</h3>
+                  <span class="text-secondary small">Dernières auto-surveillances</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-modern" aria-label="Statut des modules">
+                    <thead>
+                      <tr>
+                        <th scope="col">Module</th>
+                        <th scope="col">Statut</th>
+                        <th scope="col">Détails</th>
+                        <th scope="col">Dernier événement</th>
+                      </tr>
+                    </thead>
+                    <tbody id="modules-table-body">
+                      <tr>
+                        <td colspan="4" class="text-center text-secondary">Chargement des données...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <template id="module-row-template">
+      <tr>
+        <th scope="row"></th>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+    </template>
+
+    <template id="task-row-template">
+      <tr>
+        <th scope="row"></th>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script type="module" src="/src/js/codeMetricsDashboard.js"></script>
+  </body>
+</html>
