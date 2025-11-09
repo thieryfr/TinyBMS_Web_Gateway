@@ -58,6 +58,15 @@
           <div class="kpi-value" id="kpi-cycles">--</div>
         </div>
       </div>
+      <div class="kpi-item" data-tooltip="Statut TinyBMS (Register 50)">
+        <div class="kpi-icon bg-purple-lt">
+          <i class="ti ti-cpu"></i>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-label">TinyBMS</div>
+          <div class="kpi-value" id="tinybms-status-badge">--</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="container-xl mt-3">
@@ -86,6 +95,10 @@
         <button type="button" class="status-module" data-module="mqtt" data-tab="mqtt" role="tab" aria-label="MQTT">
           <span class="status-led status-led-unknown"></span>
           <span class="status-label">MQTT</span>
+        </button>
+        <button type="button" class="status-module" data-module="mqtt" data-tab="mqtt-dashboard" role="tab" aria-label="Dashboard MQTT">
+          <span class="status-led status-led-unknown"></span>
+          <span class="status-label">MQTT Dashboard</span>
         </button>
         <button type="button" class="status-module" data-module="uart" data-tab="tiny" role="tab" aria-label="Tiny">
           <span class="status-led status-led-unknown"></span>

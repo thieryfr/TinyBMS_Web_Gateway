@@ -1,0 +1,202 @@
+<section id="tab-mqtt-dashboard" class="tab-panel" aria-labelledby="tab-mqtt-dashboard-label">
+  <!-- KPIs Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Messages publiés</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="mqtt-dash-pub-rate">0</div>
+            <div class="text-secondary">/s</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Total: </span>
+            <span class="text-secondary small" id="mqtt-dash-pub-total">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Messages reçus</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0 me-2" id="mqtt-dash-sub-rate">0</div>
+            <div class="text-secondary">/s</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Total: </span>
+            <span class="text-secondary small" id="mqtt-dash-sub-total">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Topics actifs</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0" id="mqtt-dash-topics-count">0</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Connecté: </span>
+            <span class="badge status-badge status-badge--disconnected" id="mqtt-dash-connection-badge">Non</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="subheader">Uptime</div>
+          </div>
+          <div class="d-flex align-items-baseline mt-2">
+            <div class="h1 mb-0" id="mqtt-dash-uptime">--</div>
+          </div>
+          <div class="mt-2">
+            <span class="text-muted small">Reconnexions: </span>
+            <span class="text-secondary small" id="mqtt-dash-reconnects">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title mb-0">Flux de messages en temps réel</h3>
+          <div class="ms-auto">
+            <button id="mqtt-dash-chart-refresh" class="btn btn-sm btn-outline-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+              Actualiser
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="mqtt-dash-timeline-chart" class="echart-container" style="height: 300px;" role="img" aria-label="Timeline des messages MQTT"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Distribution QoS</h3>
+        </div>
+        <div class="card-body">
+          <div id="mqtt-dash-qos-chart" class="echart-container" style="height: 300px;" role="img" aria-label="Répartition des niveaux QoS"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Topics actifs</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-vcenter card-table table-striped">
+              <thead>
+                <tr>
+                  <th>Topic</th>
+                  <th class="text-end">Messages</th>
+                  <th class="text-end">Dernière mise à jour</th>
+                </tr>
+              </thead>
+              <tbody id="mqtt-dash-topics-table">
+                <tr>
+                  <td colspan="3" class="text-muted text-center">Aucun topic actif</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-6">
+      <div class="card">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title mb-0">Événements récents</h3>
+          <button id="mqtt-dash-events-clear" class="btn btn-sm btn-outline-danger ms-auto">Effacer</button>
+        </div>
+        <div class="card-body p-0">
+          <div style="max-height: 400px; overflow-y: auto;">
+            <div id="mqtt-dash-events-timeline" class="list-group list-group-flush">
+              <div class="list-group-item text-muted text-center">Aucun événement</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bandwidth Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Débit réseau</h3>
+        </div>
+        <div class="card-body">
+          <div id="mqtt-dash-bandwidth-chart" class="echart-container" style="height: 250px;" role="img" aria-label="Débit réseau MQTT"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="row g-3">
+    <div class="col-xl-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title mb-0">Statistiques détaillées</h3>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Client démarré</dt><dd id="mqtt-dash-client-started">--</dd></div>
+                <div><dt>Wi-Fi</dt><dd id="mqtt-dash-wifi-state">--</dd></div>
+                <div><dt>Broker</dt><dd id="mqtt-dash-broker">--</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Reconnexions</dt><dd id="mqtt-dash-reconnect-count">0</dd></div>
+                <div><dt>Déconnexions</dt><dd id="mqtt-dash-disconnect-count">0</dd></div>
+                <div><dt>Erreurs</dt><dd id="mqtt-dash-error-count">0</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Messages perdus</dt><dd id="mqtt-dash-dropped">0</dd></div>
+                <div><dt>Messages retenus</dt><dd id="mqtt-dash-retained">0</dd></div>
+                <div><dt>Taille moyenne</dt><dd id="mqtt-dash-avg-size">--</dd></div>
+              </dl>
+            </div>
+            <div class="col-md-3">
+              <dl class="status-kv">
+                <div><dt>Dernier événement</dt><dd id="mqtt-dash-last-event">--</dd></div>
+                <div><dt>Horodatage</dt><dd id="mqtt-dash-last-event-time">--</dd></div>
+                <div><dt>Dernière erreur</dt><dd id="mqtt-dash-last-error">--</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

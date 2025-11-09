@@ -7,6 +7,7 @@ import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
+import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
 
 const MQTT_STATUS_POLL_INTERVAL_MS = 5000;
 const MAX_TIMELINE_ITEMS = 60;
@@ -33,6 +34,16 @@ const state = {
         lastStatus: null,
         lastConfig: null,
         messageChart: null,
+    },
+    mqttDashboard: {
+        timelineChart: null,
+        qosChart: null,
+        bandwidthChart: null,
+        events: [],
+        topics: new Map(),
+        lastUpdate: null,
+        previousStats: { published: 0, received: 0, bytesIn: 0, bytesOut: 0 },
+        startTime: Date.now(),
     },
     configRegisters: null,
     batteryCharts: null,
@@ -615,6 +626,13 @@ async function fetchMqttStatus() {
     if (!res.ok) throw new Error('Status failed');
     const status = await res.json();
     updateMqttStatus(status);
+
+    // Update dashboard if it's initialized
+    if (state.mqttDashboard.timelineChart) {
+        updateMqttDashboardKPIs(status);
+    }
+
+    return status;
 }
 
 function refreshMqttData(force = false) {
@@ -622,6 +640,249 @@ function refreshMqttData(force = false) {
     if (force || !state.mqtt.lastConfig) {
         fetchMqttConfig().catch((err) => displayMqttMessage('Config MQTT échouée.', true));
     }
+}
+
+// === MQTT DASHBOARD ===
+
+function setupMqttDashboard() {
+    const timelineEl = document.getElementById('mqtt-dash-timeline-chart');
+    const qosEl = document.getElementById('mqtt-dash-qos-chart');
+    const bandwidthEl = document.getElementById('mqtt-dash-bandwidth-chart');
+
+    if (timelineEl) state.mqttDashboard.timelineChart = new MqttTimelineChart(timelineEl);
+    if (qosEl) state.mqttDashboard.qosChart = new MqttQosChart(qosEl);
+    if (bandwidthEl) state.mqttDashboard.bandwidthChart = new MqttBandwidthChart(bandwidthEl);
+
+    const refreshBtn = document.getElementById('mqtt-dash-chart-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshMqttDashboard(true);
+        });
+    }
+
+    const clearEventsBtn = document.getElementById('mqtt-dash-events-clear');
+    if (clearEventsBtn) {
+        clearEventsBtn.addEventListener('click', () => {
+            state.mqttDashboard.events = [];
+            updateMqttDashboardEvents();
+        });
+    }
+}
+
+function updateMqttDashboardKPIs(status) {
+    if (!status) return;
+
+    const now = Date.now();
+    const timeDelta = state.mqttDashboard.lastUpdate ? (now - state.mqttDashboard.lastUpdate) / 1000 : 1;
+    state.mqttDashboard.lastUpdate = now;
+
+    // Extract current stats
+    const currentPub = status.published_messages || status.message_counts?.published || 0;
+    const currentSub = status.received_messages || status.message_counts?.received || 0;
+    const currentBytesIn = status.bytes_received || 0;
+    const currentBytesOut = status.bytes_sent || 0;
+
+    // Calculate rates
+    const pubRate = Math.max(0, (currentPub - state.mqttDashboard.previousStats.published) / timeDelta);
+    const subRate = Math.max(0, (currentSub - state.mqttDashboard.previousStats.received) / timeDelta);
+
+    // Update previous stats
+    state.mqttDashboard.previousStats = {
+        published: currentPub,
+        received: currentSub,
+        bytesIn: currentBytesIn,
+        bytesOut: currentBytesOut,
+    };
+
+    // Update KPIs
+    set('mqtt-dash-pub-rate', pubRate.toFixed(1));
+    set('mqtt-dash-sub-rate', subRate.toFixed(1));
+    set('mqtt-dash-pub-total', currentPub.toLocaleString());
+    set('mqtt-dash-sub-total', currentSub.toLocaleString());
+
+    // Topics count
+    const topicCounts = status.topic_counts || [];
+    const topicsCount = Array.isArray(topicCounts) ? topicCounts.length : Object.keys(topicCounts || {}).length;
+    set('mqtt-dash-topics-count', topicsCount);
+
+    // Connection badge
+    const badge = document.getElementById('mqtt-dash-connection-badge');
+    if (badge) {
+        badge.className = 'badge status-badge';
+        if (status.connected) {
+            badge.textContent = 'Oui';
+            badge.classList.add('status-badge--connected');
+        } else {
+            badge.textContent = 'Non';
+            badge.classList.add('status-badge--disconnected');
+        }
+    }
+
+    // Uptime
+    const uptime = status.uptime_ms || (now - state.mqttDashboard.startTime);
+    set('mqtt-dash-uptime', formatDuration(uptime));
+    set('mqtt-dash-reconnects', status.reconnects || 0);
+
+    // Update charts
+    if (state.mqttDashboard.timelineChart) {
+        state.mqttDashboard.timelineChart.addDataPoint(now, pubRate * timeDelta, subRate * timeDelta);
+    }
+
+    // QoS distribution
+    if (state.mqttDashboard.qosChart) {
+        const qos0 = status.qos_counts?.qos0 || status.qos0_messages || 0;
+        const qos1 = status.qos_counts?.qos1 || status.qos1_messages || 0;
+        const qos2 = status.qos_counts?.qos2 || status.qos2_messages || 0;
+        state.mqttDashboard.qosChart.setData(qos0, qos1, qos2);
+    }
+
+    // Bandwidth
+    if (state.mqttDashboard.bandwidthChart) {
+        const bytesInRate = (currentBytesIn - state.mqttDashboard.previousStats.bytesIn) / timeDelta;
+        const bytesOutRate = (currentBytesOut - state.mqttDashboard.previousStats.bytesOut) / timeDelta;
+        state.mqttDashboard.bandwidthChart.addDataPoint(now, bytesInRate, bytesOutRate);
+    }
+
+    // Update topics table
+    updateMqttDashboardTopics(status);
+
+    // Update detailed stats
+    updateMqttDashboardStats(status);
+}
+
+function updateMqttDashboardTopics(status) {
+    const tbody = document.getElementById('mqtt-dash-topics-table');
+    if (!tbody) return;
+
+    const topicCounts = status.topic_counts || [];
+    const topics = Array.isArray(topicCounts) ? topicCounts : Object.entries(topicCounts || {}).map(([name, count]) => ({ topic: name, count }));
+
+    if (topics.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">Aucun topic actif</td></tr>';
+        return;
+    }
+
+    // Update topics map with timestamps
+    topics.forEach((topic) => {
+        const name = topic.topic || topic.name;
+        if (name) {
+            const existing = state.mqttDashboard.topics.get(name);
+            const count = topic.count || topic.messages || 0;
+            if (!existing || existing.count !== count) {
+                state.mqttDashboard.topics.set(name, {
+                    count,
+                    lastUpdate: Date.now(),
+                });
+            }
+        }
+    });
+
+    // Build table rows
+    const rows = Array.from(state.mqttDashboard.topics.entries())
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, 20) // Show top 20
+        .map(([name, data]) => {
+            const lastUpdate = new Date(data.lastUpdate).toLocaleTimeString();
+            return `
+                <tr>
+                    <td><code class="text-muted">${name}</code></td>
+                    <td class="text-end">${data.count.toLocaleString()}</td>
+                    <td class="text-end text-muted small">${lastUpdate}</td>
+                </tr>
+            `;
+        })
+        .join('');
+
+    tbody.innerHTML = rows;
+}
+
+function updateMqttDashboardEvents() {
+    const container = document.getElementById('mqtt-dash-events-timeline');
+    if (!container) return;
+
+    if (state.mqttDashboard.events.length === 0) {
+        container.innerHTML = '<div class="list-group-item text-muted text-center">Aucun événement</div>';
+        return;
+    }
+
+    const html = state.mqttDashboard.events
+        .slice(-50) // Keep last 50 events
+        .reverse()
+        .map((event) => {
+            const time = new Date(event.timestamp).toLocaleTimeString();
+            const iconClass = event.type === 'error' ? 'text-danger' : event.type === 'warning' ? 'text-warning' : 'text-success';
+            const icon = event.type === 'error' ? '⚠️' : event.type === 'warning' ? '⚡' : '✓';
+
+            return `
+                <div class="list-group-item">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="${iconClass}">${icon}</span>
+                        <div class="flex-grow-1">
+                            <div class="text-truncate">${event.message}</div>
+                            <small class="text-muted">${time}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+
+    container.innerHTML = html;
+}
+
+function addMqttDashboardEvent(message, type = 'info') {
+    state.mqttDashboard.events.push({
+        message,
+        type,
+        timestamp: Date.now(),
+    });
+    updateMqttDashboardEvents();
+}
+
+function updateMqttDashboardStats(status) {
+    if (!status) return;
+
+    set('mqtt-dash-client-started', status.client_started ? 'Actif' : 'Arrêté');
+    set('mqtt-dash-wifi-state', status.wifi_connected ? 'Connecté' : 'Déconnecté');
+
+    const broker = status.host ? `${status.scheme || 'mqtt'}://${status.host}:${status.port || 1883}` : '--';
+    set('mqtt-dash-broker', broker);
+
+    set('mqtt-dash-reconnect-count', status.reconnects || 0);
+    set('mqtt-dash-disconnect-count', status.disconnects || 0);
+    set('mqtt-dash-error-count', status.errors || 0);
+
+    set('mqtt-dash-dropped', status.dropped_messages || 0);
+    set('mqtt-dash-retained', status.retained_messages || 0);
+
+    const avgSize = status.average_message_size ||
+                    (status.bytes_sent && status.published_messages ? (status.bytes_sent / status.published_messages) : 0);
+    set('mqtt-dash-avg-size', avgSize > 0 ? Math.round(avgSize) + ' B' : '--');
+
+    set('mqtt-dash-last-event', status.last_event || '--');
+
+    const ts = Number(status.last_event_timestamp_ms);
+    set('mqtt-dash-last-event-time', Number.isFinite(ts) && ts > 0 ? new Date(ts).toLocaleString() : '--');
+
+    const lastError = status.last_error || 'Aucune';
+    set('mqtt-dash-last-error', lastError);
+
+    // Add event on state change
+    if (status.last_event && (!state.mqtt.lastStatus || status.last_event !== state.mqtt.lastStatus.last_event)) {
+        const type = status.last_error ? 'error' : status.connected ? 'success' : 'warning';
+        addMqttDashboardEvent(status.last_event, type);
+    }
+}
+
+function refreshMqttDashboard(force = false) {
+    fetchMqttStatus()
+        .then((status) => {
+            updateMqttDashboardKPIs(status);
+        })
+        .catch((err) => {
+            console.error('MQTT dashboard refresh failed', err);
+            addMqttDashboardEvent('Échec de la mise à jour: ' + err.message, 'error');
+        });
 }
 
 // === INITIALISATION ===
@@ -641,6 +902,7 @@ async function initialise() {
     setupHistoryControls();
     updateArchiveControls();
     setupMqttTab();
+    setupMqttDashboard();
     setupConfigTab();
 
     state.historyChart = new HistoryChart(document.getElementById('history-chart'));
@@ -1179,54 +1441,38 @@ function updateTinyBMSStatus(registers) {
     const reg50 = registers.find(reg => reg.address === 50 || reg.address === 0x32);
 
     if (!reg50 || !reg50.value) {
-        statusBadge.className = 'badge bg-secondary-lt text-secondary fw-semibold px-3 py-2';
-        statusBadge.innerHTML = '<i class="ti ti-help-circle me-1"></i><span>Inconnu</span>';
+        statusBadge.textContent = 'Inconnu';
         return;
     }
 
     const status = reg50.value;
-    let className, icon, text;
+    let text;
 
     switch (status) {
         case 0x91: // Charging
-            className = 'badge bg-warning-lt text-warning fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-charging';
             text = 'En charge';
             break;
         case 0x92: // Fully Charged
-            className = 'badge bg-success-lt text-success fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-4';
             text = 'Chargé';
             break;
         case 0x93: // Discharging
-            className = 'badge bg-blue-lt text-blue fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-2';
             text = 'Décharge';
             break;
         case 0x96: // Regeneration
-            className = 'badge bg-cyan-lt text-cyan fw-semibold px-3 py-2';
-            icon = 'ti ti-refresh';
             text = 'Régénération';
             break;
         case 0x97: // Idle
-            className = 'badge bg-info-lt text-info fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-3';
             text = 'Au repos';
             break;
         case 0x9B: // Fault
-            className = 'badge bg-danger-lt text-danger fw-semibold px-3 py-2';
-            icon = 'ti ti-alert-triangle';
             text = 'Défaut';
             break;
         default:
-            className = 'badge bg-secondary-lt text-secondary fw-semibold px-3 py-2';
-            icon = 'ti ti-help-circle';
             text = `0x${status.toString(16).toUpperCase()}`;
             break;
     }
 
-    statusBadge.className = className;
-    statusBadge.innerHTML = `<i class="${icon} me-1"></i><span>${text}</span>`;
+    statusBadge.textContent = text;
 }
 
 function updateAlarmsWarnings(alarms, warnings) {
