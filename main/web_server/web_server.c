@@ -783,8 +783,9 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
     int written = snprintf(buffer,
                            sizeof(buffer),
                            "{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
-                           "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,"
-                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\"," 
+                           "\"username\":\"%s\",\"password\":\"%s\",\"client_cert_path\":\"%s\","
+                           "\"ca_cert_path\":\"%s\",\"verify_hostname\":%s,\"keepalive\":%u,\"default_qos\":%u,"
+                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\","
                            "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}",
                            scheme,
                            config->broker_uri,
@@ -792,6 +793,9 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
                            (unsigned)port,
                            config->username,
                            config->password,
+                           config->client_cert_path,
+                           config->ca_cert_path,
+                           config->verify_hostname ? "true" : "false",
                            (unsigned)config->keepalive_seconds,
                            (unsigned)config->default_qos,
                            config->retain_enabled ? "true" : "false",
@@ -884,6 +888,19 @@ static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
 
     web_server_extract_json_string(payload, "\"username\"", updated.username, sizeof(updated.username));
     web_server_extract_json_string(payload, "\"password\"", updated.password, sizeof(updated.password));
+    web_server_extract_json_string(payload,
+                                   "\"client_cert_path\"",
+                                   updated.client_cert_path,
+                                   sizeof(updated.client_cert_path));
+    web_server_extract_json_string(payload,
+                                   "\"ca_cert_path\"",
+                                   updated.ca_cert_path,
+                                   sizeof(updated.ca_cert_path));
+
+    bool verify_hostname = updated.verify_hostname;
+    if (web_server_extract_json_bool(payload, "\"verify_hostname\"", &verify_hostname)) {
+        updated.verify_hostname = verify_hostname;
+    }
 
     uint32_t keepalive = 0U;
     if (web_server_extract_json_uint(payload, "\"keepalive\"", &keepalive)) {
