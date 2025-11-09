@@ -67,7 +67,9 @@ function ensureNetworkBanner() {
 
   const banner = document.createElement('div');
   banner.className = 'alert alert-danger alert-important d-flex align-items-center gap-2 d-none';
-  banner.setAttribute('role', 'status');
+  banner.setAttribute('role', 'alert');
+  banner.setAttribute('aria-live', 'assertive');
+  banner.setAttribute('aria-atomic', 'true');
 
   const icon = document.createElement('i');
   icon.className = 'ti ti-plug-off';
@@ -158,6 +160,17 @@ function getFeedbackElement(field, { create = false } = {}) {
     ? field.parentElement?.querySelector(`.invalid-feedback[data-feedback-for="${ident}"]`)
     : null;
 
+  if (!feedback && ident) {
+    const form = field.closest('form');
+    if (form) {
+      feedback = form.querySelector(`.invalid-feedback[data-feedback-for="${ident}"]`);
+    }
+  }
+
+  if (!feedback && ident) {
+    feedback = document.querySelector(`.invalid-feedback[data-feedback-for="${ident}"]`);
+  }
+
   if (!feedback) {
     let sibling = field.nextElementSibling;
     while (sibling) {
@@ -173,6 +186,7 @@ function getFeedbackElement(field, { create = false } = {}) {
     feedback = document.createElement('div');
     feedback.className = 'invalid-feedback';
     feedback.dataset.feedbackFor = field.name || field.id || '';
+    feedback.setAttribute('aria-live', 'assertive');
     field.insertAdjacentElement('afterend', feedback);
   }
 
@@ -744,11 +758,16 @@ document.addEventListener('DOMContentLoaded', () => {
   updateTlsVisibility();
   setupEventListeners();
 
-  fetchMqttConfig()
-    .then(() => displayMessage(''))
-    .catch(() => displayMessage('Échec du chargement de la configuration.', true));
+  const configPromise = fetchMqttConfig()
+    .then(() => {
+      displayMessage('');
+    })
+    .catch((error) => {
+      displayMessage('Échec du chargement de la configuration.', true);
+      return Promise.reject(error);
+    });
 
-  fetchMqttStatus();
+  Promise.all([configPromise, fetchMqttStatus()]).catch(() => {});
 });
 
 export {};
