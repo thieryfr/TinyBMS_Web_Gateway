@@ -37,6 +37,10 @@
 #define CAN_VICTRON_TWAI_TX_QUEUE_LEN    16
 #define CAN_VICTRON_TWAI_RX_QUEUE_LEN    16
 
+#define CAN_VICTRON_METRIC_BUFFER_SIZE   256U
+#define CAN_VICTRON_OCCUPANCY_WINDOW_MS  60000U
+#define CAN_VICTRON_BITRATE_BPS          250000U
+
 // CAN configuration defaults are now centralized in can_config_defaults.h
 
 #ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
@@ -57,6 +61,13 @@ static size_t s_next_event_slot = 0;
 static portMUX_TYPE s_event_slot_lock = portMUX_INITIALIZER_UNLOCKED;
 
 #ifdef ESP_PLATFORM
+typedef struct {
+    uint64_t timestamp;
+    uint32_t bits;
+} can_victron_metric_sample_t;
+#endif
+
+#ifdef ESP_PLATFORM
 static SemaphoreHandle_t s_twai_mutex = NULL;
 static SemaphoreHandle_t s_driver_state_mutex = NULL;  // Protects s_driver_started
 static SemaphoreHandle_t s_keepalive_mutex = NULL;     // Protects keepalive variables
@@ -67,6 +78,18 @@ static uint64_t s_last_keepalive_tx_ms = 0;
 static uint64_t s_last_keepalive_rx_ms = 0;
 static int s_twai_tx_gpio = CONFIG_TINYBMS_CAN_VICTRON_TX_GPIO;
 static int s_twai_rx_gpio = CONFIG_TINYBMS_CAN_VICTRON_RX_GPIO;
+
+static SemaphoreHandle_t s_stats_mutex = NULL;
+static uint64_t s_tx_frame_count = 0;
+static uint64_t s_rx_frame_count = 0;
+static uint64_t s_tx_byte_count = 0;
+static uint64_t s_rx_byte_count = 0;
+static can_victron_metric_sample_t s_metric_samples[CAN_VICTRON_METRIC_BUFFER_SIZE];
+static size_t s_metric_head = 0;
+static size_t s_metric_count = 0;
+static uint32_t s_bus_off_count = 0;
+static twai_state_t s_last_twai_state = TWAI_STATE_STOPPED;
+#endif
 
 // Flag pour terminaison propre de la tâche
 static volatile bool s_task_should_exit = false;
@@ -79,6 +102,8 @@ static void can_victron_process_keepalive_rx(bool remote_request, uint64_t now);
 static void can_victron_service_keepalive(uint64_t now);
 static void can_victron_handle_rx_message(const twai_message_t *message);
 static void can_victron_task(void *context);
+static void can_victron_reset_stats(void);
+static void can_victron_record_frame(can_victron_direction_t direction, uint64_t timestamp, size_t dlc);
 #endif
 
 static const config_manager_can_settings_t *can_victron_get_settings(void)
@@ -160,6 +185,75 @@ static void can_victron_publish_event(event_bus_event_id_t id, char *payload, si
         ESP_LOGW(TAG, "Failed to publish CAN event %u", (unsigned)id);
     }
 }
+
+#ifdef ESP_PLATFORM
+static void can_victron_reset_stats(void)
+{
+    if (s_stats_mutex != NULL && xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        s_tx_frame_count = 0;
+        s_rx_frame_count = 0;
+        s_tx_byte_count = 0;
+        s_rx_byte_count = 0;
+        s_metric_head = 0;
+        s_metric_count = 0;
+        memset(s_metric_samples, 0, sizeof(s_metric_samples));
+        xSemaphoreGive(s_stats_mutex);
+    } else {
+        s_tx_frame_count = 0;
+        s_rx_frame_count = 0;
+        s_tx_byte_count = 0;
+        s_rx_byte_count = 0;
+        s_metric_head = 0;
+        s_metric_count = 0;
+        memset(s_metric_samples, 0, sizeof(s_metric_samples));
+    }
+    s_bus_off_count = 0;
+    s_last_twai_state = TWAI_STATE_STOPPED;
+}
+
+static void can_victron_record_frame(can_victron_direction_t direction, uint64_t timestamp, size_t dlc)
+{
+    if (s_stats_mutex == NULL) {
+        return;
+    }
+
+    uint32_t payload_bytes = (dlc > 8U) ? 8U : (uint32_t)dlc;
+    uint32_t bits = 47U + payload_bytes * 8U;
+
+    if (xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
+        return;
+    }
+
+    if (direction == CAN_VICTRON_DIRECTION_TX) {
+        s_tx_frame_count++;
+        s_tx_byte_count += payload_bytes;
+    } else {
+        s_rx_frame_count++;
+        s_rx_byte_count += payload_bytes;
+    }
+
+    size_t index = s_metric_head;
+    s_metric_samples[index].timestamp = timestamp;
+    s_metric_samples[index].bits = bits;
+    s_metric_head = (index + 1U) % CAN_VICTRON_METRIC_BUFFER_SIZE;
+    if (s_metric_count < CAN_VICTRON_METRIC_BUFFER_SIZE) {
+        s_metric_count++;
+    }
+
+    xSemaphoreGive(s_stats_mutex);
+}
+#else
+static void can_victron_reset_stats(void)
+{
+}
+
+static void can_victron_record_frame(can_victron_direction_t direction, uint64_t timestamp, size_t dlc)
+{
+    (void)direction;
+    (void)timestamp;
+    (void)dlc;
+}
+#endif
 
 static esp_err_t can_victron_emit_events(uint32_t can_id,
                                          const uint8_t *data,
@@ -258,6 +352,7 @@ static esp_err_t can_victron_emit_events(uint32_t can_id,
     }
 
     can_victron_publish_event(APP_EVENT_ID_CAN_FRAME_DECODED, decoded_payload, decoded_offset);
+    can_victron_record_frame(direction, timestamp, dlc);
     return ESP_OK;
 }
 
@@ -406,6 +501,13 @@ static void can_victron_stop_driver(void)
 
     (void)twai_stop();
     (void)twai_driver_uninstall();
+
+    if (s_stats_mutex != NULL && xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        s_last_twai_state = TWAI_STATE_STOPPED;
+        xSemaphoreGive(s_stats_mutex);
+    } else {
+        s_last_twai_state = TWAI_STATE_STOPPED;
+    }
 }
 
 static bool can_victron_is_driver_started(void)
@@ -578,6 +680,131 @@ static void can_victron_task(void *context)
 }
 #endif  // ESP_PLATFORM
 
+esp_err_t can_victron_get_status(can_victron_status_t *status)
+{
+    if (status == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(status, 0, sizeof(*status));
+    status->timestamp_ms = can_victron_timestamp_ms();
+    status->driver_started = can_victron_is_driver_started();
+
+    const config_manager_can_settings_t *settings = can_victron_get_settings();
+    status->keepalive_interval_ms = can_victron_effective_interval_ms(settings);
+    status->keepalive_timeout_ms = can_victron_effective_timeout_ms(settings);
+    status->keepalive_retry_ms = can_victron_effective_retry_ms(settings);
+    status->occupancy_window_ms = CAN_VICTRON_OCCUPANCY_WINDOW_MS;
+
+#ifdef ESP_PLATFORM
+    if (s_keepalive_mutex != NULL && xSemaphoreTake(s_keepalive_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        status->keepalive_ok = s_keepalive_ok;
+        status->last_keepalive_tx_ms = s_last_keepalive_tx_ms;
+        status->last_keepalive_rx_ms = s_last_keepalive_rx_ms;
+        xSemaphoreGive(s_keepalive_mutex);
+    } else {
+        status->keepalive_ok = s_keepalive_ok;
+        status->last_keepalive_tx_ms = s_last_keepalive_tx_ms;
+        status->last_keepalive_rx_ms = s_last_keepalive_rx_ms;
+    }
+
+    can_victron_metric_sample_t local_samples[CAN_VICTRON_METRIC_BUFFER_SIZE];
+    memset(local_samples, 0, sizeof(local_samples));
+    size_t local_count = 0;
+    size_t local_head = 0;
+
+    uint32_t local_bus_off_count = s_bus_off_count;
+    twai_state_t local_last_state = s_last_twai_state;
+
+    if (s_stats_mutex != NULL && xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        status->tx_frame_count = s_tx_frame_count;
+        status->rx_frame_count = s_rx_frame_count;
+        status->tx_byte_count = s_tx_byte_count;
+        status->rx_byte_count = s_rx_byte_count;
+        local_count = s_metric_count;
+        local_head = s_metric_head;
+        memcpy(local_samples, s_metric_samples, sizeof(local_samples));
+        local_bus_off_count = s_bus_off_count;
+        local_last_state = s_last_twai_state;
+        xSemaphoreGive(s_stats_mutex);
+    } else {
+        status->tx_frame_count = s_tx_frame_count;
+        status->rx_frame_count = s_rx_frame_count;
+        status->tx_byte_count = s_tx_byte_count;
+        status->rx_byte_count = s_rx_byte_count;
+    }
+
+    uint64_t window_start = (status->timestamp_ms > CAN_VICTRON_OCCUPANCY_WINDOW_MS)
+                                ? status->timestamp_ms - CAN_VICTRON_OCCUPANCY_WINDOW_MS
+                                : 0;
+    uint64_t total_bits = 0;
+
+    if (local_count > 0) {
+        for (size_t i = 0; i < local_count; ++i) {
+            size_t index = (local_head + CAN_VICTRON_METRIC_BUFFER_SIZE - local_count + i) % CAN_VICTRON_METRIC_BUFFER_SIZE;
+            const can_victron_metric_sample_t *sample = &local_samples[index];
+            if (sample->timestamp == 0 || sample->bits == 0) {
+                continue;
+            }
+            if (sample->timestamp < window_start) {
+                continue;
+            }
+            total_bits += sample->bits;
+        }
+    }
+
+    double occupancy = 0.0;
+    if (CAN_VICTRON_OCCUPANCY_WINDOW_MS > 0U) {
+        occupancy = (double)total_bits /
+                    ((double)CAN_VICTRON_BITRATE_BPS * ((double)CAN_VICTRON_OCCUPANCY_WINDOW_MS / 1000.0));
+    }
+    if (occupancy < 0.0) {
+        occupancy = 0.0;
+    }
+    if (occupancy > 1.0) {
+        occupancy = 1.0;
+    }
+    status->bus_occupancy_pct = (float)(occupancy * 100.0);
+
+    status->bus_state = local_last_state;
+    status->bus_off_count = local_bus_off_count;
+
+    twai_status_info_t info = {0};
+    if (status->driver_started && twai_get_status_info(&info) == ESP_OK) {
+        status->tx_error_counter = info.tx_error_counter;
+        status->rx_error_counter = info.rx_error_counter;
+        status->tx_failed_count = info.tx_failed_count;
+        status->rx_missed_count = info.rx_missed_count;
+        status->arbitration_lost_count = info.arb_lost_count;
+        status->bus_error_count = info.bus_error_count;
+
+        status->bus_state = info.state;
+
+        if (s_stats_mutex != NULL && xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            if (info.state == TWAI_STATE_BUS_OFF && s_last_twai_state != TWAI_STATE_BUS_OFF) {
+                s_bus_off_count++;
+            }
+            s_last_twai_state = info.state;
+            status->bus_off_count = s_bus_off_count;
+            xSemaphoreGive(s_stats_mutex);
+        } else {
+            if (info.state == TWAI_STATE_BUS_OFF && s_last_twai_state != TWAI_STATE_BUS_OFF) {
+                s_bus_off_count++;
+            }
+            s_last_twai_state = info.state;
+            status->bus_off_count = s_bus_off_count;
+        }
+    }
+#else
+    status->keepalive_ok = true;
+    status->last_keepalive_tx_ms = status->timestamp_ms;
+    status->last_keepalive_rx_ms = status->timestamp_ms;
+    status->bus_state = TWAI_STATE_RUNNING;
+#endif
+
+    return ESP_OK;
+}
+
 void can_victron_set_event_publisher(event_bus_publish_fn_t publisher)
 {
     s_event_publisher = publisher;
@@ -680,6 +907,15 @@ void can_victron_init(void)
         }
     }
 
+    if (s_stats_mutex == NULL) {
+        s_stats_mutex = xSemaphoreCreateMutex();
+        if (s_stats_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create CAN statistics mutex");
+        }
+    }
+
+    can_victron_reset_stats();
+
     esp_err_t err = can_victron_start_driver();
     if (err == ESP_OK) {
         if (s_can_task_handle == NULL) {
@@ -713,6 +949,7 @@ void can_victron_init(void)
     }
 #else
     ESP_LOGI(TAG, "Victron CAN monitor initialised (host mode)");
+    can_victron_reset_stats();
     can_victron_publish_demo_frames();
 #endif
 }
@@ -756,6 +993,13 @@ void can_victron_deinit(void)
         vSemaphoreDelete(s_keepalive_mutex);
         s_keepalive_mutex = NULL;
     }
+
+    if (s_stats_mutex != NULL) {
+        vSemaphoreDelete(s_stats_mutex);
+        s_stats_mutex = NULL;
+    }
+
+    can_victron_reset_stats();
 
     // Reset state
     s_can_task_handle = NULL;
