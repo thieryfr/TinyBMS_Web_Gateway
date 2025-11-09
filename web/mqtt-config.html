@@ -97,7 +97,28 @@
                     </div>
                     <div class="col-md-6">
                       <label for="mqtt-password" class="form-label">Mot de passe</label>
-                      <input id="mqtt-password" name="password" type="password" class="form-control">
+                      <div class="input-group">
+                        <input
+                          id="mqtt-password"
+                          name="password"
+                          type="password"
+                          class="form-control"
+                          autocomplete="current-password"
+                        >
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          id="mqtt-password-toggle"
+                          aria-label="Afficher le mot de passe"
+                          aria-pressed="false"
+                        >
+                          <i class="ti ti-eye" aria-hidden="true"></i>
+                          <span class="visually-hidden password-toggle-label">Afficher le mot de passe</span>
+                        </button>
+                      </div>
+                      <div class="form-hint mt-1">
+                        Le mot de passe est enregistré en clair dans la mémoire NVS de l'appareil.
+                      </div>
                     </div>
                     <div class="col-md-6">
                       <label for="mqtt-keepalive" class="form-label">Keepalive (s)</label>
@@ -114,6 +135,51 @@
                       </div>
                     </div>
                   </div>
+
+                  <fieldset class="mt-4 d-none" id="mqtt-tls-section" data-tls-field>
+                    <legend class="small text-uppercase text-secondary">Options TLS</legend>
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label for="mqtt-client-cert" class="form-label">Chemin du certificat client</label>
+                        <input
+                          id="mqtt-client-cert"
+                          name="client_cert_path"
+                          type="text"
+                          class="form-control"
+                          placeholder="/spiffs/client.crt"
+                          autocomplete="off"
+                        >
+                      </div>
+                      <div class="col-12">
+                        <label for="mqtt-ca-cert" class="form-label">Chemin du certificat CA</label>
+                        <input
+                          id="mqtt-ca-cert"
+                          name="ca_cert_path"
+                          type="text"
+                          class="form-control"
+                          placeholder="/spiffs/ca.crt"
+                          autocomplete="off"
+                        >
+                      </div>
+                      <div class="col-12">
+                        <div class="form-check form-switch">
+                          <input
+                            id="mqtt-verify-hostname"
+                            name="verify_hostname"
+                            type="checkbox"
+                            class="form-check-input"
+                            checked
+                          >
+                          <label class="form-check-label" for="mqtt-verify-hostname">
+                            Valider le nom d'hôte du serveur
+                          </label>
+                        </div>
+                        <div class="form-hint mt-1">
+                          Décochez uniquement si le certificat ne correspond pas à l'hôte configuré.
+                        </div>
+                      </div>
+                    </div>
+                  </fieldset>
 
                   <fieldset class="mt-4">
                     <legend class="small text-uppercase text-secondary">Topics personnalisés</legend>
@@ -163,6 +229,43 @@
 
     <!-- JavaScript for MQTT configuration -->
     <script type="module">
+      function updateTlsVisibility() {
+        const scheme = document.getElementById('mqtt-scheme');
+        const isSecure = scheme && scheme.value === 'mqtts';
+        const sections = document.querySelectorAll('[data-tls-field]');
+        sections.forEach((node) => {
+          node.classList.toggle('d-none', !isSecure);
+          node.setAttribute('aria-hidden', (!isSecure).toString());
+        });
+      }
+
+      function setupPasswordToggle() {
+        const input = document.getElementById('mqtt-password');
+        const toggle = document.getElementById('mqtt-password-toggle');
+        if (!input || !toggle) return;
+
+        const updateLabel = (visible) => {
+          const text = visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe';
+          toggle.setAttribute('aria-label', text);
+          toggle.setAttribute('aria-pressed', visible.toString());
+          const helper = toggle.querySelector('.password-toggle-label');
+          if (helper) helper.textContent = text;
+          const icon = toggle.querySelector('i');
+          if (icon) {
+            icon.classList.toggle('ti-eye', !visible);
+            icon.classList.toggle('ti-eye-off', visible);
+          }
+        };
+
+        toggle.addEventListener('click', () => {
+          const isPassword = input.type === 'password';
+          input.type = isPassword ? 'text' : 'password';
+          updateLabel(isPassword);
+        });
+
+        updateLabel(false);
+      }
+
       // Fetch and display MQTT status
       async function fetchMqttStatus() {
         try {
@@ -250,15 +353,21 @@
           const topics = config.topics || {};
 
           set('mqtt-scheme', config.scheme || 'mqtt');
+          updateTlsVisibility();
           set('mqtt-host', config.host || '');
           set('mqtt-port', config.port != null ? String(config.port) : '');
           set('mqtt-username', config.username || '');
           set('mqtt-password', config.password || '');
+          set('mqtt-client-cert', config.client_cert_path || '');
+          set('mqtt-ca-cert', config.ca_cert_path || '');
           set('mqtt-keepalive', config.keepalive != null ? String(config.keepalive) : '');
           set('mqtt-qos', config.default_qos != null ? String(config.default_qos) : '');
 
           const retain = document.getElementById('mqtt-retain');
           if (retain) retain.checked = Boolean(config.retain);
+
+          const verify = document.getElementById('mqtt-verify-hostname');
+          if (verify) verify.checked = config.verify_hostname !== false;
 
           set('mqtt-status-topic', topics.status || '');
           set('mqtt-metrics-topic', topics.metrics || '');
@@ -296,7 +405,10 @@
             port: Number.parseInt(form.port?.value, 10) || 0,
             username: form.username?.value?.trim() || '',
             password: form.password?.value || '',
+            client_cert_path: document.getElementById('mqtt-client-cert')?.value?.trim() || '',
+            ca_cert_path: document.getElementById('mqtt-ca-cert')?.value?.trim() || '',
             retain: form.retain?.checked || false,
+            verify_hostname: document.getElementById('mqtt-verify-hostname')?.checked ?? true,
             status_topic: form.status_topic?.value?.trim() || '',
             metrics_topic: form.metrics_topic?.value?.trim() || '',
             config_topic: form.config_topic?.value?.trim() || '',
@@ -331,6 +443,12 @@
       document.addEventListener('DOMContentLoaded', () => {
         const form = document.getElementById('mqtt-config-form');
         if (form) form.addEventListener('submit', handleSubmit);
+
+        const scheme = document.getElementById('mqtt-scheme');
+        if (scheme) scheme.addEventListener('change', updateTlsVisibility);
+
+        setupPasswordToggle();
+        updateTlsVisibility();
 
         const refresh = document.getElementById('mqtt-refresh');
         if (refresh) refresh.addEventListener('click', fetchMqttStatus);

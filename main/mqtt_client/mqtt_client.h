@@ -39,15 +39,24 @@ typedef struct esp_mqtt_client *esp_mqtt_client_handle_t;
 #define MQTT_CLIENT_MAX_CREDENTIAL_LENGTH 64U
 
 /**
+ * @brief Maximum length (including the terminating null byte) accepted for TLS
+ *        related file paths when configuring the client.
+ */
+#define MQTT_CLIENT_MAX_TLS_PATH_LENGTH 128U
+
+/**
  * @brief MQTT configuration persisted by the configuration manager.
  */
 typedef struct {
     char broker_uri[MQTT_CLIENT_MAX_URI_LENGTH]; /**< URI of the MQTT broker. */
     char username[MQTT_CLIENT_MAX_CREDENTIAL_LENGTH]; /**< Optional username. */
     char password[MQTT_CLIENT_MAX_CREDENTIAL_LENGTH]; /**< Optional password. */
+    char client_cert_path[MQTT_CLIENT_MAX_TLS_PATH_LENGTH]; /**< Optional client certificate path. */
+    char ca_cert_path[MQTT_CLIENT_MAX_TLS_PATH_LENGTH];      /**< Optional CA certificate path. */
     uint16_t keepalive_seconds; /**< Keepalive interval negotiated with the broker. */
     uint8_t default_qos;        /**< Default QoS level used for publications. */
     bool retain_enabled;        /**< Set to true to retain status publications. */
+    bool verify_hostname;       /**< When true, enforce broker hostname validation. */
 } mqtt_client_config_t;
 
 /**
