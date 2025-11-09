@@ -1441,54 +1441,38 @@ function updateTinyBMSStatus(registers) {
     const reg50 = registers.find(reg => reg.address === 50 || reg.address === 0x32);
 
     if (!reg50 || !reg50.value) {
-        statusBadge.className = 'badge bg-secondary-lt text-secondary fw-semibold px-3 py-2';
-        statusBadge.innerHTML = '<i class="ti ti-help-circle me-1"></i><span>Inconnu</span>';
+        statusBadge.textContent = 'Inconnu';
         return;
     }
 
     const status = reg50.value;
-    let className, icon, text;
+    let text;
 
     switch (status) {
         case 0x91: // Charging
-            className = 'badge bg-warning-lt text-warning fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-charging';
             text = 'En charge';
             break;
         case 0x92: // Fully Charged
-            className = 'badge bg-success-lt text-success fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-4';
             text = 'Chargé';
             break;
         case 0x93: // Discharging
-            className = 'badge bg-blue-lt text-blue fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-2';
             text = 'Décharge';
             break;
         case 0x96: // Regeneration
-            className = 'badge bg-cyan-lt text-cyan fw-semibold px-3 py-2';
-            icon = 'ti ti-refresh';
             text = 'Régénération';
             break;
         case 0x97: // Idle
-            className = 'badge bg-info-lt text-info fw-semibold px-3 py-2';
-            icon = 'ti ti-battery-3';
             text = 'Au repos';
             break;
         case 0x9B: // Fault
-            className = 'badge bg-danger-lt text-danger fw-semibold px-3 py-2';
-            icon = 'ti ti-alert-triangle';
             text = 'Défaut';
             break;
         default:
-            className = 'badge bg-secondary-lt text-secondary fw-semibold px-3 py-2';
-            icon = 'ti ti-help-circle';
             text = `0x${status.toString(16).toUpperCase()}`;
             break;
     }
 
-    statusBadge.className = className;
-    statusBadge.innerHTML = `<i class="${icon} me-1"></i><span>${text}</span>`;
+    statusBadge.textContent = text;
 }
 
 function updateAlarmsWarnings(alarms, warnings) {
