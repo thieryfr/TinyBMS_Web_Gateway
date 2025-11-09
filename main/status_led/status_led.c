@@ -355,7 +355,7 @@ void status_led_init(void)
         return;
     }
 
-    s_event_subscription = event_bus_subscribe_default(NULL, NULL);
+    s_event_subscription = event_bus_subscribe_default_named("status_led", NULL, NULL);
     if (s_event_subscription == NULL) {
         ESP_LOGE(TAG, "Failed to subscribe to event bus");
         vQueueDelete(s_command_queue);

@@ -5,4 +5,5 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         alert_manager
+        system_metrics
 )

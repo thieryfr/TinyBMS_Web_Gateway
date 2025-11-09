@@ -589,7 +589,8 @@ void alert_manager_init(void)
 
     // Subscribe to event bus for UART BMS data
     event_bus_init();
-    s_uart_bms_subscription = event_bus_subscribe_default(alert_manager_event_callback, NULL);
+    s_uart_bms_subscription =
+        event_bus_subscribe_default_named("alert_manager", alert_manager_event_callback, NULL);
     if (s_uart_bms_subscription == NULL) {
         ESP_LOGE(TAG, "Failed to subscribe to event bus");
         return;
