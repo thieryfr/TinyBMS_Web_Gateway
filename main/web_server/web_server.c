@@ -58,9 +58,18 @@
 #define WEB_SERVER_TASKS_JSON_SIZE        8192
 #define WEB_SERVER_MODULES_JSON_SIZE      2048
 
+// WebSocket rate limiting and security
+#define WEB_SERVER_WS_MAX_PAYLOAD_SIZE    (32 * 1024)  // 32KB max payload
+#define WEB_SERVER_WS_MAX_MSGS_PER_SEC    10           // Max 10 messages/sec per client
+#define WEB_SERVER_WS_RATE_WINDOW_MS      1000         // 1 second rate limiting window
+
 typedef struct ws_client {
     int fd;
     struct ws_client *next;
+    // Rate limiting
+    int64_t last_reset_time;      // Timestamp (ms) of rate window start
+    uint32_t message_count;        // Messages sent in current window
+    uint32_t total_violations;     // Total rate limit violations
 } ws_client_t;
 
 /**
@@ -308,6 +317,8 @@ static void ws_client_list_add(ws_client_t **list, int fd)
 
     client->fd = fd;
     client->next = *list;
+    // Initialize rate limiting (calloc already zeroed message_count and total_violations)
+    client->last_reset_time = esp_timer_get_time() / 1000;  // Convert to ms
     *list = client;
 
     xSemaphoreGive(s_ws_mutex);
@@ -348,6 +359,13 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         return;
     }
 
+    // Validate payload size to prevent DoS attacks
+    if (length > WEB_SERVER_WS_MAX_PAYLOAD_SIZE) {
+        ESP_LOGW(TAG, "WebSocket broadcast: payload too large (%zu bytes > %d max), dropping",
+                 length, WEB_SERVER_WS_MAX_PAYLOAD_SIZE);
+        return;
+    }
+
     // Calculer la longueur du payload (sans le '\0' final si présent)
     size_t payload_length = length;
     if (payload_length > 0 && payload[payload_length - 1] == '\0') {
@@ -368,8 +386,31 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         return;
     }
 
+    int64_t current_time = esp_timer_get_time() / 1000;  // Convert to ms
     ws_client_t *iter = *list;
     while (iter != NULL && client_count < MAX_BROADCAST_CLIENTS) {
+        // Check and update rate limiting
+        int64_t time_since_reset = current_time - iter->last_reset_time;
+
+        // Reset rate window if expired
+        if (time_since_reset >= WEB_SERVER_WS_RATE_WINDOW_MS) {
+            iter->last_reset_time = current_time;
+            iter->message_count = 0;
+        }
+
+        // Check rate limit
+        if (iter->message_count >= WEB_SERVER_WS_MAX_MSGS_PER_SEC) {
+            iter->total_violations++;
+            if (iter->total_violations % 10 == 1) {  // Log every 10th violation to avoid spam
+                ESP_LOGW(TAG, "WebSocket client fd=%d rate limited (%u msgs in window, %u total violations)",
+                         iter->fd, iter->message_count, iter->total_violations);
+            }
+            iter = iter->next;
+            continue;  // Skip this client
+        }
+
+        // Client is within rate limit, include in broadcast
+        iter->message_count++;
         client_fds[client_count++] = iter->fd;
         iter = iter->next;
     }
@@ -457,9 +498,75 @@ static const char *web_server_content_type(const char *path)
     return "application/octet-stream";
 }
 
+/**
+ * Check if URI is secure (no path traversal attempts)
+ * @param uri URI to check
+ * @return true if secure, false otherwise
+ *
+ * Checks for:
+ * - ../ and ..\\ sequences (including URL encoded variants)
+ * - Absolute paths
+ * - Null bytes
+ * - Excessive path length
+ */
 static bool web_server_uri_is_secure(const char *uri)
 {
-    return uri != NULL && strstr(uri, "../") == NULL;
+    if (uri == NULL) {
+        return false;
+    }
+
+    size_t len = strlen(uri);
+
+    // Check for excessive length
+    if (len == 0 || len > 256) {
+        return false;
+    }
+
+    // Check for null bytes (truncation attacks)
+    if (memchr(uri, '\0', len) != (uri + len)) {
+        return false;
+    }
+
+    // Check for absolute paths (should be relative)
+    if (uri[0] == '/') {
+        // Allow single leading slash for root-relative paths
+        if (len > 1 && uri[1] == '/') {
+            return false; // Double slash not allowed
+        }
+    }
+
+    // Check for various path traversal patterns
+    const char *dangerous_patterns[] = {
+        "../",      // Standard traversal
+        "..\\",     // Windows style
+        "%2e%2e/",  // URL encoded ../ (lowercase)
+        "%2E%2E/",  // URL encoded ../ (uppercase)
+        "%2e%2e\\", // URL encoded ..\ (lowercase)
+        "%2E%2E\\", // URL encoded ..\ (uppercase)
+        "..%2f",    // Partial encoding
+        "..%2F",    // Partial encoding
+        "..%5c",    // Partial encoding backslash
+        "..%5C",    // Partial encoding backslash
+        "%252e",    // Double URL encoded
+        "....//",   // Obfuscated traversal
+        NULL
+    };
+
+    for (int i = 0; dangerous_patterns[i] != NULL; i++) {
+        if (strcasestr(uri, dangerous_patterns[i]) != NULL) {
+            ESP_LOGW(TAG, "Path traversal attempt detected: %s", uri);
+            return false;
+        }
+    }
+
+    // Check for repeated slashes (path normalization bypass)
+    for (size_t i = 0; i < len - 1; i++) {
+        if (uri[i] == '/' && uri[i + 1] == '/') {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static esp_err_t web_server_send_file(httpd_req_t *req, const char *path)
@@ -1592,6 +1699,13 @@ static esp_err_t web_server_ws_receive(httpd_req_t *req, ws_client_t **list)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to get frame length: %s", esp_err_to_name(err));
         return err;
+    }
+
+    // Validate incoming payload size to prevent DoS attacks
+    if (frame.len > WEB_SERVER_WS_MAX_PAYLOAD_SIZE) {
+        ESP_LOGW(TAG, "WebSocket receive: payload too large (%zu bytes > %d max), rejecting",
+                 frame.len, WEB_SERVER_WS_MAX_PAYLOAD_SIZE);
+        return ESP_ERR_INVALID_SIZE;
     }
 
     if (frame.len > 0) {
