@@ -41,6 +41,9 @@ static size_t s_last_snapshot_len = 0;
 // Mutex to protect access to shared monitoring state
 static SemaphoreHandle_t s_monitoring_mutex = NULL;
 
+// Compteur d'incidents pour visibilité opérationnelle
+static uint32_t s_mutex_timeout_count = 0;
+
 static bool monitoring_history_empty(void)
 {
     if (s_monitoring_mutex == NULL) {
@@ -227,7 +230,8 @@ static esp_err_t monitoring_prepare_snapshot(void)
         }
         xSemaphoreGive(s_monitoring_mutex);
     } else {
-        ESP_LOGW(TAG, "Failed to acquire mutex for snapshot preparation");
+        s_mutex_timeout_count++;
+        ESP_LOGW(TAG, "Failed to acquire mutex for snapshot preparation (timeout #%u)", s_mutex_timeout_count);
         return ESP_ERR_TIMEOUT;
     }
 
@@ -305,7 +309,8 @@ esp_err_t monitoring_get_status_json(char *buffer, size_t buffer_size, size_t *o
     bool has_data = false;
 
     if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        ESP_LOGW(TAG, "Mutex timeout reading status");
+        s_mutex_timeout_count++;
+        ESP_LOGW(TAG, "Mutex timeout reading status (timeout #%u)", s_mutex_timeout_count);
         // Retourner erreur au lieu d'accéder sans protection
         return ESP_ERR_TIMEOUT;
     }

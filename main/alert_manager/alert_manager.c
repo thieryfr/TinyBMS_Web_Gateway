@@ -14,8 +14,10 @@
 #include "freertos/semphr.h"
 
 #include "esp_log.h"
+#ifdef ESP_PLATFORM
 #include "nvs_flash.h"
 #include "nvs.h"
+#endif
 #include "cJSON.h"
 
 #include "uart_bms.h"
@@ -137,6 +139,7 @@ static void alert_manager_init_default_config(alert_config_t *config)
 // NVS persistence
 // =============================================================================
 
+#ifdef ESP_PLATFORM
 /**
  * @brief Load configuration from NVS
  */
@@ -191,6 +194,26 @@ static esp_err_t alert_manager_save_config(void)
     ESP_LOGI(TAG, "Configuration saved to NVS");
     return ESP_OK;
 }
+#else
+/**
+ * @brief Stub pour load config (builds de test/simulation)
+ */
+static esp_err_t alert_manager_load_config(void)
+{
+    ESP_LOGW(TAG, "NVS not available in simulation mode, using defaults");
+    alert_manager_init_default_config(&s_state.config);
+    return ESP_OK;
+}
+
+/**
+ * @brief Stub pour save config (builds de test/simulation)
+ */
+static esp_err_t alert_manager_save_config(void)
+{
+    ESP_LOGW(TAG, "NVS not available in simulation mode, config not persisted");
+    return ESP_OK;
+}
+#endif
 
 // =============================================================================
 // Alert lifecycle management

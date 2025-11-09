@@ -16,6 +16,8 @@ static const char *TAG = "history_fs";
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static bool s_mounted = false;
+static bool s_mount_failed = false;
+static TaskHandle_t s_retry_task_handle = NULL;
 
 static void history_fs_publish_event(app_event_id_t id)
 {
@@ -56,6 +58,52 @@ const char *history_fs_mount_point(void)
     return "";
 #endif
 }
+
+#if CONFIG_TINYBMS_HISTORY_FS_ENABLE
+/**
+ * @brief Tâche de retry pour tenter de remonter le système de fichiers
+ */
+static void history_fs_retry_task(void *arg)
+{
+    (void)arg;
+    const TickType_t retry_delay = pdMS_TO_TICKS(30000); // Retry toutes les 30 secondes
+
+    while (s_mount_failed && !s_mounted) {
+        vTaskDelay(retry_delay);
+
+        if (s_mounted) {
+            break; // Monté avec succès par un autre chemin
+        }
+
+        ESP_LOGI(TAG, "Attempting to remount LittleFS history partition...");
+
+        esp_vfs_littlefs_conf_t conf = {0};
+        conf.base_path = CONFIG_TINYBMS_HISTORY_FS_MOUNT_POINT;
+        conf.partition_label = CONFIG_TINYBMS_HISTORY_FS_PARTITION_LABEL;
+        conf.format_if_mount_failed = CONFIG_TINYBMS_HISTORY_FS_FORMAT_ON_FAIL;
+
+        esp_err_t err = esp_vfs_littlefs_register(&conf);
+        if (err == ESP_OK) {
+            s_mounted = true;
+            s_mount_failed = false;
+            history_fs_publish_event(APP_EVENT_ID_STORAGE_HISTORY_READY);
+
+            size_t total = 0;
+            size_t used = 0;
+            if (history_fs_get_usage(&total, &used) == ESP_OK) {
+                ESP_LOGI(TAG, "History LittleFS remounted successfully: %u / %u bytes",
+                         (unsigned)used, (unsigned)total);
+            }
+            break; // Succès, sortir de la boucle
+        } else {
+            ESP_LOGW(TAG, "Remount attempt failed: %s", esp_err_to_name(err));
+        }
+    }
+
+    s_retry_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+#endif
 
 esp_err_t history_fs_get_usage(size_t *total_bytes, size_t *used_bytes)
 {
@@ -112,11 +160,30 @@ void history_fs_init(void)
             ESP_LOGE(TAG, "Failed to mount LittleFS: %s", esp_err_to_name(err));
         }
         s_mounted = false;
+        s_mount_failed = true;
         history_fs_publish_event(APP_EVENT_ID_STORAGE_HISTORY_UNAVAILABLE);
+
+        // Lancer une tâche de retry différé pour tenter de remonter plus tard
+        if (s_retry_task_handle == NULL) {
+            BaseType_t task_created = xTaskCreate(
+                history_fs_retry_task,
+                "history_fs_retry",
+                2048,
+                NULL,
+                tskIDLE_PRIORITY + 1,
+                &s_retry_task_handle
+            );
+            if (task_created == pdPASS) {
+                ESP_LOGI(TAG, "Started retry task for history filesystem mounting");
+            } else {
+                ESP_LOGE(TAG, "Failed to create retry task");
+            }
+        }
         return;
     }
 
     s_mounted = true;
+    s_mount_failed = false;
     history_fs_publish_event(APP_EVENT_ID_STORAGE_HISTORY_READY);
 
     size_t total = 0;

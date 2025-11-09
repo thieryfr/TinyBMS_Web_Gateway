@@ -67,6 +67,7 @@ static ws_client_t *s_can_clients = NULL;
 static ws_client_t *s_alert_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
+static volatile bool s_event_task_should_stop = false;
 
 static bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t size)
 {
@@ -160,52 +161,51 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         return;
     }
 
+    // Calculer la longueur du payload (sans le '\0' final si présent)
+    size_t payload_length = length;
+    if (payload_length > 0 && payload[payload_length - 1] == '\0') {
+        payload_length -= 1;
+    }
+
+    if (payload_length == 0) {
+        return;
+    }
+
+    // Copier la liste des FDs sous mutex pour minimiser la section critique
+    #define MAX_BROADCAST_CLIENTS 32
+    int client_fds[MAX_BROADCAST_CLIENTS];
+    size_t client_count = 0;
+
     if (xSemaphoreTake(s_ws_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         ESP_LOGW(TAG, "WebSocket broadcast: failed to acquire mutex (timeout), event dropped");
         return;
     }
 
-    ws_client_t *prev = NULL;
     ws_client_t *iter = *list;
-    while (iter != NULL) {
-        size_t payload_length = length;
-        if (payload_length > 0 && payload[payload_length - 1] == '\0') {
-            payload_length -= 1;
-        }
-
-        if (payload_length == 0) {
-            prev = iter;
-            iter = iter->next;
-            continue;
-        }
-
-        httpd_ws_frame_t frame = {
-            .final = true,
-            .fragmented = false,
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t *)payload,
-            .len = payload_length,
-        };
-
-        esp_err_t err = httpd_ws_send_frame_async(s_httpd, iter->fd, &frame);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Dropping websocket client %d: %s", iter->fd, esp_err_to_name(err));
-            ws_client_t *to_free = iter;
-            iter = iter->next;
-            if (prev == NULL) {
-                *list = iter;
-            } else {
-                prev->next = iter;
-            }
-            free(to_free);
-            continue;
-        }
-
-        prev = iter;
+    while (iter != NULL && client_count < MAX_BROADCAST_CLIENTS) {
+        client_fds[client_count++] = iter->fd;
         iter = iter->next;
     }
 
     xSemaphoreGive(s_ws_mutex);
+
+    // Diffuser hors section critique pour éviter les blocages
+    httpd_ws_frame_t frame = {
+        .final = true,
+        .fragmented = false,
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t *)payload,
+        .len = payload_length,
+    };
+
+    for (size_t i = 0; i < client_count; i++) {
+        esp_err_t err = httpd_ws_send_frame_async(s_httpd, client_fds[i], &frame);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to send to websocket client %d: %s", client_fds[i], esp_err_to_name(err));
+            // Retirer le client en échec de la liste
+            ws_client_list_remove(list, client_fds[i]);
+        }
+    }
 }
 
 static esp_err_t web_server_mount_spiffs(void)
@@ -1396,12 +1396,18 @@ static void web_server_event_task(void *context)
 {
     (void)context;
     if (s_event_subscription == NULL) {
+        s_event_task_handle = NULL;
         vTaskDelete(NULL);
         return;
     }
 
     event_bus_event_t event = {0};
-    while (event_bus_receive(s_event_subscription, &event, portMAX_DELAY)) {
+    while (!s_event_task_should_stop) {
+        // Utiliser un timeout pour permettre la vérification périodique du drapeau de terminaison
+        if (!event_bus_receive(s_event_subscription, &event, pdMS_TO_TICKS(1000))) {
+            continue; // Timeout, vérifier le drapeau et réessayer
+        }
+
         if (event.payload == NULL || event.payload_size == 0) {
             continue;
         }
@@ -1434,6 +1440,8 @@ static void web_server_event_task(void *context)
         }
     }
 
+    ESP_LOGI(TAG, "Event task shutting down cleanly");
+    s_event_task_handle = NULL;
     vTaskDelete(NULL);
 }
 
