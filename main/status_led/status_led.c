@@ -223,6 +223,7 @@ static void status_led_handle_event(const event_bus_event_t *event)
     case APP_EVENT_ID_BMS_LIVE_DATA:
     case APP_EVENT_ID_TELEMETRY_SAMPLE:
     case APP_EVENT_ID_MQTT_METRICS:
+    case APP_EVENT_ID_MONITORING_DIAGNOSTICS:
     case APP_EVENT_ID_UI_NOTIFICATION:
     case APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED:
     case APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED: {

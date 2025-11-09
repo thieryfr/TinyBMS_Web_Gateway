@@ -11,6 +11,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/portmacro.h"
 
 #include "app_events.h"
 #include "uart_bms.h"
@@ -41,8 +42,90 @@ static size_t s_last_snapshot_len = 0;
 // Mutex to protect access to shared monitoring state
 static SemaphoreHandle_t s_monitoring_mutex = NULL;
 
-// Compteur d'incidents pour visibilité opérationnelle
-static uint32_t s_mutex_timeout_count = 0;
+#define MONITORING_DIAGNOSTICS_INTERVAL_MS    5000U
+#define MONITORING_MAX_EVENT_BUS_CONSUMERS    16U
+
+typedef struct {
+    uint32_t mutex_timeouts;
+    uint32_t queue_publish_failures;
+    uint64_t last_queue_failure_ms;
+    uint64_t snapshot_latency_total_us;
+    uint32_t snapshot_latency_samples;
+    uint32_t snapshot_latency_max_us;
+} monitoring_diagnostics_state_t;
+
+static monitoring_diagnostics_state_t s_diagnostics_state = {0};
+static portMUX_TYPE s_diagnostics_lock = portMUX_INITIALIZER_UNLOCKED;
+static char s_last_diagnostics[MONITORING_DIAGNOSTICS_MAX_SIZE] = {0};
+static size_t s_last_diagnostics_len = 0;
+static esp_timer_handle_t s_diagnostics_timer = NULL;
+
+static uint32_t monitoring_diagnostics_record_mutex_timeout(void)
+{
+    uint32_t value = 0;
+    portENTER_CRITICAL(&s_diagnostics_lock);
+    s_diagnostics_state.mutex_timeouts++;
+    value = s_diagnostics_state.mutex_timeouts;
+    portEXIT_CRITICAL(&s_diagnostics_lock);
+    return value;
+}
+
+static uint32_t monitoring_diagnostics_record_publish_failure(void)
+{
+    uint32_t value = 0;
+    uint64_t now_ms = esp_timer_get_time() / 1000ULL;
+    portENTER_CRITICAL(&s_diagnostics_lock);
+    s_diagnostics_state.queue_publish_failures++;
+    s_diagnostics_state.last_queue_failure_ms = now_ms;
+    value = s_diagnostics_state.queue_publish_failures;
+    portEXIT_CRITICAL(&s_diagnostics_lock);
+    return value;
+}
+
+static void monitoring_diagnostics_record_snapshot_latency(uint32_t duration_us)
+{
+    portENTER_CRITICAL(&s_diagnostics_lock);
+    s_diagnostics_state.snapshot_latency_total_us += (uint64_t)duration_us;
+    s_diagnostics_state.snapshot_latency_samples++;
+    if (duration_us > s_diagnostics_state.snapshot_latency_max_us) {
+        s_diagnostics_state.snapshot_latency_max_us = duration_us;
+    }
+    portEXIT_CRITICAL(&s_diagnostics_lock);
+}
+
+static void monitoring_diagnostics_get_snapshot(monitoring_diagnostics_state_t *out_state)
+{
+    if (out_state == NULL) {
+        return;
+    }
+
+    portENTER_CRITICAL(&s_diagnostics_lock);
+    *out_state = s_diagnostics_state;
+    portEXIT_CRITICAL(&s_diagnostics_lock);
+}
+
+static void monitoring_diagnostics_reset(void)
+{
+    portENTER_CRITICAL(&s_diagnostics_lock);
+    memset(&s_diagnostics_state, 0, sizeof(s_diagnostics_state));
+    portEXIT_CRITICAL(&s_diagnostics_lock);
+}
+
+static void monitoring_diagnostics_timer_callback(void *arg)
+{
+    (void)arg;
+
+    if (s_event_publisher == NULL) {
+        return;
+    }
+
+    esp_err_t err = monitoring_publish_diagnostics_snapshot();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG,
+                 "Failed to publish monitoring diagnostics: %s",
+                 esp_err_to_name(err));
+    }
+}
 
 static bool monitoring_history_empty(void)
 {
@@ -54,6 +137,8 @@ static bool monitoring_history_empty(void)
     if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         empty = (s_history_count == 0);
         xSemaphoreGive(s_monitoring_mutex);
+    } else {
+        (void)monitoring_diagnostics_record_mutex_timeout();
     }
     return empty;
 }
@@ -65,7 +150,10 @@ static void monitoring_history_push(const uart_bms_live_data_t *data)
     }
 
     if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        ESP_LOGW(TAG, "Failed to acquire mutex for history push");
+        uint32_t count = monitoring_diagnostics_record_mutex_timeout();
+        ESP_LOGW(TAG,
+                 "Failed to acquire mutex for history push (timeout #%u)",
+                 (unsigned)count);
         return;
     }
 
@@ -213,6 +301,76 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
     return ESP_OK;
 }
 
+static esp_err_t monitoring_build_diagnostics_json(char *buffer, size_t buffer_size, size_t *out_length)
+{
+    if (buffer == NULL || buffer_size == 0U) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    monitoring_diagnostics_state_t diagnostics = {0};
+    monitoring_diagnostics_get_snapshot(&diagnostics);
+
+    uint32_t avg_latency_us = 0;
+    if (diagnostics.snapshot_latency_samples > 0U && diagnostics.snapshot_latency_total_us > 0U) {
+        avg_latency_us =
+            (uint32_t)(diagnostics.snapshot_latency_total_us / diagnostics.snapshot_latency_samples);
+    }
+
+    event_bus_subscription_metrics_t bus_metrics[MONITORING_MAX_EVENT_BUS_CONSUMERS];
+    size_t consumer_count = event_bus_get_all_metrics(bus_metrics, MONITORING_MAX_EVENT_BUS_CONSUMERS);
+    uint32_t dropped_total = 0U;
+    for (size_t i = 0; i < consumer_count && i < MONITORING_MAX_EVENT_BUS_CONSUMERS; ++i) {
+        dropped_total += bus_metrics[i].dropped_events;
+    }
+
+    uint64_t timestamp_ms = esp_timer_get_time() / 1000ULL;
+
+    size_t offset = 0U;
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "{\"type\":\"monitoring_diagnostics\",\"timestamp_ms\":%" PRIu64 ",",
+                                timestamp_ms)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "\"mutex_timeouts\":%" PRIu32 ",",
+                                diagnostics.mutex_timeouts)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "\"queue_saturation\":{\"publish_failures\":%" PRIu32 ",\"last_failure_ms\":%" PRIu64 ","
+                                "\"dropped_events_total\":%" PRIu32 ",\"consumer_count\":%zu},",
+                                diagnostics.queue_publish_failures,
+                                diagnostics.last_queue_failure_ms,
+                                dropped_total,
+                                consumer_count)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "\"snapshot_latency\":{\"avg_us\":%" PRIu32 ",\"max_us\":%" PRIu32 ",\"samples\":%" PRIu32 "}}",
+                                avg_latency_us,
+                                diagnostics.snapshot_latency_max_us,
+                                diagnostics.snapshot_latency_samples)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (out_length != NULL) {
+        *out_length = offset;
+    }
+
+    return ESP_OK;
+}
+
 static esp_err_t monitoring_prepare_snapshot(void)
 {
     if (s_monitoring_mutex == NULL) {
@@ -230,13 +388,26 @@ static esp_err_t monitoring_prepare_snapshot(void)
         }
         xSemaphoreGive(s_monitoring_mutex);
     } else {
-        s_mutex_timeout_count++;
-        ESP_LOGW(TAG, "Failed to acquire mutex for snapshot preparation (timeout #%u)", s_mutex_timeout_count);
+        uint32_t count = monitoring_diagnostics_record_mutex_timeout();
+        ESP_LOGW(TAG,
+                 "Failed to acquire mutex for snapshot preparation (timeout #%u)",
+                 (unsigned)count);
         return ESP_ERR_TIMEOUT;
     }
 
     const uart_bms_live_data_t *snapshot = has_data ? &bms_copy : NULL;
-    return monitoring_build_snapshot_json(snapshot, s_last_snapshot, sizeof(s_last_snapshot), &s_last_snapshot_len);
+    uint64_t start_us = esp_timer_get_time();
+    esp_err_t build_err =
+        monitoring_build_snapshot_json(snapshot, s_last_snapshot, sizeof(s_last_snapshot), &s_last_snapshot_len);
+    if (build_err == ESP_OK) {
+        uint64_t duration_us = esp_timer_get_time() - start_us;
+        if (duration_us > UINT32_MAX) {
+            duration_us = UINT32_MAX;
+        }
+        monitoring_diagnostics_record_snapshot_latency((uint32_t)duration_us);
+    }
+
+    return build_err;
 }
 
 static void monitoring_on_bms_update(const uart_bms_live_data_t *data, void *context)
@@ -252,7 +423,10 @@ static void monitoring_on_bms_update(const uart_bms_live_data_t *data, void *con
         s_has_latest_bms = true;
         xSemaphoreGive(s_monitoring_mutex);
     } else {
-        ESP_LOGW(TAG, "Failed to acquire mutex for BMS update");
+        uint32_t count = monitoring_diagnostics_record_mutex_timeout();
+        ESP_LOGW(TAG,
+                 "Failed to acquire mutex for BMS update (timeout #%u)",
+                 (unsigned)count);
     }
 
     monitoring_history_push(data);
@@ -292,6 +466,28 @@ void monitoring_init(void)
     if (publish_err != ESP_OK) {
         ESP_LOGW(TAG, "Initial telemetry publish failed: %s", esp_err_to_name(publish_err));
     }
+
+    if (s_diagnostics_timer == NULL) {
+        const esp_timer_create_args_t timer_args = {
+            .callback = monitoring_diagnostics_timer_callback,
+            .name = "mon_diag",
+        };
+        esp_err_t timer_err = esp_timer_create(&timer_args, &s_diagnostics_timer);
+        if (timer_err != ESP_OK) {
+            ESP_LOGW(TAG, "Unable to create diagnostics timer: %s", esp_err_to_name(timer_err));
+        } else {
+            timer_err = esp_timer_start_periodic(
+                s_diagnostics_timer, (uint64_t)MONITORING_DIAGNOSTICS_INTERVAL_MS * 1000ULL);
+            if (timer_err != ESP_OK) {
+                ESP_LOGW(TAG, "Unable to start diagnostics timer: %s", esp_err_to_name(timer_err));
+            }
+        }
+    }
+
+    esp_err_t diag_err = monitoring_publish_diagnostics_snapshot();
+    if (diag_err != ESP_OK) {
+        ESP_LOGW(TAG, "Initial diagnostics publish failed: %s", esp_err_to_name(diag_err));
+    }
 }
 
 esp_err_t monitoring_get_status_json(char *buffer, size_t buffer_size, size_t *out_length)
@@ -309,8 +505,10 @@ esp_err_t monitoring_get_status_json(char *buffer, size_t buffer_size, size_t *o
     bool has_data = false;
 
     if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        s_mutex_timeout_count++;
-        ESP_LOGW(TAG, "Mutex timeout reading status (timeout #%u)", s_mutex_timeout_count);
+        uint32_t count = monitoring_diagnostics_record_mutex_timeout();
+        ESP_LOGW(TAG,
+                 "Mutex timeout reading status (timeout #%u)",
+                 (unsigned)count);
         // Retourner erreur au lieu d'accéder sans protection
         return ESP_ERR_TIMEOUT;
     }
@@ -345,7 +543,39 @@ esp_err_t monitoring_publish_telemetry_snapshot(void)
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(50))) {
-        ESP_LOGW(TAG, "Unable to publish telemetry snapshot");
+        uint32_t count = monitoring_diagnostics_record_publish_failure();
+        ESP_LOGW(TAG,
+                 "Unable to publish telemetry snapshot (queue saturation #%u)",
+                 (unsigned)count);
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t monitoring_publish_diagnostics_snapshot(void)
+{
+    if (s_event_publisher == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = monitoring_build_diagnostics_json(
+        s_last_diagnostics, sizeof(s_last_diagnostics), &s_last_diagnostics_len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    event_bus_event_t event = {
+        .id = APP_EVENT_ID_MONITORING_DIAGNOSTICS,
+        .payload = s_last_diagnostics,
+        .payload_size = s_last_diagnostics_len + 1U,
+    };
+
+    if (!s_event_publisher(&event, pdMS_TO_TICKS(10))) {
+        uint32_t count = monitoring_diagnostics_record_publish_failure();
+        ESP_LOGW(TAG,
+                 "Unable to publish monitoring diagnostics (queue saturation #%u)",
+                 (unsigned)count);
         return ESP_FAIL;
     }
 
@@ -364,7 +594,10 @@ esp_err_t monitoring_get_history_json(size_t limit, char *buffer, size_t buffer_
 
     // Acquire mutex for reading history data
     if (xSemaphoreTake(s_monitoring_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        ESP_LOGW(TAG, "Failed to acquire mutex for history read");
+        uint32_t count = monitoring_diagnostics_record_mutex_timeout();
+        ESP_LOGW(TAG,
+                 "Failed to acquire mutex for history read (timeout #%u)",
+                 (unsigned)count);
         return ESP_ERR_TIMEOUT;
     }
 
@@ -433,6 +666,12 @@ void monitoring_deinit(void)
         ESP_LOGW(TAG, "Failed to unregister BMS listener: %s", esp_err_to_name(err));
     }
 
+    if (s_diagnostics_timer != NULL) {
+        esp_timer_stop(s_diagnostics_timer);
+        esp_timer_delete(s_diagnostics_timer);
+        s_diagnostics_timer = NULL;
+    }
+
     // Destroy mutex
     if (s_monitoring_mutex != NULL) {
         vSemaphoreDelete(s_monitoring_mutex);
@@ -445,10 +684,12 @@ void monitoring_deinit(void)
     s_history_head = 0;
     s_history_count = 0;
     s_last_snapshot_len = 0;
-    s_mutex_timeout_count = 0;
+    s_last_diagnostics_len = 0;
     memset(&s_latest_bms, 0, sizeof(s_latest_bms));
     memset(s_history, 0, sizeof(s_history));
     memset(s_last_snapshot, 0, sizeof(s_last_snapshot));
+    memset(s_last_diagnostics, 0, sizeof(s_last_diagnostics));
+    monitoring_diagnostics_reset();
 
     ESP_LOGI(TAG, "Monitoring deinitialized");
 }
