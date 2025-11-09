@@ -74,24 +74,20 @@ export class SystemStatus {
    */
   updateModuleDisplay(module) {
     const status = this.modules.get(module);
-    const moduleElement = document.querySelector(`.status-module[data-module="${module}"]`);
+    const moduleElements = document.querySelectorAll(`.status-module[data-module="${module}"]`);
 
-    if (!moduleElement) {
-      return;
-    }
+    moduleElements.forEach((moduleElement) => {
+      const ledElement = moduleElement.querySelector('.status-led');
+      if (!ledElement) {
+        return;
+      }
 
-    const ledElement = moduleElement.querySelector('.status-led');
-    if (!ledElement) {
-      return;
-    }
+      Object.values(LED_STATUS).forEach(s => {
+        ledElement.classList.remove(`status-led-${s}`);
+      });
 
-    // Remove all status classes
-    Object.values(LED_STATUS).forEach(s => {
-      ledElement.classList.remove(`status-led-${s}`);
+      ledElement.classList.add(`status-led-${status}`);
     });
-
-    // Add current status class
-    ledElement.classList.add(`status-led-${status}`);
   }
 
   /**
