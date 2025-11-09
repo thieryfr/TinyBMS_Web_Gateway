@@ -105,8 +105,11 @@ static const config_manager_can_settings_t *can_victron_get_settings(void)
         },
     };
 
-    const config_manager_can_settings_t *settings = config_manager_get_can_settings();
-    return (settings != NULL) ? settings : &defaults;
+    static config_manager_can_settings_t cached = {0};
+    if (config_manager_get_can_settings(&cached) == ESP_OK) {
+        return &cached;
+    }
+    return &defaults;
 }
 
 static uint64_t can_victron_timestamp_ms(void)

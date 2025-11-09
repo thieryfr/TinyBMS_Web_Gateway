@@ -333,7 +333,9 @@ static void mqtt_gateway_publish_alert(const event_bus_event_t *event)
 
 static void mqtt_gateway_load_topics(void)
 {
-    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
+    config_manager_mqtt_topics_t topics = {0};
+    esp_err_t topics_err = config_manager_get_mqtt_topics(&topics);
+    bool has_topics = (topics_err == ESP_OK);
 
     char fallback_status[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
     char fallback_metrics[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
@@ -357,27 +359,27 @@ static void mqtt_gateway_load_topics(void)
 
     mqtt_gateway_set_topic(s_gateway.status_topic,
                            sizeof(s_gateway.status_topic),
-                           topics != NULL ? topics->status : NULL,
+                           has_topics ? topics.status : NULL,
                            fallback_status);
     mqtt_gateway_set_topic(s_gateway.metrics_topic,
                            sizeof(s_gateway.metrics_topic),
-                           topics != NULL ? topics->metrics : NULL,
+                           has_topics ? topics.metrics : NULL,
                            fallback_metrics);
     mqtt_gateway_set_topic(s_gateway.config_topic,
                            sizeof(s_gateway.config_topic),
-                           topics != NULL ? topics->config : NULL,
+                           has_topics ? topics.config : NULL,
                            fallback_config);
     mqtt_gateway_set_topic(s_gateway.can_raw_topic,
                            sizeof(s_gateway.can_raw_topic),
-                           topics != NULL ? topics->can_raw : NULL,
+                           has_topics ? topics.can_raw : NULL,
                            fallback_can_raw);
     mqtt_gateway_set_topic(s_gateway.can_decoded_topic,
                            sizeof(s_gateway.can_decoded_topic),
-                           topics != NULL ? topics->can_decoded : NULL,
+                           has_topics ? topics.can_decoded : NULL,
                            fallback_can_decoded);
     mqtt_gateway_set_topic(s_gateway.can_ready_topic,
                            sizeof(s_gateway.can_ready_topic),
-                           topics != NULL ? topics->can_ready : NULL,
+                           has_topics ? topics.can_ready : NULL,
                            fallback_can_ready);
     mqtt_gateway_set_topic(s_gateway.alerts_topic,
                            sizeof(s_gateway.alerts_topic),
@@ -385,6 +387,12 @@ static void mqtt_gateway_load_topics(void)
                            fallback_alerts);
 
     mqtt_gateway_unlock_ctx();
+
+    if (topics_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "Failed to load MQTT topics from configuration (%s), using defaults",
+                 mqtt_gateway_err_to_name(topics_err));
+    }
 }
 
 static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error)
@@ -505,13 +513,14 @@ static void mqtt_gateway_start_client(void)
 
 static void mqtt_gateway_reload_config(bool restart_client)
 {
-    const mqtt_client_config_t *cfg = config_manager_get_mqtt_client_config();
-    if (cfg == NULL) {
-        ESP_LOGW(TAG, "MQTT configuration unavailable");
+    mqtt_client_config_t cfg = {0};
+    esp_err_t cfg_err = config_manager_get_mqtt_client_config(&cfg);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "MQTT configuration unavailable: %s", mqtt_gateway_err_to_name(cfg_err));
         return;
     }
 
-    mqtt_client_config_t snapshot = *cfg;
+    mqtt_client_config_t snapshot = cfg;
 
     esp_err_t err = mqtt_client_apply_configuration(&snapshot);
     if (err != ESP_OK) {

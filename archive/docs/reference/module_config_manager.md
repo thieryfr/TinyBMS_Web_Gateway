@@ -157,8 +157,8 @@ Pour ajouter un nouveau paramètre persisté :
   - `config_manager_get_registers_json()` expose la liste des registres modifiables via les descripteurs générés dans `generated_tiny_rw_registers.inc` (accès, échelles, labels, etc.).
   - `config_manager_apply_register_update_json()` traite une requête ciblant un registre TinyBMS, en prépare l'écriture UART puis vérifie le read-back.
 - **Paramètres UART** : `config_manager_get_uart_poll_interval_ms()` et `config_manager_set_uart_poll_interval_ms()` s'assurent que l'intervalle reste dans la fenêtre `[UART_BMS_MIN_POLL_INTERVAL_MS, UART_BMS_MAX_POLL_INTERVAL_MS]` et synchronisent `uart_bms_set_poll_interval_ms()`.
-- **Configuration MQTT** : `config_manager_get_mqtt_client_config()`/`config_manager_set_mqtt_client_config()` manipulent la structure `mqtt_client_config_t`, avec sanitation (keepalive, QoS) et détection d'identifiants vides.
-- **Topics MQTT** : `config_manager_get_mqtt_topics()`/`config_manager_set_mqtt_topics()` gèrent les chaînes dynamiques utilisées par `mqtt_gateway`.
+- **Configuration MQTT** : `config_manager_get_mqtt_client_config()`/`config_manager_set_mqtt_client_config()` manipulent la structure `mqtt_client_config_t`, le getter renvoyant désormais un `esp_err_t` et recopiant un instantané dans la structure fournie (sanitisation keepalive, QoS et identifiants vides).
+- **Topics MQTT** : `config_manager_get_mqtt_topics()`/`config_manager_set_mqtt_topics()` gèrent les chaînes dynamiques utilisées par `mqtt_gateway` (getters thread-safe via copie protégée par mutex).
 
 ## Persistance (NVS)
 - Les clés sont stockées dans l'espace de noms `gateway_cfg`. Exemple : `mqtt_uri`, `mqtt_keepalive`, `mqtt_t_met`.

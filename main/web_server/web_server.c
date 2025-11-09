@@ -637,40 +637,46 @@ static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
 {
-    const mqtt_client_config_t *config = config_manager_get_mqtt_client_config();
-    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
-    if (config == NULL || topics == NULL) {
+    mqtt_client_config_t config = {0};
+    config_manager_mqtt_topics_t topics = {0};
+    esp_err_t cfg_err = config_manager_get_mqtt_client_config(&config);
+    esp_err_t topics_err = config_manager_get_mqtt_topics(&topics);
+    if (cfg_err != ESP_OK || topics_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "MQTT configuration unavailable (cfg=%s, topics=%s)",
+                 esp_err_to_name(cfg_err),
+                 esp_err_to_name(topics_err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
-        return ESP_FAIL;
+        return (cfg_err != ESP_OK) ? cfg_err : topics_err;
     }
 
     char scheme[16];
     char host[MQTT_CLIENT_MAX_URI_LENGTH];
     uint16_t port = 0U;
-    web_server_parse_mqtt_uri(config->broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
+    web_server_parse_mqtt_uri(config.broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
 
     char buffer[WEB_SERVER_MQTT_JSON_SIZE];
     int written = snprintf(buffer,
                            sizeof(buffer),
                            "{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
                            "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,"
-                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\"," 
+                           "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\","
                            "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}",
                            scheme,
-                           config->broker_uri,
+                           config.broker_uri,
                            host,
                            (unsigned)port,
-                           config->username,
-                           config->password,
-                           (unsigned)config->keepalive_seconds,
-                           (unsigned)config->default_qos,
-                           config->retain_enabled ? "true" : "false",
-                           topics->status,
-                           topics->metrics,
-                           topics->config,
-                           topics->can_raw,
-                           topics->can_decoded,
-                           topics->can_ready);
+                           config.username,
+                           config.password,
+                           (unsigned)config.keepalive_seconds,
+                           (unsigned)config.default_qos,
+                           config.retain_enabled ? "true" : "false",
+                           topics.status,
+                           topics.metrics,
+                           topics.config,
+                           topics.can_raw,
+                           topics.can_decoded,
+                           topics.can_ready);
     if (written < 0 || written >= (int)sizeof(buffer)) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config too large");
         return ESP_ERR_INVALID_SIZE;
@@ -708,15 +714,17 @@ static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
     }
     payload[received] = '\0';
 
-    const mqtt_client_config_t *current = config_manager_get_mqtt_client_config();
-    const config_manager_mqtt_topics_t *current_topics = config_manager_get_mqtt_topics();
-    if (current == NULL || current_topics == NULL) {
+    mqtt_client_config_t current = {0};
+    config_manager_mqtt_topics_t current_topics = {0};
+    esp_err_t cfg_err = config_manager_get_mqtt_client_config(&current);
+    esp_err_t topics_err = config_manager_get_mqtt_topics(&current_topics);
+    if (cfg_err != ESP_OK || topics_err != ESP_OK) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
-        return ESP_FAIL;
+        return (cfg_err != ESP_OK) ? cfg_err : topics_err;
     }
 
-    mqtt_client_config_t updated = *current;
-    config_manager_mqtt_topics_t topics = *current_topics;
+    mqtt_client_config_t updated = current;
+    config_manager_mqtt_topics_t topics = current_topics;
 
     char default_scheme[16];
     char default_host[MQTT_CLIENT_MAX_URI_LENGTH];

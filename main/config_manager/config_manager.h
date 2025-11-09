@@ -10,29 +10,23 @@
  * @section config_thread_safety Thread Safety
  *
  * The configuration manager uses an internal mutex (s_config_mutex) to protect
- * configuration state modifications. All setter functions are thread-safe.
- *
- * **Thread-Safe Functions** (mutex-protected):
- * - config_manager_set_uart_poll_interval_ms()
- * - All future setter functions (TODO: add mutex protection)
- *
- * **Read-Only Functions** (not currently mutex-protected):
- * - config_manager_get_*() functions
- * - NOTE: Reader-writer lock may be needed for full thread safety
+ * configuration state. All public getters and setters acquire this mutex to
+ * guarantee that callers observe a consistent snapshot even when multiple tasks
+ * read and mutate the configuration concurrently.
  *
  * **Initialization**: Must call config_manager_init() before other functions.
  *
- * @warning Getter functions currently read global state without mutex protection.
- *          This is safe if configuration changes are infrequent, but may cause
- *          inconsistencies if settings are modified during reads.
- *
  * @section config_usage Usage Example
  * @code
- * // Initialize module
  * config_manager_init();
  *
  * // Read configuration (thread-safe for read-only access)
  * uint32_t interval = config_manager_get_uart_poll_interval_ms();
+ *
+ * mqtt_client_config_t mqtt_cfg;
+ * if (config_manager_get_mqtt_client_config(&mqtt_cfg) == ESP_OK) {
+ *     // use mqtt_cfg
+ * }
  *
  * // Modify configuration (thread-safe)
  * esp_err_t err = config_manager_set_uart_poll_interval_ms(500);
@@ -112,15 +106,15 @@ esp_err_t config_manager_set_config_json(const char *json, size_t length);
 esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, size_t *out_length);
 esp_err_t config_manager_apply_register_update_json(const char *json, size_t length);
 
-const config_manager_device_settings_t *config_manager_get_device_settings(void);
-const char *config_manager_get_device_name(void);
+esp_err_t config_manager_get_device_settings(config_manager_device_settings_t *out);
+esp_err_t config_manager_get_device_name(char *buffer, size_t buffer_size);
 
 uint32_t config_manager_get_uart_poll_interval_ms(void);
 esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms);
 
-const config_manager_uart_pins_t *config_manager_get_uart_pins(void);
+esp_err_t config_manager_get_uart_pins(config_manager_uart_pins_t *out);
 
-const mqtt_client_config_t *config_manager_get_mqtt_client_config(void);
+esp_err_t config_manager_get_mqtt_client_config(mqtt_client_config_t *out);
 esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config);
 
 #define CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH 96
@@ -134,11 +128,11 @@ typedef struct {
     char can_ready[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
 } config_manager_mqtt_topics_t;
 
-const config_manager_mqtt_topics_t *config_manager_get_mqtt_topics(void);
+esp_err_t config_manager_get_mqtt_topics(config_manager_mqtt_topics_t *out);
 esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *topics);
 
-const config_manager_wifi_settings_t *config_manager_get_wifi_settings(void);
-const config_manager_can_settings_t *config_manager_get_can_settings(void);
+esp_err_t config_manager_get_wifi_settings(config_manager_wifi_settings_t *out);
+esp_err_t config_manager_get_can_settings(config_manager_can_settings_t *out);
 
 #define CONFIG_MANAGER_MAX_CONFIG_SIZE 2048
 #define CONFIG_MANAGER_MAX_REGISTERS_JSON 4096

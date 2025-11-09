@@ -72,8 +72,11 @@ static const config_manager_wifi_settings_t *wifi_get_settings(void)
         },
     };
 
-    const config_manager_wifi_settings_t *settings = config_manager_get_wifi_settings();
-    return (settings != NULL) ? settings : &defaults;
+    static config_manager_wifi_settings_t cached = {0};
+    if (config_manager_get_wifi_settings(&cached) == ESP_OK) {
+        return &cached;
+    }
+    return &defaults;
 }
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
