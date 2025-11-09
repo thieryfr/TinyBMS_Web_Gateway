@@ -95,12 +95,14 @@ void event_bus_unsubscribe(event_bus_subscription_handle_t handle);
  * The call is thread-safe and can be invoked from any FreeRTOS task.
  *
  * @param event     Pointer to the event description to enqueue for subscribers.
- * @param timeout   Reserved for future use. Publishing is currently
- *                  non-blocking; events targeting full queues are dropped.
+ * @param timeout   Maximum time to wait when a subscriber queue is full.
+ *                  - 0: Non-blocking, event is dropped immediately if queue is full
+ *                  - portMAX_DELAY: Wait indefinitely
+ *                  - Other value: Maximum ticks to wait for queue space
  *
  * @return true when all subscribers accepted the event, false otherwise. When
  *         false is returned, at least one subscriber queue was full and the
- *         event was discarded for that subscriber.
+ *         event was discarded for that subscriber after the timeout expired.
  */
 bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout);
 
@@ -135,6 +137,19 @@ bool event_bus_receive(event_bus_subscription_handle_t handle,
  *         callback was registered.
  */
 bool event_bus_dispatch(event_bus_subscription_handle_t handle, TickType_t timeout);
+
+/**
+ * @brief Get the number of events dropped for a specific subscriber.
+ *
+ * This function allows monitoring of queue saturation. A non-zero value
+ * indicates that the subscriber's queue was full and events were lost.
+ *
+ * @param handle Subscription handle created with ::event_bus_subscribe.
+ *
+ * @return Number of events that have been dropped for this subscriber since
+ *         subscription creation, or 0 if the handle is invalid.
+ */
+uint32_t event_bus_get_dropped_events(event_bus_subscription_handle_t handle);
 
 #ifdef __cplusplus
 }
