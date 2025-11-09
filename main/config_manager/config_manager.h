@@ -105,6 +105,7 @@ typedef struct {
 } config_manager_can_settings_t;
 
 void config_manager_init(void);
+void config_manager_deinit(void);
 void config_manager_set_event_publisher(event_bus_publish_fn_t publisher);
 
 esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length);

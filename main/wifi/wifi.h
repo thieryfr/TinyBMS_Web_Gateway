@@ -20,6 +20,11 @@ void wifi_set_event_publisher(event_bus_publish_fn_t publisher);
  */
 void wifi_init(void);
 
+/**
+ * @brief Deinitialize the Wi-Fi subsystem and free resources.
+ */
+void wifi_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

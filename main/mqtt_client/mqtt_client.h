@@ -114,6 +114,11 @@ esp_err_t mqtt_client_start(void);
  * @brief Stop the MQTT client and release its runtime resources.
  */
 void mqtt_client_stop(void);
+
+/**
+ * @brief Alias for mqtt_client_stop() for consistency with other modules.
+ */
+static inline void mqtt_client_deinit(void) { mqtt_client_stop(); }
 /**
  * @brief Thread-safe publish helper delegating to the ESP-IDF MQTT client.
  */

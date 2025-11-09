@@ -422,3 +422,33 @@ esp_err_t monitoring_get_history_json(size_t limit, char *buffer, size_t buffer_
 
     return ESP_OK;
 }
+
+void monitoring_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing monitoring...");
+
+    // Unregister BMS listener
+    esp_err_t err = uart_bms_unregister_listener(monitoring_on_bms_update);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to unregister BMS listener: %s", esp_err_to_name(err));
+    }
+
+    // Destroy mutex
+    if (s_monitoring_mutex != NULL) {
+        vSemaphoreDelete(s_monitoring_mutex);
+        s_monitoring_mutex = NULL;
+    }
+
+    // Reset state
+    s_has_latest_bms = false;
+    s_event_publisher = NULL;
+    s_history_head = 0;
+    s_history_count = 0;
+    s_last_snapshot_len = 0;
+    s_mutex_timeout_count = 0;
+    memset(&s_latest_bms, 0, sizeof(s_latest_bms));
+    memset(s_history, 0, sizeof(s_history));
+    memset(s_last_snapshot, 0, sizeof(s_last_snapshot));
+
+    ESP_LOGI(TAG, "Monitoring deinitialized");
+}

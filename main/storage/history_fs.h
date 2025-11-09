@@ -17,6 +17,11 @@ extern "C" {
 void history_fs_init(void);
 
 /**
+ * @brief Deinitialize the history filesystem and unmount the partition.
+ */
+void history_fs_deinit(void);
+
+/**
  * @brief Provide the event publisher used to report history storage state changes.
  */
 void history_fs_set_event_publisher(event_bus_publish_fn_t publisher);

@@ -485,3 +485,71 @@ void wifi_init(void)
     ESP_LOGI(TAG, "Wi-Fi support disabled in configuration");
 #endif
 }
+
+void wifi_deinit(void)
+{
+#if !CONFIG_TINYBMS_WIFI_ENABLE
+    ESP_LOGI(TAG, "Wi-Fi support disabled, nothing to deinitialize");
+    return;
+#endif
+
+#ifdef ESP_PLATFORM
+    if (!s_wifi_initialised) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Deinitializing WiFi...");
+
+    // Unregister event handlers
+    if (s_wifi_event_handle != NULL) {
+        esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, s_wifi_event_handle);
+        s_wifi_event_handle = NULL;
+    }
+    if (s_ip_got_handle != NULL) {
+        esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, s_ip_got_handle);
+        s_ip_got_handle = NULL;
+    }
+    if (s_ip_lost_handle != NULL) {
+        esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, s_ip_lost_handle);
+        s_ip_lost_handle = NULL;
+    }
+
+    // Stop WiFi
+    esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to stop WiFi: %s", esp_err_to_name(err));
+    }
+
+    // Deinit WiFi
+    err = esp_wifi_deinit();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to deinit WiFi: %s", esp_err_to_name(err));
+    }
+
+    // Destroy netifs
+    if (s_sta_netif != NULL) {
+        esp_netif_destroy(s_sta_netif);
+        s_sta_netif = NULL;
+    }
+    if (s_ap_netif != NULL) {
+        esp_netif_destroy(s_ap_netif);
+        s_ap_netif = NULL;
+    }
+
+    // Destroy mutex
+    if (s_wifi_state_mutex != NULL) {
+        vSemaphoreDelete(s_wifi_state_mutex);
+        s_wifi_state_mutex = NULL;
+    }
+
+    // Reset state
+    s_wifi_initialised = false;
+    s_ap_fallback_active = false;
+    s_retry_count = 0;
+    s_event_publisher = NULL;
+
+    ESP_LOGI(TAG, "WiFi deinitialized");
+#else
+    ESP_LOGI(TAG, "WiFi module deinitialized (host build stub)");
+#endif
+}

@@ -694,6 +694,52 @@ void mqtt_gateway_init(void)
     mqtt_gateway_start_client();
 }
 
+void mqtt_gateway_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing MQTT gateway...");
+
+    // Stop MQTT client
+    mqtt_client_stop();
+
+    // Unsubscribe from event bus (this will cause the task to exit)
+    if (s_gateway.subscription != NULL) {
+        event_bus_unsubscribe(s_gateway.subscription);
+        s_gateway.subscription = NULL;
+    }
+
+    // Give task time to exit cleanly
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Destroy mutex
+    if (s_gateway.lock != NULL) {
+        vSemaphoreDelete(s_gateway.lock);
+        s_gateway.lock = NULL;
+    }
+
+    // Reset state
+    s_gateway.task = NULL;
+    s_gateway.config_valid = false;
+    s_gateway.mqtt_started = false;
+    s_gateway.wifi_connected = false;
+    s_gateway.connected = false;
+    s_gateway.reconnect_count = 0;
+    s_gateway.disconnect_count = 0;
+    s_gateway.error_count = 0;
+    s_gateway.last_event = MQTT_CLIENT_EVENT_DISCONNECTED;
+    s_gateway.last_event_timestamp_us = 0;
+    memset(&s_gateway.config, 0, sizeof(s_gateway.config));
+    memset(s_gateway.last_error, 0, sizeof(s_gateway.last_error));
+    memset(s_gateway.status_topic, 0, sizeof(s_gateway.status_topic));
+    memset(s_gateway.metrics_topic, 0, sizeof(s_gateway.metrics_topic));
+    memset(s_gateway.can_raw_topic, 0, sizeof(s_gateway.can_raw_topic));
+    memset(s_gateway.can_decoded_topic, 0, sizeof(s_gateway.can_decoded_topic));
+    memset(s_gateway.can_ready_topic, 0, sizeof(s_gateway.can_ready_topic));
+    memset(s_gateway.config_topic, 0, sizeof(s_gateway.config_topic));
+    memset(s_gateway.alerts_topic, 0, sizeof(s_gateway.alerts_topic));
+
+    ESP_LOGI(TAG, "MQTT gateway deinitialized");
+}
+
 #else
 
 const mqtt_client_event_listener_t *mqtt_gateway_get_event_listener(void)
@@ -711,6 +757,11 @@ void mqtt_gateway_get_status(mqtt_gateway_status_t *status)
 void mqtt_gateway_init(void)
 {
     ESP_LOGI(TAG, "MQTT gateway support disabled in configuration");
+}
+
+void mqtt_gateway_deinit(void)
+{
+    ESP_LOGI(TAG, "MQTT gateway support disabled, nothing to deinitialize");
 }
 
 #endif

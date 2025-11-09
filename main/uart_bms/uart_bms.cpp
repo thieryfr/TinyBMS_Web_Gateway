@@ -83,6 +83,9 @@ SemaphoreHandle_t s_listeners_mutex = nullptr;
 // Flag pour pause de polling (évite deadlock vTaskSuspend)
 static volatile bool s_poll_pause_requested = false;
 
+// Flag pour arrêt propre de la task
+static volatile bool s_task_should_exit = false;
+
 // Spinlock pour protection event buffer
 static portMUX_TYPE s_event_buffer_lock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -535,10 +538,15 @@ static void uart_poll_task(void *arg)
 
     TickType_t last_wake_time = xTaskGetTickCount();
 
-    while (true) {
+    while (!s_task_should_exit) {
         // Vérifier si une pause est demandée (évite deadlock avec vTaskSuspend)
-        while (s_poll_pause_requested) {
+        while (s_poll_pause_requested && !s_task_should_exit) {
             vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        // Sortir si demandé
+        if (s_task_should_exit) {
+            break;
         }
 
         esp_err_t frame_err = uart_bms_prepare_poll_request();
@@ -586,6 +594,9 @@ static void uart_poll_task(void *arg)
 
         vTaskDelayUntil(&last_wake_time, interval_ticks);
     }
+
+    ESP_LOGI(kTag, "UART BMS poll task exiting");
+    vTaskDelete(nullptr);
 }
 
 }  // namespace
@@ -1023,4 +1034,75 @@ const TinyBMS_LiveData *uart_bms_get_latest_shared(void)
 
     return result;
 }
+
+void uart_bms_deinit(void)
+{
+    if (!s_uart_initialised) {
+        return;
+    }
+
+    ESP_LOGI(kTag, "Deinitializing UART BMS...");
+
+    // Signal task to exit
+    s_task_should_exit = true;
+
+    // Give task time to exit cleanly
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Clear all listeners
+    if (s_listeners_mutex != nullptr && xSemaphoreTake(s_listeners_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
+            s_listeners[i].callback = nullptr;
+            s_listeners[i].context = nullptr;
+            s_shared_listeners[i].callback = nullptr;
+            s_shared_listeners[i].context = nullptr;
+        }
+        xSemaphoreGive(s_listeners_mutex);
+    }
+
+    // Delete UART driver
+    esp_err_t err = uart_driver_delete(UART_BMS_UART_PORT);
+    if (err != ESP_OK) {
+        ESP_LOGW(kTag, "Failed to delete UART driver: %s", esp_err_to_name(err));
+    }
+
+    // Destroy all mutexes
+    if (s_command_mutex != nullptr) {
+        vSemaphoreDelete(s_command_mutex);
+        s_command_mutex = nullptr;
+    }
+    if (s_rx_buffer_mutex != nullptr) {
+        vSemaphoreDelete(s_rx_buffer_mutex);
+        s_rx_buffer_mutex = nullptr;
+    }
+    if (s_snapshot_mutex != nullptr) {
+        vSemaphoreDelete(s_snapshot_mutex);
+        s_snapshot_mutex = nullptr;
+    }
+    if (s_listeners_mutex != nullptr) {
+        vSemaphoreDelete(s_listeners_mutex);
+        s_listeners_mutex = nullptr;
+    }
+
+    // Reset state
+    s_uart_initialised = false;
+    s_task_should_exit = false;
+    s_poll_pause_requested = false;
+    s_shared_snapshot_valid = false;
+    s_uart_poll_task_handle = nullptr;
+    s_event_publisher = nullptr;
+    s_poll_request_length = 0;
+    s_rx_length = 0;
+    s_next_event_buffer = 0;
+    s_next_uart_json_buffer = 0;
+    s_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+    std::memset(s_poll_request, 0, sizeof(s_poll_request));
+    std::memset(s_rx_buffer, 0, sizeof(s_rx_buffer));
+    std::memset(s_event_buffers, 0, sizeof(s_event_buffers));
+    std::memset(s_uart_raw_json, 0, sizeof(s_uart_raw_json));
+    std::memset(s_uart_decoded_json, 0, sizeof(s_uart_decoded_json));
+
+    ESP_LOGI(kTag, "UART BMS deinitialized");
+}
+
 *** End of File

@@ -68,6 +68,7 @@ static FILE *s_active_file = NULL;
 static char s_active_filename[64] = {0};
 static int s_active_day = -1;
 static bool s_directory_ready = false;
+static volatile bool s_task_should_exit = false;
 
 // Buffer de retry pour récupération d'erreurs d'écriture
 #define HISTORY_RETRY_BUFFER_SIZE 32
@@ -443,11 +444,14 @@ static void history_logger_task(void *arg)
     (void)arg;
     uart_bms_live_data_t sample;
 
-    while (true) {
-        if (xQueueReceive(s_queue, &sample, portMAX_DELAY) == pdTRUE) {
+    while (!s_task_should_exit) {
+        if (xQueueReceive(s_queue, &sample, pdMS_TO_TICKS(100)) == pdTRUE) {
             history_logger_process_sample(&sample);
         }
     }
+
+    ESP_LOGI(TAG, "History logger task exiting");
+    vTaskDelete(NULL);
 }
 
 void history_logger_init(void)
@@ -827,5 +831,46 @@ void history_logger_free_archive(history_logger_archive_t *archive)
     archive->total_samples = 0;
     archive->start_index = 0;
     archive->buffer_capacity = 0;
+}
+
+void history_logger_deinit(void)
+{
+#if !CONFIG_TINYBMS_HISTORY_ENABLE
+    ESP_LOGI(TAG, "History logging disabled, nothing to deinitialize");
+    return;
+#else
+    ESP_LOGI(TAG, "Deinitializing history logger...");
+
+    // Signal task to exit
+    s_task_should_exit = true;
+
+    // Give task time to exit cleanly
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Close active file if open
+    history_logger_close_active_file();
+
+    // Delete queue
+    if (s_queue != NULL) {
+        vQueueDelete(s_queue);
+        s_queue = NULL;
+    }
+
+    // Destroy retry mutex
+    if (s_retry_mutex != NULL) {
+        vSemaphoreDelete(s_retry_mutex);
+        s_retry_mutex = NULL;
+    }
+
+    // Reset state
+    s_directory_ready = false;
+    s_task_should_exit = false;
+    s_retry_buffer_count = 0;
+    s_active_day = -1;
+    memset(s_active_filename, 0, sizeof(s_active_filename));
+    memset(s_retry_buffer, 0, sizeof(s_retry_buffer));
+
+    ESP_LOGI(TAG, "History logger deinitialized");
+#endif
 }
 

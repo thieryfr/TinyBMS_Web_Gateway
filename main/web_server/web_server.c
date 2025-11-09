@@ -1715,3 +1715,51 @@ void web_server_init(void)
         ESP_LOGE(TAG, "Failed to start event dispatcher task");
     }
 }
+
+void web_server_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing web server...");
+
+    // Signal event task to exit
+    s_event_task_should_stop = true;
+
+    // Stop HTTP server
+    if (s_httpd != NULL) {
+        httpd_stop(s_httpd);
+        s_httpd = NULL;
+        ESP_LOGI(TAG, "HTTP server stopped");
+    }
+
+    // Give task time to exit cleanly
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Unsubscribe from event bus
+    if (s_event_subscription != NULL) {
+        event_bus_unsubscribe(s_event_subscription);
+        s_event_subscription = NULL;
+    }
+
+    // Destroy websocket mutex
+    if (s_ws_mutex != NULL) {
+        vSemaphoreDelete(s_ws_mutex);
+        s_ws_mutex = NULL;
+    }
+
+    // Unmount SPIFFS (may already be unmounted by config_manager)
+    esp_err_t err = esp_vfs_spiffs_unregister(NULL);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Failed to unmount SPIFFS: %s", esp_err_to_name(err));
+    }
+
+    // Reset state
+    s_event_task_handle = NULL;
+    s_event_task_should_stop = false;
+    s_event_publisher = NULL;
+    s_telemetry_clients = NULL;
+    s_event_clients = NULL;
+    s_uart_clients = NULL;
+    s_can_clients = NULL;
+    s_alert_clients = NULL;
+
+    ESP_LOGI(TAG, "Web server deinitialized");
+}

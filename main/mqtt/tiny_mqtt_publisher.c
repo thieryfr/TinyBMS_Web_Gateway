@@ -347,3 +347,25 @@ void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *c
     }
 }
 
+void tiny_mqtt_publisher_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing MQTT publisher...");
+
+#if CONFIG_TINYBMS_MQTT_ENABLE
+    // Unregister BMS listener if registered
+    if (s_listener_registered) {
+        esp_err_t err = uart_bms_unregister_listener(tiny_mqtt_publisher_on_bms_update);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to unregister BMS listener: %s", esp_err_to_name(err));
+        }
+        s_listener_registered = false;
+    }
+#endif
+
+    // Reset state
+    s_event_publisher = NULL;
+    tiny_mqtt_publisher_reset();
+
+    ESP_LOGI(TAG, "MQTT publisher deinitialized");
+}
+

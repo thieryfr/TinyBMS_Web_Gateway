@@ -717,3 +717,61 @@ void can_victron_init(void)
 #endif
 }
 
+void can_victron_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing CAN Victron...");
+
+#ifdef ESP_PLATFORM
+    // Signal task to exit
+    s_task_should_exit = true;
+
+    // Give task time to exit cleanly
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Stop TWAI driver
+    if (s_driver_started) {
+        esp_err_t err = twai_stop();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to stop TWAI: %s", esp_err_to_name(err));
+        }
+
+        err = twai_driver_uninstall();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to uninstall TWAI driver: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "TWAI driver uninstalled");
+        }
+    }
+
+    // Destroy all mutexes
+    if (s_twai_mutex != NULL) {
+        vSemaphoreDelete(s_twai_mutex);
+        s_twai_mutex = NULL;
+    }
+    if (s_driver_state_mutex != NULL) {
+        vSemaphoreDelete(s_driver_state_mutex);
+        s_driver_state_mutex = NULL;
+    }
+    if (s_keepalive_mutex != NULL) {
+        vSemaphoreDelete(s_keepalive_mutex);
+        s_keepalive_mutex = NULL;
+    }
+
+    // Reset state
+    s_can_task_handle = NULL;
+    s_task_should_exit = false;
+    s_driver_started = false;
+    s_keepalive_ok = false;
+    s_last_keepalive_tx_ms = 0;
+    s_last_keepalive_rx_ms = 0;
+    s_event_publisher = NULL;
+    s_next_event_slot = 0;
+    memset(s_can_raw_events, 0, sizeof(s_can_raw_events));
+    memset(s_can_decoded_events, 0, sizeof(s_can_decoded_events));
+
+    ESP_LOGI(TAG, "CAN Victron deinitialized");
+#else
+    ESP_LOGI(TAG, "CAN Victron deinitialized (host mode)");
+#endif
+}
+

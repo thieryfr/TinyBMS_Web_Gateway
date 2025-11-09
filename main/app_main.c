@@ -212,28 +212,95 @@ static esp_err_t init_mqtt_publisher(void)
 }
 
 /**
+ * @brief Initialization stages for proper cleanup ordering
+ */
+typedef enum {
+    STAGE_NONE = 0,
+    STAGE_EVENT_BUS,
+    STAGE_STATUS_LED,
+    STAGE_EVENT_PUBLISHERS,
+    STAGE_CORE_SERVICES,
+    STAGE_MQTT_PUBLISHER,
+    STAGE_BMS_SERVICES,
+    STAGE_NETWORKING_SERVICES,
+    STAGE_MONITORING_SERVICES,
+    STAGE_COMPLETE
+} init_stage_t;
+
+static init_stage_t s_init_stage = STAGE_NONE;
+
+/**
  * @brief Cleanup function called on initialization failure
  *
- * This function attempts to gracefully stop services that were successfully
- * initialized before a failure occurred.
+ * This function gracefully stops services in reverse order of initialization.
+ * It properly deinitializes modules to free resources (tasks, queues, mutexes,
+ * hardware drivers, network connections) and allow clean restart via watchdog.
  *
- * @param stage Initialization stage where failure occurred
+ * @param stage_name Human-readable stage name for logging
  */
-static void cleanup_on_error(const char *stage)
+static void cleanup_on_error(const char *stage_name)
 {
-    ESP_LOGE(TAG, "Initialization failed at stage: %s", stage);
-    ESP_LOGE(TAG, "Attempting cleanup of initialized resources...");
+    ESP_LOGE(TAG, "========================================");
+    ESP_LOGE(TAG, "Initialization failed at stage: %s", stage_name);
+    ESP_LOGE(TAG, "Current init stage: %d", s_init_stage);
+    ESP_LOGE(TAG, "Attempting graceful cleanup...");
+    ESP_LOGE(TAG, "========================================");
 
-    // Note: Currently most modules don't have explicit deinit functions
-    // Event bus does have event_bus_deinit(), but stopping here is safer
-    // than trying to partially cleanup
-
-    ESP_LOGE(TAG, "System cannot continue - halting");
-
-    // Halt execution - watchdog will reset if configured
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    // Cleanup in reverse order of initialization
+    if (s_init_stage >= STAGE_MONITORING_SERVICES) {
+        ESP_LOGI(TAG, "Cleaning up monitoring services...");
+        monitoring_deinit();
+        history_logger_deinit();
     }
+
+    if (s_init_stage >= STAGE_NETWORKING_SERVICES) {
+        ESP_LOGI(TAG, "Cleaning up networking services...");
+        mqtt_gateway_deinit();
+        mqtt_client_deinit();
+        web_server_deinit();
+    }
+
+    if (s_init_stage >= STAGE_BMS_SERVICES) {
+        ESP_LOGI(TAG, "Cleaning up BMS services...");
+        pgn_mapper_deinit();
+        can_publisher_deinit();
+        can_victron_deinit();
+        uart_bms_deinit();
+    }
+
+    if (s_init_stage >= STAGE_MQTT_PUBLISHER) {
+        ESP_LOGI(TAG, "Cleaning up MQTT publisher...");
+        tiny_mqtt_publisher_deinit();
+    }
+
+    if (s_init_stage >= STAGE_CORE_SERVICES) {
+        ESP_LOGI(TAG, "Cleaning up core services...");
+        history_fs_deinit();
+        wifi_deinit();
+        config_manager_deinit();
+    }
+
+    if (s_init_stage >= STAGE_STATUS_LED) {
+        ESP_LOGI(TAG, "Cleaning up status LED...");
+        status_led_deinit();
+    }
+
+    if (s_init_stage >= STAGE_EVENT_BUS) {
+        ESP_LOGI(TAG, "Cleaning up event bus...");
+        event_bus_deinit();
+    }
+
+    ESP_LOGE(TAG, "========================================");
+    ESP_LOGE(TAG, "Cleanup complete");
+    ESP_LOGE(TAG, "System will restart via watchdog timer");
+    ESP_LOGE(TAG, "========================================");
+
+    // Give watchdog time to reset the system
+    // If no watchdog is configured, this will hang until manual reset
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    // Last resort: trigger software reset
+    esp_restart();
 }
 
 void app_main(void)
@@ -250,10 +317,12 @@ void app_main(void)
 
     // Initialize event bus (must be first)
     event_bus_init();
+    s_init_stage = STAGE_EVENT_BUS;
     ESP_LOGI(TAG, "Event bus initialized");
 
     // Initialize status LED
     status_led_init();
+    s_init_stage = STAGE_STATUS_LED;
     ESP_LOGI(TAG, "Status LED initialized");
 
     // Get event bus publish hook
@@ -266,6 +335,7 @@ void app_main(void)
 
     // Configure event publishers for all modules
     configure_event_publishers(publish_hook);
+    s_init_stage = STAGE_EVENT_PUBLISHERS;
 
     // Initialize core services (config, wifi, filesystem)
     ret = init_core_services();
@@ -273,6 +343,7 @@ void app_main(void)
         cleanup_on_error("core_services");
         return;
     }
+    s_init_stage = STAGE_CORE_SERVICES;
 
     // Initialize MQTT publisher (depends on config)
     ret = init_mqtt_publisher();
@@ -280,6 +351,7 @@ void app_main(void)
         cleanup_on_error("mqtt_publisher");
         return;
     }
+    s_init_stage = STAGE_MQTT_PUBLISHER;
 
     // Initialize BMS services (UART, CAN)
     ret = init_bms_services(publish_hook, can_victron_publish_frame);
@@ -287,6 +359,7 @@ void app_main(void)
         cleanup_on_error("bms_services");
         return;
     }
+    s_init_stage = STAGE_BMS_SERVICES;
 
     // Initialize networking services (web, MQTT)
     ret = init_networking_services();
@@ -294,6 +367,7 @@ void app_main(void)
         cleanup_on_error("networking_services");
         return;
     }
+    s_init_stage = STAGE_NETWORKING_SERVICES;
 
     // Initialize monitoring services
     ret = init_monitoring_services();
@@ -301,8 +375,10 @@ void app_main(void)
         cleanup_on_error("monitoring_services");
         return;
     }
+    s_init_stage = STAGE_MONITORING_SERVICES;
 
     // System ready
+    s_init_stage = STAGE_COMPLETE;
     status_led_notify_system_ready();
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "System initialization complete");
