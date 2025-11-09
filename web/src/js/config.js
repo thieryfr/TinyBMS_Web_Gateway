@@ -1,8 +1,318 @@
 const MQTT_CONFIG_ENDPOINT = '/api/mqtt/config';
 const MQTT_STATUS_ENDPOINT = '/api/mqtt/status';
 const MQTT_TEST_ENDPOINT = '/api/mqtt/test';
+const DEFAULT_NETWORK_ERROR_MESSAGE = 'Impossible de contacter le serveur.';
+
+const NUMERIC_VALIDATION_RULES = {
+  port: {
+    min: 1,
+    max: 65535,
+    allowEmpty: false,
+    message: 'Le port MQTT doit être compris entre 1 et 65535.',
+  },
+  keepalive: {
+    min: 0,
+    allowEmpty: true,
+    message: 'Le keepalive doit être un entier supérieur ou égal à 0.',
+  },
+  default_qos: {
+    min: 0,
+    max: 2,
+    allowEmpty: true,
+    message: 'Le QoS par défaut doit être compris entre 0 et 2.',
+  },
+};
+
+const TOPIC_VALIDATION_RULES = {
+  status_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/status$/,
+    message: 'Le topic statut doit suivre le format bms/<identifiant>/status sans espaces.',
+  },
+  metrics_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/metrics$/,
+    message: 'Le topic mesures doit suivre le format bms/<identifiant>/metrics sans espaces.',
+  },
+  config_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/config$/,
+    message: 'Le topic configuration doit suivre le format bms/<identifiant>/config sans espaces.',
+  },
+  can_raw_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/can\/raw$/,
+    message: 'Le topic CAN brut doit suivre le format bms/<identifiant>/can/raw sans espaces.',
+  },
+  can_decoded_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/can\/decoded$/,
+    message: 'Le topic CAN décodé doit suivre le format bms/<identifiant>/can/decoded sans espaces.',
+  },
+  can_ready_topic: {
+    pattern: /^bms\/[A-Za-z0-9._-]+\/can\/ready$/,
+    message: 'Le topic CAN prêts doit suivre le format bms/<identifiant>/can/ready sans espaces.',
+  },
+};
+
+let networkErrorBanner = null;
+let networkErrorTimeoutId = null;
 
 let originalSnapshot = null;
+
+function getNetworkBannerContainer() {
+  return document.querySelector('.page-body .container-xl') || document.body;
+}
+
+function ensureNetworkBanner() {
+  if (networkErrorBanner) return networkErrorBanner;
+
+  const container = getNetworkBannerContainer();
+  if (!container) return null;
+
+  const banner = document.createElement('div');
+  banner.className = 'alert alert-danger alert-important d-flex align-items-center gap-2 d-none';
+  banner.setAttribute('role', 'status');
+
+  const icon = document.createElement('i');
+  icon.className = 'ti ti-plug-off';
+  icon.setAttribute('aria-hidden', 'true');
+
+  const message = document.createElement('div');
+  message.className = 'flex-fill';
+  message.dataset.networkMessage = 'true';
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn-close';
+  close.setAttribute('aria-label', 'Fermer l’alerte réseau');
+  close.addEventListener('click', () => {
+    banner.classList.add('d-none');
+    if (networkErrorTimeoutId) {
+      window.clearTimeout(networkErrorTimeoutId);
+      networkErrorTimeoutId = null;
+    }
+  });
+
+  banner.append(icon, message, close);
+  container.prepend(banner);
+  networkErrorBanner = banner;
+  return networkErrorBanner;
+}
+
+function showNetworkError(message) {
+  const banner = ensureNetworkBanner();
+  if (!banner) return;
+
+  const container = banner.querySelector('[data-network-message]');
+  if (container) {
+    container.textContent = message || DEFAULT_NETWORK_ERROR_MESSAGE;
+  }
+
+  banner.classList.remove('d-none');
+
+  if (networkErrorTimeoutId) window.clearTimeout(networkErrorTimeoutId);
+  networkErrorTimeoutId = window.setTimeout(() => {
+    banner.classList.add('d-none');
+    networkErrorTimeoutId = null;
+  }, 8000);
+}
+
+function clearNetworkError() {
+  if (!networkErrorBanner) return;
+  networkErrorBanner.classList.add('d-none');
+  if (networkErrorTimeoutId) {
+    window.clearTimeout(networkErrorTimeoutId);
+    networkErrorTimeoutId = null;
+  }
+}
+
+function handleNetworkError(err, fallbackMessage = DEFAULT_NETWORK_ERROR_MESSAGE) {
+  if (err && typeof err === 'object') {
+    if (err.__networkHandled) {
+      return;
+    }
+    try {
+      Object.defineProperty(err, '__networkHandled', {
+        value: true,
+        enumerable: false,
+        configurable: true,
+      });
+    } catch (defineError) {
+      err.__networkHandled = true; // eslint-disable-line no-param-reassign
+    }
+  }
+
+  const details = typeof err?.message === 'string' && err.message.trim().length > 0 ? err.message.trim() : '';
+  const message = details ? `${fallbackMessage} (${details})` : fallbackMessage;
+  showNetworkError(message);
+}
+
+function escapeCssIdent(value) {
+  if (typeof value !== 'string') return '';
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/[^a-zA-Z0-9_-]/g, '\$&');
+}
+
+function getFeedbackElement(field, { create = false } = {}) {
+  if (!field) return null;
+  const ident = escapeCssIdent(field.name || field.id || '');
+  let feedback = ident
+    ? field.parentElement?.querySelector(`.invalid-feedback[data-feedback-for="${ident}"]`)
+    : null;
+
+  if (!feedback) {
+    let sibling = field.nextElementSibling;
+    while (sibling) {
+      if (sibling.classList?.contains('invalid-feedback')) {
+        feedback = sibling;
+        break;
+      }
+      sibling = sibling.nextElementSibling;
+    }
+  }
+
+  if (!feedback && create) {
+    feedback = document.createElement('div');
+    feedback.className = 'invalid-feedback';
+    feedback.dataset.feedbackFor = field.name || field.id || '';
+    field.insertAdjacentElement('afterend', feedback);
+  }
+
+  return feedback || null;
+}
+
+function setFieldError(field, message) {
+  if (!field) return false;
+  const feedback = getFeedbackElement(field, { create: true });
+  if (feedback) feedback.textContent = message || '';
+  field.classList.add('is-invalid');
+  return false;
+}
+
+function clearFieldError(field) {
+  if (!field) return;
+  const feedback = getFeedbackElement(field);
+  if (feedback) feedback.textContent = '';
+  field.classList.remove('is-invalid');
+}
+
+function validateNumberField(field, rule) {
+  if (!field || !rule) return true;
+  const value = field.value?.trim() ?? '';
+  if (value === '') {
+    if (rule.allowEmpty) {
+      clearFieldError(field);
+      return true;
+    }
+    return setFieldError(field, rule.message);
+  }
+
+  if (!/^-?\d+$/.test(value)) {
+    return setFieldError(field, rule.message);
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return setFieldError(field, rule.message);
+  }
+
+  if (typeof rule.min === 'number' && parsed < rule.min) {
+    return setFieldError(field, rule.message);
+  }
+
+  if (typeof rule.max === 'number' && parsed > rule.max) {
+    return setFieldError(field, rule.message);
+  }
+
+  clearFieldError(field);
+  return true;
+}
+
+function validateTopicField(field, rule) {
+  if (!field || !rule) return true;
+  const value = field.value?.trim() ?? '';
+  if (value === '') {
+    clearFieldError(field);
+    return true;
+  }
+
+  if (!rule.pattern.test(value)) {
+    return setFieldError(field, rule.message);
+  }
+
+  clearFieldError(field);
+  return true;
+}
+
+function validateFieldByName(form, name) {
+  if (!form || !name) return true;
+  const field = form.elements.namedItem(name);
+  if (!field) return true;
+
+  if (Object.prototype.hasOwnProperty.call(NUMERIC_VALIDATION_RULES, name)) {
+    return validateNumberField(field, NUMERIC_VALIDATION_RULES[name]);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(TOPIC_VALIDATION_RULES, name)) {
+    return validateTopicField(field, TOPIC_VALIDATION_RULES[name]);
+  }
+
+  return true;
+}
+
+function validateForm(form) {
+  if (!form) return false;
+
+  let valid = true;
+  Object.keys(NUMERIC_VALIDATION_RULES).forEach((name) => {
+    if (!validateFieldByName(form, name)) valid = false;
+  });
+
+  Object.keys(TOPIC_VALIDATION_RULES).forEach((name) => {
+    if (!validateFieldByName(form, name)) valid = false;
+  });
+
+  if (!valid) {
+    const firstInvalid = form.querySelector('.is-invalid');
+    if (firstInvalid && typeof firstInvalid.focus === 'function') {
+      try {
+        firstInvalid.focus({ preventScroll: false });
+      } catch (focusError) {
+        firstInvalid.focus();
+      }
+    }
+  }
+
+  return valid;
+}
+
+function clearFormValidation() {
+  const form = document.getElementById('mqtt-config-form');
+  if (!form) return;
+  form.querySelectorAll('.is-invalid').forEach((field) => {
+    clearFieldError(field);
+  });
+}
+
+function handleFieldValidationEvent(event) {
+  const target = event.target;
+  if (!target) return;
+  const form = target.form;
+  if (!form || form.id !== 'mqtt-config-form') return;
+
+  const name = target.name || target.id;
+  if (!name) return;
+
+  if (target.classList.contains('is-invalid')) {
+    validateFieldByName(form, name);
+    return;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(NUMERIC_VALIDATION_RULES, name) ||
+    Object.prototype.hasOwnProperty.call(TOPIC_VALIDATION_RULES, name)
+  ) {
+    validateFieldByName(form, name);
+  }
+}
 
 function updateTlsVisibility() {
   const scheme = document.getElementById('mqtt-scheme');
@@ -130,6 +440,7 @@ function updateDirtyStateFromForm() {
 }
 
 function populateConfig(config) {
+  clearFormValidation();
   const setValue = (id, value) => {
     const el = document.getElementById(id);
     if (el) {
@@ -172,13 +483,19 @@ function populateConfig(config) {
 }
 
 async function fetchMqttConfig() {
-  const res = await fetch(MQTT_CONFIG_ENDPOINT, { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error('Config failed');
+  try {
+    const res = await fetch(MQTT_CONFIG_ENDPOINT, { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error('Config failed');
+    }
+    const config = await res.json();
+    populateConfig(config);
+    clearNetworkError();
+    return config;
+  } catch (err) {
+    handleNetworkError(err, 'Impossible de charger la configuration MQTT.');
+    throw err;
   }
-  const config = await res.json();
-  populateConfig(config);
-  return config;
 }
 
 function setStatusLoading(loading) {
@@ -283,7 +600,9 @@ async function fetchMqttStatus() {
     if (!res.ok) throw new Error('Status failed');
     const status = await res.json();
     updateMqttStatus(status);
+    clearNetworkError();
   } catch (err) {
+    handleNetworkError(err, 'Impossible de récupérer le statut MQTT.');
     updateMqttStatus(null, err);
   } finally {
     setStatusLoading(false);
@@ -295,6 +614,12 @@ async function handleSubmit(e) {
   e.preventDefault();
   const form = e.currentTarget;
   const btn = form.querySelector('button[type="submit"]');
+
+  if (!validateForm(form)) {
+    displayMessage('Veuillez corriger les erreurs du formulaire.', true);
+    return;
+  }
+
   if (btn) btn.disabled = true;
   displayMessage('Enregistrement…');
 
@@ -302,7 +627,7 @@ async function handleSubmit(e) {
     const payload = {
       scheme: form.scheme?.value || 'mqtt',
       host: form.host?.value?.trim() || '',
-      port: Number.parseInt(form.port?.value, 10) || 0,
+      port: Number.parseInt(form.port?.value, 10),
       username: form.username?.value?.trim() || '',
       password: form.password?.value || '',
       client_cert_path: document.getElementById('mqtt-client-cert')?.value?.trim() || '',
@@ -331,9 +656,12 @@ async function handleSubmit(e) {
     if (!res.ok) throw new Error((await res.text()) || 'Update failed');
 
     await Promise.all([fetchMqttConfig(), fetchMqttStatus()]);
+    clearNetworkError();
     displayMessage('Configuration mise à jour avec succès !', false);
   } catch (err) {
-    displayMessage(`Échec: ${err.message}`, true);
+    handleNetworkError(err, 'Échec de la mise à jour de la configuration MQTT.');
+    const reason = typeof err?.message === 'string' && err.message.trim().length > 0 ? err.message.trim() : 'Erreur inconnue';
+    displayMessage(`Échec: ${reason}`, true);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -347,6 +675,7 @@ async function handleResetClick(e) {
     await fetchMqttConfig();
     displayMessage('Configuration rechargée.', false);
   } catch (err) {
+    handleNetworkError(err, 'Impossible de recharger la configuration MQTT.');
     displayMessage('Échec du chargement de la configuration.', true);
   } finally {
     if (btn) btn.disabled = false;
@@ -364,6 +693,7 @@ async function handleTestClick(e) {
     const payload = await res.json().catch(() => ({ message: 'Réponse invalide', ok: false }));
     const ok = res.ok && payload.ok;
     const supported = payload.supported !== false;
+    clearNetworkError();
 
     if (!supported) {
       displayTestMessage(payload.message || 'Fonction non disponible.', true);
@@ -374,7 +704,9 @@ async function handleTestClick(e) {
       displayTestMessage(message, true);
     }
   } catch (err) {
-    displayTestMessage(`Erreur: ${err.message}`, true);
+    handleNetworkError(err, 'Impossible de tester la connexion MQTT.');
+    const reason = typeof err?.message === 'string' && err.message.trim().length > 0 ? err.message.trim() : 'Erreur inconnue';
+    displayTestMessage(`Erreur: ${reason}`, true);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -384,10 +716,14 @@ function setupEventListeners() {
   const form = document.getElementById('mqtt-config-form');
   if (form) {
     form.addEventListener('submit', handleSubmit);
-    form.addEventListener('input', () => {
+    form.addEventListener('input', (event) => {
+      handleFieldValidationEvent(event);
       window.requestAnimationFrame(updateDirtyStateFromForm);
     });
-    form.addEventListener('change', updateDirtyStateFromForm);
+    form.addEventListener('change', (event) => {
+      handleFieldValidationEvent(event);
+      updateDirtyStateFromForm();
+    });
   }
 
   const scheme = document.getElementById('mqtt-scheme');
