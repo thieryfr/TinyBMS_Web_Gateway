@@ -1,8 +1,38 @@
 // Alert Management JavaScript Module
 let alertsWebSocket = null;
+let alertsReconnectTimeout = null;
+let alertsShouldReconnect = true;
+
+/**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML-safe text
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 // Connect to alerts WebSocket
 function connectAlertsWebSocket() {
+  // Close existing WebSocket if any
+  if (alertsWebSocket) {
+    try {
+      alertsWebSocket.close();
+    } catch (e) {
+      console.warn('Error closing previous WebSocket:', e);
+    }
+    alertsWebSocket = null;
+  }
+
+  // Clear any pending reconnect timeout
+  if (alertsReconnectTimeout) {
+    clearTimeout(alertsReconnectTimeout);
+    alertsReconnectTimeout = null;
+  }
+
   const wsUrl = `ws://${window.location.hostname}/ws/alerts`;
   alertsWebSocket = new WebSocket(wsUrl);
 
@@ -25,9 +55,34 @@ function connectAlertsWebSocket() {
   };
 
   alertsWebSocket.onclose = () => {
-    console.log('Alerts WebSocket closed, reconnecting...');
-    setTimeout(connectAlertsWebSocket, 5000);
+    console.log('Alerts WebSocket closed');
+    alertsWebSocket = null;
+
+    // Only reconnect if we should
+    if (alertsShouldReconnect) {
+      console.log('Reconnecting in 5 seconds...');
+      alertsReconnectTimeout = setTimeout(connectAlertsWebSocket, 5000);
+    }
   };
+}
+
+// Disconnect alerts WebSocket
+function disconnectAlertsWebSocket() {
+  alertsShouldReconnect = false;
+
+  if (alertsReconnectTimeout) {
+    clearTimeout(alertsReconnectTimeout);
+    alertsReconnectTimeout = null;
+  }
+
+  if (alertsWebSocket) {
+    try {
+      alertsWebSocket.close();
+    } catch (e) {
+      console.warn('Error closing WebSocket:', e);
+    }
+    alertsWebSocket = null;
+  }
 }
 
 // Fetch and display active alerts
@@ -49,8 +104,8 @@ async function refreshActiveAlerts() {
       <div class="alert alert-${getSeverityClass(alert.severity)} alert-dismissible fade show mb-2" role="alert">
         <div class="d-flex">
           <div class="flex-grow-1">
-            <h4 class="alert-title mb-1">${getAlertTitle(alert.type)}</h4>
-            <div class="text-muted">${alert.message}</div>
+            <h4 class="alert-title mb-1">${escapeHtml(getAlertTitle(alert.type))}</h4>
+            <div class="text-muted">${escapeHtml(alert.message)}</div>
             <div class="small text-muted mt-1">
               ${new Date(alert.timestamp_ms).toLocaleString('fr-FR')}
             </div>
@@ -93,7 +148,7 @@ async function refreshAlertHistory() {
             <span class="badge bg-${getSeverityClass(alert.severity)}">${getSeverityLabel(alert.severity)}</span>
           </div>
           <div class="col text-truncate">
-            <div class="text-reset d-block">${alert.message}</div>
+            <div class="text-reset d-block">${escapeHtml(alert.message)}</div>
             <div class="d-block text-muted text-truncate mt-n1">
               ${new Date(alert.timestamp_ms).toLocaleString('fr-FR')}
             </div>
@@ -344,4 +399,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 100);
     });
   }
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  disconnectAlertsWebSocket();
 });
