@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "freertos/semphr.h"
+#include "freertos/event_groups.h"
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -43,6 +44,21 @@ static portMUX_TYPE s_init_lock = portMUX_INITIALIZER_UNLOCKED;
 
 #ifdef ESP_PLATFORM
 static void mqtt_client_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
+
+#define MQTT_CLIENT_TEST_CONNECTED_BIT     BIT0
+#define MQTT_CLIENT_TEST_DISCONNECTED_BIT  BIT1
+#define MQTT_CLIENT_TEST_ERROR_BIT         BIT2
+
+typedef struct {
+    EventGroupHandle_t events;
+    bool connected;
+    esp_mqtt_error_type_t error_type;
+    int connect_return_code;
+    int transport_errno;
+    esp_err_t last_esp_err;
+} mqtt_client_test_ctx_t;
+
+static void mqtt_client_test_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 #endif
 
 static void mqtt_client_publish_simple_event(mqtt_client_event_id_t id)
@@ -312,6 +328,203 @@ esp_err_t mqtt_client_apply_configuration(const mqtt_client_config_t *config)
 
     ESP_LOGI(TAG, "MQTT client configured for broker '%s'", config->broker_uri);
     return ESP_OK;
+}
+
+#ifdef ESP_PLATFORM
+static void mqtt_client_test_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    if (base != MQTT_EVENTS) {
+        return;
+    }
+
+    mqtt_client_test_ctx_t *ctx = handler_args;
+    if (ctx == NULL) {
+        return;
+    }
+
+    if (ctx->events == NULL) {
+        return;
+    }
+
+    esp_mqtt_event_handle_t event = event_data;
+
+    switch (event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ctx->connected = true;
+        (void)xEventGroupSetBits(ctx->events, MQTT_CLIENT_TEST_CONNECTED_BIT);
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ctx->connected = false;
+        (void)xEventGroupSetBits(ctx->events, MQTT_CLIENT_TEST_DISCONNECTED_BIT);
+        break;
+    case MQTT_EVENT_ERROR:
+        ctx->connected = false;
+        if (event != NULL && event->error_handle != NULL) {
+            ctx->error_type = event->error_handle->error_type;
+            ctx->connect_return_code = event->error_handle->connect_return_code;
+            ctx->transport_errno = event->error_handle->esp_transport_sock_errno;
+            ctx->last_esp_err = event->error_handle->esp_tls_last_esp_err;
+        }
+        (void)xEventGroupSetBits(ctx->events, MQTT_CLIENT_TEST_ERROR_BIT);
+        break;
+    default:
+        break;
+    }
+}
+#endif
+
+esp_err_t mqtt_client_test_connection(const mqtt_client_config_t *config,
+                                      TickType_t timeout,
+                                      bool *connected,
+                                      char *error_message,
+                                      size_t error_size)
+{
+    if (connected != NULL) {
+        *connected = false;
+    }
+
+    if (error_message != NULL && error_size > 0U) {
+        error_message[0] = '\0';
+    }
+
+    if (config == NULL || config->broker_uri[0] == '\0') {
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Configuration MQTT invalide.");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    TickType_t wait_timeout = timeout;
+    if (wait_timeout == 0) {
+        wait_timeout = pdMS_TO_TICKS(5000);
+    }
+
+#ifndef ESP_PLATFORM
+    (void)wait_timeout;
+    if (error_message != NULL && error_size > 0U) {
+        (void)snprintf(error_message, error_size, "Test non pris en charge.");
+    }
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    EventGroupHandle_t events = xEventGroupCreate();
+    if (events == NULL) {
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Mémoire insuffisante.");
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    mqtt_client_test_ctx_t ctx = {
+        .events = events,
+        .connected = false,
+        .error_type = 0,
+        .connect_return_code = 0,
+        .transport_errno = 0,
+        .last_esp_err = ESP_OK,
+    };
+
+    uint32_t timeout_ms = (uint32_t)wait_timeout * (uint32_t)portTICK_PERIOD_MS;
+    if (timeout_ms == 0U || timeout_ms > 60000U) {
+        timeout_ms = 5000U;
+    }
+
+    esp_mqtt_client_config_t esp_config = {
+        .broker.address.uri = config->broker_uri,
+        .session.keepalive = config->keepalive_seconds,
+        .session.disable_auto_reconnect = true,
+        .network.timeout_ms = (int)timeout_ms,
+    };
+
+    if (config->username[0] != '\0') {
+        esp_config.credentials.username = config->username;
+    }
+
+    if (config->password[0] != '\0') {
+        esp_config.credentials.authentication.password = config->password;
+    }
+
+    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&esp_config);
+    if (client == NULL) {
+        vEventGroupDelete(events);
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Impossible d'initialiser le client MQTT.");
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t handler_err = esp_mqtt_client_register_event(client,
+                                                            ESP_EVENT_ANY_ID,
+                                                            mqtt_client_test_event_handler,
+                                                            &ctx);
+    if (handler_err != ESP_OK) {
+        esp_mqtt_client_destroy(client);
+        vEventGroupDelete(events);
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Échec de l'enregistrement des événements (%s).",
+                           esp_err_to_name(handler_err));
+        }
+        return handler_err;
+    }
+
+    esp_err_t start_err = esp_mqtt_client_start(client);
+    if (start_err != ESP_OK) {
+        esp_mqtt_client_destroy(client);
+        vEventGroupDelete(events);
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Démarrage MQTT impossible (%s).",
+                           esp_err_to_name(start_err));
+        }
+        return start_err;
+    }
+
+    EventBits_t bits = xEventGroupWaitBits(events,
+                                           MQTT_CLIENT_TEST_CONNECTED_BIT |
+                                               MQTT_CLIENT_TEST_ERROR_BIT |
+                                               MQTT_CLIENT_TEST_DISCONNECTED_BIT,
+                                           pdFALSE,
+                                           pdFALSE,
+                                           wait_timeout);
+
+    (void)esp_mqtt_client_stop(client);
+    esp_mqtt_client_destroy(client);
+    vEventGroupDelete(events);
+
+    esp_err_t result = ESP_FAIL;
+
+    if ((bits & MQTT_CLIENT_TEST_CONNECTED_BIT) != 0U) {
+        if (connected != NULL) {
+            *connected = true;
+        }
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Connexion réussie.");
+        }
+        result = ESP_OK;
+    } else if (bits == 0U) {
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "Délai dépassé.");
+        }
+        result = ESP_ERR_TIMEOUT;
+    } else {
+        if (error_message != NULL && error_size > 0U) {
+            if ((bits & MQTT_CLIENT_TEST_ERROR_BIT) != 0U) {
+                if (ctx.connect_return_code != 0) {
+                    (void)snprintf(error_message, error_size, "Erreur MQTT (code %d).", ctx.connect_return_code);
+                } else if (ctx.last_esp_err != ESP_OK) {
+                    (void)snprintf(error_message, error_size, "Erreur ESP %s.", esp_err_to_name(ctx.last_esp_err));
+                } else if (ctx.transport_errno != 0) {
+                    (void)snprintf(error_message, error_size, "Erreur transport %d.", ctx.transport_errno);
+                } else {
+                    (void)snprintf(error_message, error_size, "Erreur de connexion.");
+                }
+            } else {
+                (void)snprintf(error_message, error_size, "Connexion interrompue.");
+            }
+        }
+        result = ESP_FAIL;
+    }
+
+    return result;
+#endif
 }
 
 void mqtt_client_get_state(mqtt_client_state_t *state)

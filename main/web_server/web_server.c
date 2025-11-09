@@ -25,6 +25,7 @@
 #include "config_manager.h"
 #include "monitoring.h"
 #include "mqtt_gateway.h"
+#include "mqtt_client.h"
 #include "history_logger.h"
 #include "history_fs.h"
 #include "alert_manager.h"
@@ -993,6 +994,63 @@ static esp_err_t web_server_api_mqtt_status_handler(httpd_req_t *req)
     return httpd_resp_send(req, buffer, written);
 }
 
+static esp_err_t web_server_api_mqtt_test_handler(httpd_req_t *req)
+{
+    const mqtt_client_config_t *config = config_manager_get_mqtt_client_config();
+    if (config == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
+        return ESP_FAIL;
+    }
+
+    bool connected = false;
+    char message[128];
+    message[0] = '\0';
+
+    esp_err_t err = mqtt_client_test_connection(config, pdMS_TO_TICKS(5000), &connected, message, sizeof(message));
+    bool supported = (err != ESP_ERR_NOT_SUPPORTED);
+    bool ok = (err == ESP_OK && connected);
+
+    if (message[0] == '\0') {
+        if (!supported) {
+            (void)snprintf(message, sizeof(message), "Fonction non disponible.");
+        } else if (ok) {
+            (void)snprintf(message, sizeof(message), "Connexion réussie.");
+        } else if (err == ESP_ERR_TIMEOUT) {
+            (void)snprintf(message, sizeof(message), "Délai dépassé.");
+        } else {
+            (void)snprintf(message, sizeof(message), "Échec du test de connexion.");
+        }
+    }
+
+    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW(TAG,
+                 "MQTT test connection failed: %s (connected=%d, message='%s')",
+                 esp_err_to_name(err),
+                 connected ? 1 : 0,
+                 message);
+    }
+
+    char buffer[192];
+    int written = snprintf(buffer,
+                           sizeof(buffer),
+                           "{\"supported\":%s,\"ok\":%s,\"connected\":%s,\"message\":\"%s\"}",
+                           supported ? "true" : "false",
+                           ok ? "true" : "false",
+                           connected ? "true" : "false",
+                           message);
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Response too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (!supported) {
+        httpd_resp_set_status(req, "501 Not Implemented");
+    }
+    return httpd_resp_send(req, buffer, written);
+}
+
 static esp_err_t web_server_api_can_status_handler(httpd_req_t *req)
 {
     can_victron_status_t status = {0};
@@ -1764,6 +1822,14 @@ void web_server_init(void)
         .user_ctx = NULL,
     };
     httpd_register_uri_handler(s_httpd, &api_mqtt_status);
+
+    const httpd_uri_t api_mqtt_test = {
+        .uri = "/api/mqtt/test",
+        .method = HTTP_GET,
+        .handler = web_server_api_mqtt_test_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_mqtt_test);
 
     const httpd_uri_t api_can_status = {
         .uri = "/api/can/status",

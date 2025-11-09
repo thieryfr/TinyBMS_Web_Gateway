@@ -42,25 +42,29 @@
           <div class="row g-3 mt-3">
             <!-- Status Card -->
             <div class="col-lg-4">
-              <div class="card">
+              <div class="card" id="mqtt-status-card">
                 <div class="card-header d-flex flex-wrap align-items-center gap-2">
                   <h3 class="card-title mb-0">État du broker</h3>
-                  <button id="mqtt-refresh" class="btn btn-outline-primary btn-sm ms-auto">Actualiser</button>
+                  <div class="ms-auto d-flex flex-wrap gap-2">
+                    <button id="mqtt-test" class="btn btn-outline-secondary btn-sm">Tester la connexion</button>
+                    <button id="mqtt-refresh" class="btn btn-outline-primary btn-sm">Actualiser</button>
+                  </div>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="mqtt-status-body">
                   <div class="d-flex flex-wrap align-items-center gap-3">
-                    <span id="mqtt-connection-state" class="badge status-badge">--</span>
-                    <span id="mqtt-last-error" class="text-secondary small" aria-live="polite">Aucune erreur</span>
+                    <span id="mqtt-connection-state" class="badge status-badge" data-placeholder>--</span>
+                    <span id="mqtt-last-error" class="text-secondary small" aria-live="polite" data-placeholder>Aucune erreur</span>
                   </div>
                   <dl class="status-kv mt-3">
-                    <div><dt>Client</dt><dd id="mqtt-client-started">--</dd></div>
-                    <div><dt>Wi-Fi</dt><dd id="mqtt-wifi-state">--</dd></div>
-                    <div><dt>Reconnexions</dt><dd id="mqtt-reconnect-count">0</dd></div>
-                    <div><dt>Déconnexions</dt><dd id="mqtt-disconnect-count">0</dd></div>
-                    <div><dt>Erreurs</dt><dd id="mqtt-error-count">0</dd></div>
-                    <div><dt>Dernier événement</dt><dd id="mqtt-last-event">--</dd></div>
-                    <div><dt>Horodatage</dt><dd id="mqtt-last-event-time">--</dd></div>
+                    <div><dt>Client</dt><dd id="mqtt-client-started" data-placeholder>--</dd></div>
+                    <div><dt>Wi-Fi</dt><dd id="mqtt-wifi-state" data-placeholder>--</dd></div>
+                    <div><dt>Reconnexions</dt><dd id="mqtt-reconnect-count" data-placeholder>0</dd></div>
+                    <div><dt>Déconnexions</dt><dd id="mqtt-disconnect-count" data-placeholder>0</dd></div>
+                    <div><dt>Erreurs</dt><dd id="mqtt-error-count" data-placeholder>0</dd></div>
+                    <div><dt>Dernier événement</dt><dd id="mqtt-last-event" data-placeholder>--</dd></div>
+                    <div><dt>Horodatage</dt><dd id="mqtt-last-event-time" data-placeholder>--</dd></div>
                   </dl>
+                  <p id="mqtt-test-message" class="mt-3 small text-secondary" aria-live="polite"></p>
                 </div>
               </div>
             </div>
@@ -68,11 +72,12 @@
             <!-- Configuration Form -->
             <div class="col-lg-8">
               <form id="mqtt-config-form" class="card">
-                <div class="card-header">
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
                   <h3 class="card-title mb-0">
                     <i class="ti ti-settings-cog me-2"></i>
                     Configuration de la passerelle MQTT
                   </h3>
+                  <span id="mqtt-unsaved-badge" class="badge bg-warning text-dark ms-auto d-none">Modifications non sauvegardées</span>
                 </div>
                 <div class="card-body">
                   <div class="row g-3">
@@ -212,10 +217,16 @@
                   </fieldset>
                 </div>
                 <div class="card-footer">
-                  <button type="submit" class="btn btn-primary w-100">
-                    <i class="ti ti-device-floppy me-2"></i>
-                    Enregistrer la configuration
-                  </button>
+                  <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                      <i class="ti ti-device-floppy me-2"></i>
+                      Enregistrer la configuration
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary w-100" id="mqtt-reset">
+                      <i class="ti ti-arrow-back-up me-2"></i>
+                      Réinitialiser
+                    </button>
+                  </div>
                   <p id="mqtt-config-message" class="mt-2 mb-0 small text-center" role="status" aria-live="polite"></p>
                 </div>
               </form>
@@ -226,237 +237,6 @@
     </div>
 
     <script defer src="/assets/js/tabler.min.js"></script>
-
-    <!-- JavaScript for MQTT configuration -->
-    <script type="module">
-      function updateTlsVisibility() {
-        const scheme = document.getElementById('mqtt-scheme');
-        const isSecure = scheme && scheme.value === 'mqtts';
-        const sections = document.querySelectorAll('[data-tls-field]');
-        sections.forEach((node) => {
-          node.classList.toggle('d-none', !isSecure);
-          node.setAttribute('aria-hidden', (!isSecure).toString());
-        });
-      }
-
-      function setupPasswordToggle() {
-        const input = document.getElementById('mqtt-password');
-        const toggle = document.getElementById('mqtt-password-toggle');
-        if (!input || !toggle) return;
-
-        const updateLabel = (visible) => {
-          const text = visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe';
-          toggle.setAttribute('aria-label', text);
-          toggle.setAttribute('aria-pressed', visible.toString());
-          const helper = toggle.querySelector('.password-toggle-label');
-          if (helper) helper.textContent = text;
-          const icon = toggle.querySelector('i');
-          if (icon) {
-            icon.classList.toggle('ti-eye', !visible);
-            icon.classList.toggle('ti-eye-off', visible);
-          }
-        };
-
-        toggle.addEventListener('click', () => {
-          const isPassword = input.type === 'password';
-          input.type = isPassword ? 'text' : 'password';
-          updateLabel(isPassword);
-        });
-
-        updateLabel(false);
-      }
-
-      // Fetch and display MQTT status
-      async function fetchMqttStatus() {
-        try {
-          const res = await fetch('/api/mqtt/status', { cache: 'no-store' });
-          if (!res.ok) throw new Error('Status failed');
-          const status = await res.json();
-          updateMqttStatus(status);
-        } catch (err) {
-          updateMqttStatus(null, err);
-        }
-      }
-
-      function updateMqttStatus(status, error) {
-        const badge = document.getElementById('mqtt-connection-state');
-        const helper = document.getElementById('mqtt-last-error');
-        if (!badge || !helper) return;
-
-        badge.className = 'status-badge';
-        helper.classList.remove('text-danger');
-
-        const set = (id, value) => {
-          const el = document.getElementById(`mqtt-${id}`);
-          if (el) el.textContent = value;
-        };
-
-        const reset = () => {
-          ['client-started', 'wifi-state', 'reconnect-count', 'disconnect-count', 'error-count', 'last-event', 'last-event-time'].forEach((id) => {
-            set(id, '--');
-          });
-        };
-
-        if (error) {
-          reset();
-          badge.textContent = 'Erreur';
-          badge.classList.add('status-badge--error');
-          helper.textContent = error.message || 'Statut indisponible';
-          helper.classList.add('text-danger');
-          return;
-        }
-
-        if (!status) {
-          reset();
-          badge.textContent = 'Inconnu';
-          badge.classList.add('status-badge--disconnected');
-          helper.textContent = 'Aucune donnée';
-          return;
-        }
-
-        if (status.connected) {
-          badge.textContent = 'Connecté';
-          badge.classList.add('status-badge--connected');
-        } else if (status.client_started) {
-          badge.textContent = 'Déconnecté';
-          badge.classList.add('status-badge--disconnected');
-        } else {
-          badge.textContent = 'Arrêté';
-          badge.classList.add('status-badge--error');
-        }
-
-        helper.textContent = status.last_error ? status.last_error : 'Aucune erreur récente';
-        if (status.last_error) helper.classList.add('text-danger');
-
-        set('client-started', status.client_started ? 'Actif' : 'Arrêté');
-        set('wifi-state', status.wifi_connected ? 'Connecté' : 'Déconnecté');
-        set('reconnect-count', String(status.reconnects ?? 0));
-        set('disconnect-count', String(status.disconnects ?? 0));
-        set('error-count', String(status.errors ?? 0));
-        set('last-event', status.last_event || '--');
-
-        const ts = Number(status.last_event_timestamp_ms);
-        set('last-event-time', Number.isFinite(ts) && ts > 0 ? new Date(ts).toLocaleString() : '--');
-      }
-
-      // Fetch and populate configuration
-      async function fetchMqttConfig() {
-        try {
-          const res = await fetch('/api/mqtt/config', { cache: 'no-store' });
-          if (!res.ok) throw new Error('Config failed');
-          const config = await res.json();
-
-          const set = (id, value) => {
-            const el = document.getElementById(id);
-            if (el) el.value = value ?? '';
-          };
-          const topics = config.topics || {};
-
-          set('mqtt-scheme', config.scheme || 'mqtt');
-          updateTlsVisibility();
-          set('mqtt-host', config.host || '');
-          set('mqtt-port', config.port != null ? String(config.port) : '');
-          set('mqtt-username', config.username || '');
-          set('mqtt-password', config.password || '');
-          set('mqtt-client-cert', config.client_cert_path || '');
-          set('mqtt-ca-cert', config.ca_cert_path || '');
-          set('mqtt-keepalive', config.keepalive != null ? String(config.keepalive) : '');
-          set('mqtt-qos', config.default_qos != null ? String(config.default_qos) : '');
-
-          const retain = document.getElementById('mqtt-retain');
-          if (retain) retain.checked = Boolean(config.retain);
-
-          const verify = document.getElementById('mqtt-verify-hostname');
-          if (verify) verify.checked = config.verify_hostname !== false;
-
-          set('mqtt-status-topic', topics.status || '');
-          set('mqtt-metrics-topic', topics.metrics || '');
-          set('mqtt-config-topic', topics.config || '');
-          set('mqtt-can-raw-topic', topics.can_raw || '');
-          set('mqtt-can-decoded-topic', topics.can_decoded || '');
-          set('mqtt-can-ready-topic', topics.can_ready || '');
-
-          displayMessage('');
-        } catch (err) {
-          displayMessage('Échec du chargement de la configuration.', true);
-        }
-      }
-
-      function displayMessage(msg, error = false) {
-        const el = document.getElementById('mqtt-config-message');
-        if (!el) return;
-        el.textContent = msg;
-        el.classList.toggle('text-danger', error);
-        el.classList.toggle('text-success', !error && msg);
-      }
-
-      // Handle form submission
-      async function handleSubmit(e) {
-        e.preventDefault();
-        const form = e.currentTarget;
-        const btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        displayMessage('Enregistrement…');
-
-        try {
-          const payload = {
-            scheme: form.scheme?.value || 'mqtt',
-            host: form.host?.value?.trim() || '',
-            port: Number.parseInt(form.port?.value, 10) || 0,
-            username: form.username?.value?.trim() || '',
-            password: form.password?.value || '',
-            client_cert_path: document.getElementById('mqtt-client-cert')?.value?.trim() || '',
-            ca_cert_path: document.getElementById('mqtt-ca-cert')?.value?.trim() || '',
-            retain: form.retain?.checked || false,
-            verify_hostname: document.getElementById('mqtt-verify-hostname')?.checked ?? true,
-            status_topic: form.status_topic?.value?.trim() || '',
-            metrics_topic: form.metrics_topic?.value?.trim() || '',
-            config_topic: form.config_topic?.value?.trim() || '',
-            can_raw_topic: form.can_raw_topic?.value?.trim() || '',
-            can_decoded_topic: form.can_decoded_topic?.value?.trim() || '',
-            can_ready_topic: form.can_ready_topic?.value?.trim() || '',
-          };
-
-          const keepalive = Number.parseInt(form.keepalive?.value, 10);
-          if (!Number.isNaN(keepalive)) payload.keepalive = keepalive;
-          const qos = Number.parseInt(form.default_qos?.value, 10);
-          if (!Number.isNaN(qos)) payload.default_qos = qos;
-
-          const res = await fetch('/api/mqtt/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          if (!res.ok) throw new Error(await res.text() || 'Update failed');
-
-          await Promise.all([fetchMqttConfig(), fetchMqttStatus()]);
-          displayMessage('Configuration mise à jour avec succès !', false);
-        } catch (err) {
-          displayMessage(`Échec: ${err.message}`, true);
-        } finally {
-          if (btn) btn.disabled = false;
-        }
-      }
-
-      // Initialize
-      document.addEventListener('DOMContentLoaded', () => {
-        const form = document.getElementById('mqtt-config-form');
-        if (form) form.addEventListener('submit', handleSubmit);
-
-        const scheme = document.getElementById('mqtt-scheme');
-        if (scheme) scheme.addEventListener('change', updateTlsVisibility);
-
-        setupPasswordToggle();
-        updateTlsVisibility();
-
-        const refresh = document.getElementById('mqtt-refresh');
-        if (refresh) refresh.addEventListener('click', fetchMqttStatus);
-
-        // Initial load
-        fetchMqttConfig();
-        fetchMqttStatus();
-      });
-    </script>
+    <script type="module" src="/src/js/config.js"></script>
   </body>
 </html>
