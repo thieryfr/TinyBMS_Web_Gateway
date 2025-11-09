@@ -1,86 +1,24 @@
+import { normalizeEventBusMetrics, coerceNumber } from './codeMetricsUtils.js';
+
 const REFRESH_INTERVAL_MS = 10000;
 
 const ENDPOINTS = {
-    runtime: '/api/metrics/runtime',
-    eventBus: '/api/event-bus/metrics',
-    tasks: '/api/system/tasks',
-    modules: '/api/system/modules',
+    runtime: ['/api/monitoring/runtime', '/api/metrics/runtime'],
+    eventBus: ['/api/monitoring/event-bus', '/api/event-bus/metrics'],
+    tasks: ['/api/monitoring/tasks', '/api/system/tasks'],
+    modules: ['/api/monitoring/modules', '/api/system/modules'],
 };
 
 const FALLBACK_DATA = {
     runtime: {
-        timestamp_ms: Date.now(),
-        uptime_s: 86_400,
-        boot_count: 3,
-        cycle_count: 128,
-        reset_reason: 'ESP_RST_POWERON',
-        firmware: 'v1.3.0-demo',
-        last_boot: new Date(Date.now() - 86_400_000).toISOString(),
-        cpu_load: { core0: 37.5, core1: 42.1 },
-        event_loop: { avg_latency_ms: 3.2, max_latency_ms: 8.6 },
-        total_heap_bytes: 320_000,
-        free_heap_bytes: 182_500,
-        min_free_heap_bytes: 132_000,
+        event_loop: {},
     },
     eventBus: {
-        dropped_total: 18,
-        dropped_by_consumer: [
-            { name: 'mqtt_gateway', dropped: 8 },
-            { name: 'web_server', dropped: 6 },
-            { name: 'logger', dropped: 4 },
-        ],
-        queue_depth: [
-            { name: 'telemetry', used: 6, capacity: 20 },
-            { name: 'events', used: 12, capacity: 32 },
-            { name: 'can_frames', used: 4, capacity: 16 },
-        ],
+        dropped_by_consumer: [],
+        queue_depth: [],
     },
-    tasks: [
-        {
-            name: 'main',
-            state: 'running',
-            cpu_percent: 21.3,
-            stack_high_water_mark: 2048,
-            core: 0,
-            runtime_ticks: 1_284_398,
-        },
-        {
-            name: 'mqtt',
-            state: 'ready',
-            cpu_percent: 14.1,
-            stack_high_water_mark: 1536,
-            core: 1,
-            runtime_ticks: 932_144,
-        },
-        {
-            name: 'event_bus',
-            state: 'blocked',
-            cpu_percent: 8.7,
-            stack_high_water_mark: 1280,
-            core: 0,
-            runtime_ticks: 601_445,
-        },
-    ],
-    modules: [
-        {
-            name: 'event_bus',
-            status: 'ok',
-            detail: 'Aucun drop sur les 5 dernières minutes',
-            last_event: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-        },
-        {
-            name: 'mqtt_gateway',
-            status: 'warning',
-            detail: 'Temps de réponse > 200 ms sur 2 publications',
-            last_event: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
-        },
-        {
-            name: 'web_server',
-            status: 'ok',
-            detail: 'Aucun timeout HTTP',
-            last_event: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-        },
-    ],
+    tasks: [],
+    modules: [],
 };
 
 function deepClone(value) {
@@ -101,6 +39,20 @@ async function fetchJson(url) {
         console.warn(`[code-metrics] Impossible de récupérer ${url}:`, error);
         return null;
     }
+}
+
+async function fetchFromCandidates(candidates) {
+    const urls = Array.isArray(candidates) ? candidates : [candidates];
+    for (const url of urls) {
+        if (!url) {
+            continue;
+        }
+        const payload = await fetchJson(url);
+        if (payload) {
+            return { data: payload, source: url };
+        }
+    }
+    return { data: null, source: urls.at(-1) ?? null };
 }
 
 function formatDuration(seconds) {
@@ -178,6 +130,7 @@ class CodeMetricsDashboard {
             heap: document.querySelector('#metric-heap'),
             heapMin: document.querySelector('#metric-heap-min'),
             eventDrops: document.querySelector('#metric-event-drops'),
+            eventBlocking: document.querySelector('#metric-event-blocking'),
             eventLatency: document.querySelector('#metric-event-latency'),
             eventLatencyChip: document.querySelector('#metric-event-latency-chip'),
             heapUsageChip: document.querySelector('#metric-heap-usage-chip'),
@@ -263,13 +216,22 @@ class CodeMetricsDashboard {
 
         this.charts.eventDrops.setOption({
             tooltip: { trigger: 'axis' },
-            grid: { left: 80, right: 20, top: 30, bottom: 40 },
+            legend: { data: ['Drops', 'Blocages'], top: 0 },
+            grid: { left: 80, right: 20, top: 35, bottom: 40 },
             xAxis: { type: 'value', boundaryGap: [0, 0.01] },
             yAxis: { type: 'category', data: [] },
             series: [
                 {
                     name: 'Drops',
                     type: 'bar',
+                    stack: 'events',
+                    data: [],
+                    itemStyle: { borderRadius: [0, 6, 6, 0] },
+                },
+                {
+                    name: 'Blocages',
+                    type: 'bar',
+                    stack: 'events',
                     data: [],
                     itemStyle: { borderRadius: [0, 6, 6, 0] },
                 },
@@ -303,20 +265,29 @@ class CodeMetricsDashboard {
         this.dom.refreshButton?.classList.add('data-loading');
 
         const [runtime, eventBus, tasks, modules] = await Promise.all([
-            fetchJson(ENDPOINTS.runtime),
-            fetchJson(ENDPOINTS.eventBus),
-            fetchJson(ENDPOINTS.tasks),
-            fetchJson(ENDPOINTS.modules),
+            fetchFromCandidates(ENDPOINTS.runtime),
+            fetchFromCandidates(ENDPOINTS.eventBus),
+            fetchFromCandidates(ENDPOINTS.tasks),
+            fetchFromCandidates(ENDPOINTS.modules),
         ]);
 
         const fallback = deepClone(FALLBACK_DATA);
+        const sources = {
+            runtime: runtime.data != null,
+            eventBus: eventBus.data != null,
+            tasks: Array.isArray(tasks.data),
+            modules: Array.isArray(modules.data),
+        };
         const payload = {
-            runtime: runtime ?? fallback.runtime,
-            eventBus: eventBus ?? fallback.eventBus,
-            tasks: Array.isArray(tasks) && tasks.length ? tasks : fallback.tasks,
-            modules: Array.isArray(modules) && modules.length ? modules : fallback.modules,
-            isFallback:
-                !runtime && !eventBus && (!tasks || !tasks.length) && (!modules || !modules.length),
+            runtime: runtime.data ?? fallback.runtime,
+            eventBus: eventBus.data ?? fallback.eventBus,
+            tasks: Array.isArray(tasks.data) ? tasks.data : fallback.tasks,
+            modules: Array.isArray(modules.data) ? modules.data : fallback.modules,
+            isFallback: !sources.runtime && !sources.eventBus && !sources.tasks && !sources.modules,
+            isPartialFallback:
+                sources.runtime || sources.eventBus || sources.tasks || sources.modules
+                    ? Object.values(sources).some((value) => !value)
+                    : false,
         };
 
         this.render(payload);
@@ -326,14 +297,15 @@ class CodeMetricsDashboard {
     }
 
     render(payload) {
-        this.renderRuntime(payload.runtime, payload.isFallback);
+        this.renderRuntime(payload.runtime);
         this.renderEventBus(payload.eventBus);
         this.renderTasks(payload.tasks);
         this.renderModules(payload.modules);
         this.updateMeta(payload);
+        this.updateModeIndicator(payload.isFallback, payload.isPartialFallback);
     }
 
-    renderRuntime(runtime, isFallback) {
+    renderRuntime(runtime) {
         const uptime = runtime?.uptime_s;
         this.dom.uptime.textContent = formatDuration(uptime);
         this.dom.cycleCount.textContent = Number.isFinite(runtime?.cycle_count)
@@ -367,7 +339,13 @@ class CodeMetricsDashboard {
 
         const used = heap.used;
         if (cpuAverage != null) {
-            this.charts.cpu.setOption({ series: [{ data: [{ value: Number(cpuAverage.toFixed(1)), name: 'Charge moyenne' }] }] });
+            this.charts.cpu.setOption({
+                series: [
+                    {
+                        data: [{ value: Number(cpuAverage.toFixed(1)), name: 'Charge moyenne' }],
+                    },
+                ],
+            });
         }
 
         const now = runtime?.timestamp_ms ? runtime.timestamp_ms : Date.now();
@@ -402,7 +380,6 @@ class CodeMetricsDashboard {
             this.dom.heapUsageChip.textContent = '--';
         }
 
-        this.updateModeIndicator(isFallback);
     }
 
     renderRuntimeCharts() {
@@ -434,28 +411,57 @@ class CodeMetricsDashboard {
     }
 
     renderEventBus(eventBus) {
-        if (!eventBus) return;
-        const drops = Array.isArray(eventBus.dropped_by_consumer) ? eventBus.dropped_by_consumer : [];
-        const sortedDrops = drops.slice().sort((a, b) => (b?.dropped ?? 0) - (a?.dropped ?? 0));
+        if (!eventBus) {
+            if (this.dom.eventDrops) {
+                this.dom.eventDrops.textContent = '--';
+            }
+            if (this.dom.eventBlocking) {
+                this.dom.eventBlocking.textContent = '--';
+            }
+            this.charts.eventDrops.setOption({
+                yAxis: { data: [] },
+                series: [
+                    { name: 'Drops', data: [] },
+                    { name: 'Blocages', data: [] },
+                ],
+            });
+            this.charts.queues.setOption({
+                xAxis: { data: [] },
+                series: [
+                    { name: 'Utilisation', data: [] },
+                    { name: 'Capacité', data: [] },
+                ],
+            });
+            return;
+        }
+
+        const metrics = normalizeEventBusMetrics(eventBus);
+        const totalDrops = metrics.droppedTotal;
+        const totalBlocking = metrics.blockingTotal;
+
+        if (this.dom.eventDrops) {
+            this.dom.eventDrops.textContent = totalDrops != null ? totalDrops.toLocaleString('fr-FR') : '--';
+        }
+        if (this.dom.eventBlocking) {
+            this.dom.eventBlocking.textContent =
+                totalBlocking != null ? totalBlocking.toLocaleString('fr-FR') : '--';
+        }
 
         this.charts.eventDrops.setOption({
-            yAxis: { data: sortedDrops.map((item) => item.name) },
+            yAxis: { data: metrics.consumers.map((item) => item.name) },
             series: [
                 {
                     name: 'Drops',
-                    data: sortedDrops.map((item) => item.dropped ?? 0),
+                    data: metrics.consumers.map((item) => item.dropped ?? 0),
+                },
+                {
+                    name: 'Blocages',
+                    data: metrics.consumers.map((item) => item.blocking ?? 0),
                 },
             ],
         });
 
-        const totalDrops = Number.isFinite(eventBus?.dropped_total)
-            ? eventBus.dropped_total
-            : sortedDrops.reduce((total, item) => total + (item?.dropped ?? 0), 0);
-        if (Number.isFinite(totalDrops) && this.dom.eventDrops) {
-            this.dom.eventDrops.textContent = totalDrops.toLocaleString('fr-FR');
-        }
-
-        const queues = Array.isArray(eventBus.queue_depth) ? eventBus.queue_depth : [];
+        const queues = metrics.queueDepth;
         this.charts.queues.setOption({
             xAxis: { data: queues.map((item) => item.name) },
             series: [
@@ -483,19 +489,22 @@ class CodeMetricsDashboard {
 
         const sorted = tasks
             .slice()
-            .sort((a, b) => (b?.cpu_percent ?? 0) - (a?.cpu_percent ?? 0));
+            .sort((a, b) => (coerceNumber(b?.cpu_percent ?? b?.cpu ?? b?.cpu_usage) ?? 0) - (coerceNumber(a?.cpu_percent ?? a?.cpu ?? a?.cpu_usage) ?? 0));
 
         sorted.forEach((task) => {
             const row = this.templates.taskRow.content.firstElementChild.cloneNode(true);
             row.children[0].textContent = task.name ?? '--';
             row.children[1].innerHTML = this.renderTaskState(task.state);
-            row.children[2].textContent = task.cpu_percent != null ? formatPercentage(task.cpu_percent) : '--';
-            row.children[3].textContent = task.stack_high_water_mark != null
-                ? `${task.stack_high_water_mark} o`
-                : '--';
-            row.children[4].textContent = task.core ?? '--';
-            row.children[5].textContent = task.runtime_ticks != null
-                ? `${task.runtime_ticks.toLocaleString('fr-FR')} ticks`
+            const cpuPercent = coerceNumber(task.cpu_percent ?? task.cpu ?? task.cpu_usage ?? task.cpu_load);
+            row.children[2].textContent = cpuPercent != null ? formatPercentage(cpuPercent) : '--';
+            const stackFree =
+                coerceNumber(task.stack_high_water_mark ?? task.stack_free_bytes ?? task.stack_free) ?? null;
+            row.children[3].textContent = stackFree != null ? `${stackFree} o` : '--';
+            const coreId = task.core ?? task.core_id ?? task.affinity ?? '--';
+            row.children[4].textContent = coreId;
+            const runtimeTicks = coerceNumber(task.runtime_ticks ?? task.runtime ?? task.runtime_ms);
+            row.children[5].textContent = runtimeTicks != null
+                ? `${Math.round(runtimeTicks).toLocaleString('fr-FR')} ${task.runtime_ms != null ? 'ms' : 'ticks'}`
                 : '--';
             this.dom.tasksTable.appendChild(row);
         });
@@ -573,17 +582,24 @@ class CodeMetricsDashboard {
 
         if (payload.isFallback) {
             this.dom.sourceLabel.textContent = 'Mode démo';
+        } else if (payload.isPartialFallback) {
+            this.dom.sourceLabel.textContent = 'Live (partiel)';
         } else {
             this.dom.sourceLabel.textContent = 'Live';
         }
     }
 
-    updateModeIndicator(isFallback) {
+    updateModeIndicator(isFallback, isPartial) {
         if (!this.dom.modeIndicator) return;
         this.dom.modeIndicator.classList.toggle('live-indicator--fallback', Boolean(isFallback));
+        this.dom.modeIndicator.classList.toggle('live-indicator--partial', Boolean(isPartial && !isFallback));
         const textSpan = this.dom.modeIndicator.querySelector('span:last-child');
         if (textSpan) {
-            textSpan.textContent = isFallback ? 'Mode démo' : 'Données en direct';
+            textSpan.textContent = isFallback
+                ? 'Mode démo'
+                : isPartial
+                    ? 'Données partielles'
+                    : 'Données en direct';
         }
     }
 }

@@ -15,6 +15,7 @@ const config = require('./mock-data/config');
 const history = require('./mock-data/history');
 const registers = require('./mock-data/registers');
 const uart = require('./mock-data/uart');
+const metrics = require('./mock-data/metrics');
 const can = require('./mock-data/can');
 
 // Configuration
@@ -115,6 +116,42 @@ app.get('/api/mqtt/status', (req, res) => {
 app.get('/api/can/status', (req, res) => {
   const status = can.getStatus();
   res.json(status);
+});
+
+/**
+ * Code metrics monitoring endpoints
+ */
+app.get('/api/monitoring/runtime', (req, res) => {
+  res.json(metrics.getRuntime());
+});
+
+app.get('/api/monitoring/event-bus', (req, res) => {
+  res.json(metrics.getEventBus());
+});
+
+app.get('/api/monitoring/tasks', (req, res) => {
+  res.json(metrics.getTasks());
+});
+
+app.get('/api/monitoring/modules', (req, res) => {
+  res.json(metrics.getModules());
+});
+
+// Legacy compatibility routes
+app.get('/api/metrics/runtime', (req, res) => {
+  res.json(metrics.getRuntime());
+});
+
+app.get('/api/event-bus/metrics', (req, res) => {
+  res.json(metrics.getEventBus());
+});
+
+app.get('/api/system/tasks', (req, res) => {
+  res.json(metrics.getTasks());
+});
+
+app.get('/api/system/modules', (req, res) => {
+  res.json(metrics.getModules());
 });
 
 /**

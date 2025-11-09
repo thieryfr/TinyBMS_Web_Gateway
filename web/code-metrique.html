@@ -133,8 +133,9 @@
                     <i class="ti ti-traffic-cone"></i>
                   </div>
                   <div class="metric-content">
-                    <span id="metric-events-label" class="metric-label">Événements perdus</span>
+                    <span id="metric-events-label" class="metric-label">Bus d'événements</span>
                     <span id="metric-event-drops" class="metric-value">--</span>
+                    <span id="metric-event-blocking" class="metric-subtitle">Blocages en attente&nbsp;: --</span>
                     <span id="metric-event-latency" class="metric-subtitle">Latence moyenne&nbsp;: --</span>
                   </div>
                 </div>
@@ -182,11 +183,11 @@
             <div class="col-12 col-xl-6">
               <div class="card chart-card">
                 <div class="card-header d-flex align-items-center gap-2">
-                  <h3 class="card-title mb-0">Drops par consommateur</h3>
-                  <span class="text-secondary small">Analyse des modules saturés</span>
+                  <h3 class="card-title mb-0">Drops &amp; blocages par consommateur</h3>
+                  <span class="text-secondary small">Analyse de la saturation du bus</span>
                 </div>
                 <div class="card-body">
-                  <div id="event-bus-drop-chart" class="echart-container" role="img" aria-label="Drops par module"></div>
+                  <div id="event-bus-drop-chart" class="echart-container" role="img" aria-label="Drops et blocages par module"></div>
                 </div>
               </div>
             </div>
