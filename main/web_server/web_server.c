@@ -29,6 +29,7 @@
 #include "history_fs.h"
 #include "alert_manager.h"
 #include "web_server_alerts.h"
+#include "can_victron.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -49,6 +50,7 @@
 #define WEB_SERVER_FILE_BUFSZ   1024
 #define WEB_SERVER_HISTORY_JSON_SIZE 4096
 #define WEB_SERVER_MQTT_JSON_SIZE    768
+#define WEB_SERVER_CAN_JSON_SIZE     512
 
 typedef struct ws_client {
     int fd;
@@ -56,6 +58,22 @@ typedef struct ws_client {
 } ws_client_t;
 
 static const char *TAG = "web_server";
+
+static const char *web_server_twai_state_to_string(twai_state_t state)
+{
+    switch (state) {
+    case TWAI_STATE_STOPPED:
+        return "Arrêté";
+    case TWAI_STATE_RUNNING:
+        return "En marche";
+    case TWAI_STATE_BUS_OFF:
+        return "Bus-off";
+    case TWAI_STATE_RECOVERING:
+        return "Récupération";
+    default:
+        return "Inconnu";
+    }
+}
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static httpd_handle_t s_httpd = NULL;
@@ -846,6 +864,67 @@ static esp_err_t web_server_api_mqtt_status_handler(httpd_req_t *req)
     return httpd_resp_send(req, buffer, written);
 }
 
+static esp_err_t web_server_api_can_status_handler(httpd_req_t *req)
+{
+    can_victron_status_t status = {0};
+    esp_err_t err = can_victron_get_status(&status);
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CAN status unavailable");
+        return err;
+    }
+
+    float occupancy = status.bus_occupancy_pct;
+    if (occupancy < 0.0f) {
+        occupancy = 0.0f;
+    }
+    if (occupancy > 100.0f) {
+        occupancy = 100.0f;
+    }
+
+    const char *state_label = web_server_twai_state_to_string(status.bus_state);
+
+    char buffer[WEB_SERVER_CAN_JSON_SIZE];
+    int written = snprintf(buffer,
+                           sizeof(buffer),
+                           "{\"timestamp_ms\":%llu,\"driver_started\":%s,"
+                           "\"frames\":{\"tx_count\":%llu,\"rx_count\":%llu,\"tx_bytes\":%llu,\"rx_bytes\":%llu},"
+                           "\"keepalive\":{\"ok\":%s,\"last_tx_ms\":%llu,\"last_rx_ms\":%llu,\"interval_ms\":%u,\"timeout_ms\":%u,\"retry_ms\":%u},"
+                           "\"bus\":{\"state\":%d,\"state_label\":\"%s\",\"occupancy_pct\":%.2f,\"window_ms\":%u},"
+                           "\"errors\":{\"tx_error_counter\":%u,\"rx_error_counter\":%u,\"tx_failed_count\":%u,\"rx_missed_count\":%u,\"arbitration_lost_count\":%u,\"bus_error_count\":%u,\"bus_off_count\":%u}}",
+                           (unsigned long long)status.timestamp_ms,
+                           status.driver_started ? "true" : "false",
+                           (unsigned long long)status.tx_frame_count,
+                           (unsigned long long)status.rx_frame_count,
+                           (unsigned long long)status.tx_byte_count,
+                           (unsigned long long)status.rx_byte_count,
+                           status.keepalive_ok ? "true" : "false",
+                           (unsigned long long)status.last_keepalive_tx_ms,
+                           (unsigned long long)status.last_keepalive_rx_ms,
+                           (unsigned)status.keepalive_interval_ms,
+                           (unsigned)status.keepalive_timeout_ms,
+                           (unsigned)status.keepalive_retry_ms,
+                           (int)status.bus_state,
+                           state_label,
+                           (double)occupancy,
+                           (unsigned)status.occupancy_window_ms,
+                           (unsigned)status.tx_error_counter,
+                           (unsigned)status.rx_error_counter,
+                           (unsigned)status.tx_failed_count,
+                           (unsigned)status.rx_missed_count,
+                           (unsigned)status.arbitration_lost_count,
+                           (unsigned)status.bus_error_count,
+                           (unsigned)status.bus_off_count);
+
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CAN status too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, written);
+}
+
 static esp_err_t web_server_api_history_handler(httpd_req_t *req)
 {
     size_t limit = 0;
@@ -1524,6 +1603,14 @@ void web_server_init(void)
     };
     httpd_register_uri_handler(s_httpd, &api_mqtt_status);
 
+    const httpd_uri_t api_can_status = {
+        .uri = "/api/can/status",
+        .method = HTTP_GET,
+        .handler = web_server_api_can_status_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_can_status);
+
     const httpd_uri_t api_history = {
         .uri = "/api/history",
         .method = HTTP_GET,
@@ -1762,4 +1849,3 @@ void web_server_deinit(void)
     s_alert_clients = NULL;
 
     ESP_LOGI(TAG, "Web server deinitialized");
-}

@@ -10,6 +10,7 @@
  *   - GET  /api/config
  *   - POST /api/config
  *   - POST /api/ota
+ *   - GET  /api/can/status
  *   - WS   /ws/telemetry
  *   - WS   /ws/events
  *

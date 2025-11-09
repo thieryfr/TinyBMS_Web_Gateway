@@ -15,6 +15,7 @@ const config = require('./mock-data/config');
 const history = require('./mock-data/history');
 const registers = require('./mock-data/registers');
 const uart = require('./mock-data/uart');
+const can = require('./mock-data/can');
 
 // Configuration
 const PORT = 3000;
@@ -104,6 +105,15 @@ app.post('/api/mqtt/config', (req, res) => {
  */
 app.get('/api/mqtt/status', (req, res) => {
   const status = config.getMqttStatus();
+  res.json(status);
+});
+
+/**
+ * GET /api/can/status
+ * Get CAN bus statistics
+ */
+app.get('/api/can/status', (req, res) => {
+  const status = can.getStatus();
   res.json(status);
 });
 

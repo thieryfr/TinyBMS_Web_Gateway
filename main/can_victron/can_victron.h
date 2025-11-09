@@ -57,7 +57,44 @@
 
 #include "esp_err.h"
 
+#ifdef ESP_PLATFORM
+#include "driver/twai.h"
+#else
+typedef enum {
+    TWAI_STATE_STOPPED = 0,
+    TWAI_STATE_RUNNING = 1,
+    TWAI_STATE_BUS_OFF = 2,
+    TWAI_STATE_RECOVERING = 3,
+    TWAI_STATE_BUS_OFF_RECOVERING = 4,
+} twai_state_t;
+#endif
+
 #include "event_bus.h"
+
+typedef struct {
+    bool driver_started;
+    bool keepalive_ok;
+    uint64_t timestamp_ms;
+    uint64_t last_keepalive_tx_ms;
+    uint64_t last_keepalive_rx_ms;
+    uint32_t keepalive_interval_ms;
+    uint32_t keepalive_timeout_ms;
+    uint32_t keepalive_retry_ms;
+    uint64_t tx_frame_count;
+    uint64_t rx_frame_count;
+    uint64_t tx_byte_count;
+    uint64_t rx_byte_count;
+    uint32_t tx_error_counter;
+    uint32_t rx_error_counter;
+    uint32_t tx_failed_count;
+    uint32_t rx_missed_count;
+    uint32_t arbitration_lost_count;
+    uint32_t bus_error_count;
+    uint32_t bus_off_count;
+    twai_state_t bus_state;
+    float bus_occupancy_pct;
+    uint32_t occupancy_window_ms;
+} can_victron_status_t;
 
 void can_victron_init(void);
 void can_victron_deinit(void);
@@ -66,3 +103,4 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
                                     const uint8_t *data,
                                     size_t length,
                                     const char *description);
+esp_err_t can_victron_get_status(can_victron_status_t *status);
