@@ -82,6 +82,7 @@ typedef struct {
 typedef void (*uart_bms_data_callback_t)(const uart_bms_live_data_t *data, void *context);
 
 void uart_bms_init(void);
+void uart_bms_deinit(void);
 void uart_bms_set_event_publisher(event_bus_publish_fn_t publisher);
 void uart_bms_set_poll_interval_ms(uint32_t interval_ms);
 uint32_t uart_bms_get_poll_interval_ms(void);

@@ -39,6 +39,7 @@ typedef struct {
 } history_logger_archive_t;
 
 void history_logger_init(void);
+void history_logger_deinit(void);
 void history_logger_set_event_publisher(event_bus_publish_fn_t publisher);
 void history_logger_handle_sample(const uart_bms_live_data_t *sample);
 

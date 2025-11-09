@@ -23,6 +23,11 @@
 void web_server_init(void);
 
 /**
+ * @brief Deinitialize the web server and free resources.
+ */
+void web_server_deinit(void);
+
+/**
  * @brief Provide the event bus publisher so the server can emit notifications.
  */
 void web_server_set_event_publisher(event_bus_publish_fn_t publisher);

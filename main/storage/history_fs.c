@@ -194,3 +194,37 @@ void history_fs_init(void)
 #endif
 }
 
+void history_fs_deinit(void)
+{
+#if !CONFIG_TINYBMS_HISTORY_FS_ENABLE
+    ESP_LOGI(TAG, "History LittleFS disabled, nothing to deinitialize");
+    return;
+#else
+    ESP_LOGI(TAG, "Deinitializing history FS...");
+
+    // Stop retry task if running
+    if (s_retry_task_handle != NULL) {
+        vTaskDelete(s_retry_task_handle);
+        s_retry_task_handle = NULL;
+        ESP_LOGI(TAG, "Stopped retry task");
+    }
+
+    // Unmount LittleFS if mounted
+    if (s_mounted) {
+        esp_err_t err = esp_vfs_littlefs_unregister(CONFIG_TINYBMS_HISTORY_FS_PARTITION_LABEL);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to unmount LittleFS: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "LittleFS unmounted");
+        }
+    }
+
+    // Reset state
+    s_mounted = false;
+    s_mount_failed = false;
+    s_event_publisher = NULL;
+
+    ESP_LOGI(TAG, "History FS deinitialized");
+#endif
+}
+

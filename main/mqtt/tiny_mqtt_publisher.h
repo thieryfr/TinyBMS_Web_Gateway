@@ -29,6 +29,7 @@ typedef struct {
 
 void tiny_mqtt_publisher_set_event_publisher(event_bus_publish_fn_t publisher);
 void tiny_mqtt_publisher_init(const tiny_mqtt_publisher_config_t *config);
+void tiny_mqtt_publisher_deinit(void);
 void tiny_mqtt_publisher_apply_config(const tiny_mqtt_publisher_config_t *config);
 void tiny_mqtt_publisher_reset(void);
 void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context);

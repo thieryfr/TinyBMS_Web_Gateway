@@ -14,6 +14,13 @@ void status_led_init(void);
  */
 void status_led_notify_system_ready(void);
 
+/**
+ * @brief Deinitialize the status LED controller and free resources.
+ *
+ * Stops background tasks, frees the command queue, and unsubscribes from events.
+ */
+void status_led_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -68,6 +68,9 @@ static const char *TAG = "status_led";
 
 static QueueHandle_t s_command_queue = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
+static TaskHandle_t s_led_task_handle = NULL;
+static TaskHandle_t s_event_task_handle = NULL;
+static volatile bool s_task_should_exit = false;
 static bool s_initialised = false;
 
 static bool status_led_is_time_past(TickType_t now, TickType_t deadline)
@@ -238,14 +241,15 @@ static void status_led_event_task(void *ctx)
 {
     event_bus_subscription_handle_t subscription = (event_bus_subscription_handle_t)ctx;
 
-    while (subscription != NULL) {
+    while (subscription != NULL && !s_task_should_exit) {
         event_bus_event_t event;
-        if (!event_bus_receive(subscription, &event, portMAX_DELAY)) {
+        if (!event_bus_receive(subscription, &event, pdMS_TO_TICKS(100))) {
             continue;
         }
         status_led_handle_event(&event);
     }
 
+    ESP_LOGI(TAG, "Event task exiting");
     vTaskDelete(NULL);
 }
 
@@ -299,7 +303,7 @@ static void status_led_task(void *ctx)
         .pattern_reference_tick = xTaskGetTickCount(),
     };
 
-    for (;;) {
+    while (!s_task_should_exit) {
         status_led_command_t command;
         if (xQueueReceive(s_command_queue, &command, pdMS_TO_TICKS(20)) == pdTRUE) {
             status_led_handle_command(&state, &command);
@@ -320,6 +324,9 @@ static void status_led_task(void *ctx)
         bool level = status_led_compute_level(&state, now);
         gpio_set_level(STATUS_LED_GPIO, level ? 1 : 0);
     }
+
+    ESP_LOGI(TAG, "LED task exiting");
+    vTaskDelete(NULL);
 }
 
 void status_led_init(void)
@@ -356,7 +363,7 @@ void status_led_init(void)
         return;
     }
 
-    if (xTaskCreate(status_led_task, "status_led", STATUS_LED_TASK_STACK_SIZE, NULL, STATUS_LED_TASK_PRIORITY, NULL) != pdPASS) {
+    if (xTaskCreate(status_led_task, "status_led", STATUS_LED_TASK_STACK_SIZE, NULL, STATUS_LED_TASK_PRIORITY, &s_led_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create status LED task");
         event_bus_unsubscribe(s_event_subscription);
         s_event_subscription = NULL;
@@ -370,14 +377,13 @@ void status_led_init(void)
                     STATUS_LED_EVENT_TASK_STACK_SIZE,
                     (void *)s_event_subscription,
                     STATUS_LED_EVENT_TASK_PRIORITY,
-                    NULL)
+                    &s_event_task_handle)
         != pdPASS) {
         ESP_LOGE(TAG, "Failed to create status LED event task");
-        event_bus_unsubscribe(s_event_subscription);
-        s_event_subscription = NULL;
         // Continue without event-driven updates; manual commands still work.
     }
 
+    s_task_should_exit = false;
     s_initialised = true;
 }
 
@@ -392,5 +398,43 @@ void status_led_notify_system_ready(void)
         .data.system_mode = STATUS_LED_SYSTEM_MODE_READY,
     };
     status_led_send_command(&cmd);
+}
+
+void status_led_deinit(void)
+{
+    if (!s_initialised) {
+        ESP_LOGW(TAG, "Already deinitialized");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Deinitializing status LED controller...");
+
+    // Signal tasks to exit
+    s_task_should_exit = true;
+
+    // Give tasks time to exit gracefully
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Turn off LED
+    gpio_set_level(STATUS_LED_GPIO, 0);
+
+    // Unsubscribe from event bus
+    if (s_event_subscription != NULL) {
+        event_bus_unsubscribe(s_event_subscription);
+        s_event_subscription = NULL;
+    }
+
+    // Delete command queue
+    if (s_command_queue != NULL) {
+        vQueueDelete(s_command_queue);
+        s_command_queue = NULL;
+    }
+
+    // Reset task handles
+    s_led_task_handle = NULL;
+    s_event_task_handle = NULL;
+
+    s_initialised = false;
+    ESP_LOGI(TAG, "Status LED controller deinitialized");
 }
 

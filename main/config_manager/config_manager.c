@@ -2142,3 +2142,49 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
 #endif
     return config_manager_build_config_snapshot();
 }
+
+void config_manager_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing config manager...");
+
+#ifdef ESP_PLATFORM
+    // Unmount SPIFFS if mounted
+    if (s_spiffs_mounted) {
+        esp_err_t err = esp_vfs_spiffs_unregister(NULL);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to unmount SPIFFS: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "SPIFFS unmounted");
+        }
+        s_spiffs_mounted = false;
+    }
+#endif
+
+    // Destroy mutex
+    if (s_config_mutex != NULL) {
+        vSemaphoreDelete(s_config_mutex);
+        s_config_mutex = NULL;
+    }
+
+    // Reset state
+    s_event_publisher = NULL;
+    s_config_length = 0;
+    s_registers_initialised = false;
+    s_settings_loaded = false;
+    s_nvs_initialised = false;
+    s_mqtt_topics_loaded = false;
+    s_config_file_loaded = false;
+    s_next_register_event = 0;
+    s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+    memset(s_config_json, 0, sizeof(s_config_json));
+    memset(s_register_raw_values, 0, sizeof(s_register_raw_values));
+    memset(s_register_events, 0, sizeof(s_register_events));
+    memset(&s_mqtt_config, 0, sizeof(s_mqtt_config));
+    memset(&s_mqtt_topics, 0, sizeof(s_mqtt_topics));
+    memset(&s_device_settings, 0, sizeof(s_device_settings));
+    memset(&s_uart_pins, 0, sizeof(s_uart_pins));
+    memset(&s_wifi_settings, 0, sizeof(s_wifi_settings));
+    memset(&s_can_settings, 0, sizeof(s_can_settings));
+
+    ESP_LOGI(TAG, "Config manager deinitialized");
+}

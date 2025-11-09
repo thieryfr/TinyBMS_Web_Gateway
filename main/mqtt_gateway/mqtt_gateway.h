@@ -35,6 +35,11 @@ typedef struct {
 void mqtt_gateway_init(void);
 
 /**
+ * @brief Deinitialize the MQTT gateway and free resources.
+ */
+void mqtt_gateway_deinit(void);
+
+/**
  * @brief Retrieve the listener definition registered with the MQTT client module.
  */
 const mqtt_client_event_listener_t *mqtt_gateway_get_event_listener(void);
