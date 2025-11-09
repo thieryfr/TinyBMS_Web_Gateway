@@ -30,6 +30,7 @@
 #include "alert_manager.h"
 #include "web_server_alerts.h"
 #include "can_victron.h"
+#include "system_metrics.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -48,9 +49,13 @@
 #define WEB_SERVER_INDEX_PATH   WEB_SERVER_WEB_ROOT "/index.html"
 #define WEB_SERVER_MAX_PATH     256
 #define WEB_SERVER_FILE_BUFSZ   1024
-#define WEB_SERVER_HISTORY_JSON_SIZE 4096
-#define WEB_SERVER_MQTT_JSON_SIZE    768
-#define WEB_SERVER_CAN_JSON_SIZE     512
+#define WEB_SERVER_HISTORY_JSON_SIZE      4096
+#define WEB_SERVER_MQTT_JSON_SIZE         768
+#define WEB_SERVER_CAN_JSON_SIZE          512
+#define WEB_SERVER_RUNTIME_JSON_SIZE      1536
+#define WEB_SERVER_EVENT_BUS_JSON_SIZE    1536
+#define WEB_SERVER_TASKS_JSON_SIZE        8192
+#define WEB_SERVER_MODULES_JSON_SIZE      2048
 
 typedef struct ws_client {
     int fd;
@@ -111,6 +116,113 @@ static bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t siz
     }
 
     return true;
+}
+
+static esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size_t length)
+{
+    if (req == NULL || buffer == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, buffer, length);
+}
+
+static esp_err_t web_server_api_metrics_runtime_handler(httpd_req_t *req)
+{
+    system_metrics_runtime_t runtime;
+    esp_err_t err = system_metrics_collect_runtime(&runtime);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to collect runtime metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Runtime metrics unavailable");
+        return err;
+    }
+
+    char buffer[WEB_SERVER_RUNTIME_JSON_SIZE];
+    size_t length = 0;
+    err = system_metrics_runtime_to_json(&runtime, buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to serialize runtime metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Runtime metrics serialization error");
+        return err;
+    }
+
+    return web_server_send_json(req, buffer, length);
+}
+
+static esp_err_t web_server_api_event_bus_metrics_handler(httpd_req_t *req)
+{
+    system_metrics_event_bus_metrics_t metrics;
+    esp_err_t err = system_metrics_collect_event_bus(&metrics);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to collect event bus metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Event bus metrics unavailable");
+        return err;
+    }
+
+    char buffer[WEB_SERVER_EVENT_BUS_JSON_SIZE];
+    size_t length = 0;
+    err = system_metrics_event_bus_to_json(&metrics, buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to serialize event bus metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Event bus metrics serialization error");
+        return err;
+    }
+
+    return web_server_send_json(req, buffer, length);
+}
+
+static esp_err_t web_server_api_system_tasks_handler(httpd_req_t *req)
+{
+    system_metrics_task_snapshot_t tasks;
+    esp_err_t err = system_metrics_collect_tasks(&tasks);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to collect task metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task metrics unavailable");
+        return err;
+    }
+
+    char buffer[WEB_SERVER_TASKS_JSON_SIZE];
+    size_t length = 0;
+    err = system_metrics_tasks_to_json(&tasks, buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to serialize task metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task metrics serialization error");
+        return err;
+    }
+
+    return web_server_send_json(req, buffer, length);
+}
+
+static esp_err_t web_server_api_system_modules_handler(httpd_req_t *req)
+{
+    system_metrics_event_bus_metrics_t event_bus_metrics;
+    esp_err_t err = system_metrics_collect_event_bus(&event_bus_metrics);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to collect event bus metrics for modules: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Module metrics unavailable");
+        return err;
+    }
+
+    system_metrics_module_snapshot_t modules;
+    err = system_metrics_collect_modules(&modules, &event_bus_metrics);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to aggregate module metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Module metrics unavailable");
+        return err;
+    }
+
+    char buffer[WEB_SERVER_MODULES_JSON_SIZE];
+    size_t length = 0;
+    err = system_metrics_modules_to_json(&modules, buffer, sizeof(buffer), &length);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to serialize module metrics: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Module metrics serialization error");
+        return err;
+    }
+
+    return web_server_send_json(req, buffer, length);
 }
 
 static void ws_client_list_add(ws_client_t **list, int fd)
@@ -1555,6 +1667,38 @@ void web_server_init(void)
         return;
     }
 
+    const httpd_uri_t api_metrics_runtime = {
+        .uri = "/api/metrics/runtime",
+        .method = HTTP_GET,
+        .handler = web_server_api_metrics_runtime_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_metrics_runtime);
+
+    const httpd_uri_t api_event_bus_metrics = {
+        .uri = "/api/event-bus/metrics",
+        .method = HTTP_GET,
+        .handler = web_server_api_event_bus_metrics_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_event_bus_metrics);
+
+    const httpd_uri_t api_system_tasks = {
+        .uri = "/api/system/tasks",
+        .method = HTTP_GET,
+        .handler = web_server_api_system_tasks_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_system_tasks);
+
+    const httpd_uri_t api_system_modules = {
+        .uri = "/api/system/modules",
+        .method = HTTP_GET,
+        .handler = web_server_api_system_modules_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_system_modules);
+
     const httpd_uri_t api_status = {
         .uri = "/api/status",
         .method = HTTP_GET,
@@ -1792,7 +1936,7 @@ void web_server_init(void)
         alert_manager_set_event_publisher(s_event_publisher);
     }
 
-    s_event_subscription = event_bus_subscribe_default(NULL, NULL);
+    s_event_subscription = event_bus_subscribe_default_named("web_server", NULL, NULL);
     if (s_event_subscription == NULL) {
         ESP_LOGW(TAG, "Failed to subscribe to event bus; WebSocket forwarding disabled");
         return;

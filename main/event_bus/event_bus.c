@@ -4,6 +4,8 @@
 
 #include "esp_log.h"
 
+#include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -14,6 +16,8 @@ typedef struct event_bus_subscription {
     event_bus_subscriber_cb_t callback;
     void *context;
     uint32_t dropped_events;
+    UBaseType_t queue_length;
+    char name[CONFIG_TINYBMS_EVENT_BUS_NAME_MAX_LENGTH];
     struct event_bus_subscription *next;
 } event_bus_subscription_t;
 
@@ -84,9 +88,10 @@ void event_bus_deinit(void)
     vSemaphoreDelete(lock);
 }
 
-event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
-                                                     event_bus_subscriber_cb_t callback,
-                                                     void *context)
+static event_bus_subscription_handle_t event_bus_subscribe_internal(size_t queue_length,
+                                                                    event_bus_subscriber_cb_t callback,
+                                                                    void *context,
+                                                                    const char *name)
 {
     if (queue_length == 0) {
         return NULL;
@@ -112,7 +117,14 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
     subscription->callback = callback;
     subscription->context = context;
     subscription->dropped_events = 0;
+    subscription->queue_length = (UBaseType_t)queue_length;
     subscription->next = NULL;
+    if (name != NULL) {
+        strncpy(subscription->name, name, sizeof(subscription->name) - 1U);
+        subscription->name[sizeof(subscription->name) - 1U] = '\0';
+    } else {
+        subscription->name[0] = '\0';
+    }
 
     if (!event_bus_take_lock()) {
         vQueueDelete(queue);
@@ -126,6 +138,21 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
     event_bus_give_lock();
 
     return subscription;
+}
+
+event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
+                                                     event_bus_subscriber_cb_t callback,
+                                                     void *context)
+{
+    return event_bus_subscribe_internal(queue_length, callback, context, NULL);
+}
+
+event_bus_subscription_handle_t event_bus_subscribe_named(size_t queue_length,
+                                                           const char *name,
+                                                           event_bus_subscriber_cb_t callback,
+                                                           void *context)
+{
+    return event_bus_subscribe_internal(queue_length, callback, context, name);
 }
 
 void event_bus_unsubscribe(event_bus_subscription_handle_t handle)
@@ -237,4 +264,35 @@ uint32_t event_bus_get_dropped_events(event_bus_subscription_handle_t handle)
         return 0;
     }
     return handle->dropped_events;
+}
+
+size_t event_bus_get_all_metrics(event_bus_subscription_metrics_t *out_metrics, size_t capacity)
+{
+    if (out_metrics == NULL || capacity == 0 || s_bus_lock == NULL) {
+        return 0;
+    }
+
+    if (!event_bus_take_lock()) {
+        return 0;
+    }
+
+    size_t count = 0;
+    event_bus_subscription_t *iter = s_subscribers;
+    while (iter != NULL && count < capacity) {
+        event_bus_subscription_metrics_t *dest = &out_metrics[count];
+        strncpy(dest->name, iter->name, sizeof(dest->name) - 1U);
+        dest->name[sizeof(dest->name) - 1U] = '\0';
+        dest->queue_capacity = iter->queue_length;
+        dest->dropped_events = iter->dropped_events;
+        if (iter->queue != NULL) {
+            dest->messages_waiting = (uint32_t)uxQueueMessagesWaiting(iter->queue);
+        } else {
+            dest->messages_waiting = 0;
+        }
+        ++count;
+        iter = iter->next;
+    }
+
+    event_bus_give_lock();
+    return count;
 }

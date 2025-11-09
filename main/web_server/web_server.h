@@ -6,6 +6,10 @@
  * @brief Initialise the embedded HTTP server and register REST/WebSocket handlers.
  *
  * Endpoints exposed by the server:
+ *   - GET  /api/metrics/runtime
+ *   - GET  /api/event-bus/metrics
+ *   - GET  /api/system/tasks
+ *   - GET  /api/system/modules
  *   - GET  /api/status
  *   - GET  /api/config
  *   - POST /api/config

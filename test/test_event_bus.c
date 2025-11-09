@@ -119,3 +119,33 @@ TEST_CASE("unsubscribe stops further deliveries", "[event_bus]")
     TEST_ASSERT_TRUE(event_bus_publish(&event, 0));
     event_bus_deinit();
 }
+
+TEST_CASE("metrics enumerate subscriptions", "[event_bus]")
+{
+    reset_bus();
+
+    event_bus_subscription_handle_t subscriber =
+        event_bus_subscribe_named(2, "metrics_test", NULL, NULL);
+    TEST_ASSERT_NOT_NULL(subscriber);
+
+    const event_bus_event_t event = {
+        .id = 11,
+        .payload = NULL,
+        .payload_size = 0,
+    };
+
+    TEST_ASSERT_TRUE(event_bus_publish(&event, 0));
+    TEST_ASSERT_TRUE(event_bus_publish(&event, 0));
+    TEST_ASSERT_FALSE(event_bus_publish(&event, 0));
+
+    event_bus_subscription_metrics_t metrics[2] = {0};
+    size_t count = event_bus_get_all_metrics(metrics, 2);
+    TEST_ASSERT_EQUAL(1, count);
+    TEST_ASSERT_EQUAL_STRING("metrics_test", metrics[0].name);
+    TEST_ASSERT_EQUAL(2, metrics[0].queue_capacity);
+    TEST_ASSERT_TRUE(metrics[0].messages_waiting <= metrics[0].queue_capacity);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(1, metrics[0].dropped_events);
+
+    event_bus_unsubscribe(subscriber);
+    event_bus_deinit();
+}

@@ -47,6 +47,10 @@ typedef bool (*event_bus_publish_fn_t)(const event_bus_event_t *event, TickType_
 #define CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH 32
 #endif
 
+#ifndef CONFIG_TINYBMS_EVENT_BUS_NAME_MAX_LENGTH
+#define CONFIG_TINYBMS_EVENT_BUS_NAME_MAX_LENGTH 32
+#endif
+
 /**
  * @brief Initialise the event bus infrastructure.
  *
@@ -78,10 +82,22 @@ event_bus_subscription_handle_t event_bus_subscribe(size_t queue_length,
                                                      event_bus_subscriber_cb_t callback,
                                                      void *context);
 
+event_bus_subscription_handle_t event_bus_subscribe_named(size_t queue_length,
+                                                           const char *name,
+                                                           event_bus_subscriber_cb_t callback,
+                                                           void *context);
+
 static inline event_bus_subscription_handle_t event_bus_subscribe_default(event_bus_subscriber_cb_t callback,
                                                                           void *context)
 {
     return event_bus_subscribe(CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH, callback, context);
+}
+
+static inline event_bus_subscription_handle_t event_bus_subscribe_default_named(const char *name,
+                                                                                event_bus_subscriber_cb_t callback,
+                                                                                void *context)
+{
+    return event_bus_subscribe_named(CONFIG_TINYBMS_EVENT_BUS_DEFAULT_QUEUE_LENGTH, name, callback, context);
 }
 
 /**
@@ -150,6 +166,15 @@ bool event_bus_dispatch(event_bus_subscription_handle_t handle, TickType_t timeo
  *         subscription creation, or 0 if the handle is invalid.
  */
 uint32_t event_bus_get_dropped_events(event_bus_subscription_handle_t handle);
+
+typedef struct {
+    char name[CONFIG_TINYBMS_EVENT_BUS_NAME_MAX_LENGTH];
+    uint32_t queue_capacity;
+    uint32_t messages_waiting;
+    uint32_t dropped_events;
+} event_bus_subscription_metrics_t;
+
+size_t event_bus_get_all_metrics(event_bus_subscription_metrics_t *out_metrics, size_t capacity);
 
 #ifdef __cplusplus
 }
