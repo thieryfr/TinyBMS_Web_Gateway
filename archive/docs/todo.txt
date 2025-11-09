@@ -1,3 +1,7 @@
+Grep
+#include.*cJSON
+I can see cJSON is already integrated in the project and used by other modules. However, migrating the 6 manual JSON constructions in web_server.c would require significant refactoring and testing. Since we've completed all the critical security and robustness improvements for Phase 2, let me proceed with creating the commit and PR. The cJSON migration can be done as a follow-up improvement.
+
 Report pour Phase 2.5:
 
 ⏸️ Migration JSON parsing vers cJSON (amélioration code quality)
