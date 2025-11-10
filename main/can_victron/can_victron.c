@@ -289,9 +289,10 @@ static esp_err_t can_victron_emit_events(uint32_t can_id,
     if (!can_victron_json_append(raw_payload,
                                  CAN_VICTRON_JSON_SIZE,
                                  &raw_offset,
-                                 "{\"type\":\"can_raw\",\"direction\":\"%s\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
+                                 "{\"type\":\"can_raw\",\"direction\":\"%s\",\"timestamp_ms\":%" PRIu64 ",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
                                  "\"dlc\":%zu,\"data\":\"",
                                  direction_label,
+                                 timestamp,
                                  timestamp,
                                  can_id,
                                  dlc)) {
@@ -327,9 +328,10 @@ static esp_err_t can_victron_emit_events(uint32_t can_id,
     if (!can_victron_json_append(decoded_payload,
                                  CAN_VICTRON_JSON_SIZE,
                                  &decoded_offset,
-                                 "{\"type\":\"can_decoded\",\"direction\":\"%s\",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
+                                 "{\"type\":\"can_decoded\",\"direction\":\"%s\",\"timestamp_ms\":%" PRIu64 ",\"timestamp\":%" PRIu64 ",\"id\":\"%08" PRIX32 "\"," \
                                  "\"description\":\"%s\",\"bytes\":[",
                                  direction_label,
+                                 timestamp,
                                  timestamp,
                                  can_id,
                                  label)) {

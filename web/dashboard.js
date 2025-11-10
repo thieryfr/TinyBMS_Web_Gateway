@@ -5,6 +5,7 @@ import { UartCharts, UartTrafficChart, UartCommandDistributionChart } from '/src
 import { CanCharts, estimateCanBusOccupancy } from '/src/js/charts/canCharts.js';
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
+import { resolveTimestampFields, resolveTimestamp } from '/src/js/utils/timestamps.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
@@ -318,31 +319,16 @@ function formatFileSize(bytes) {
 }
 
 function resolveSampleTimestamp(sample) {
-    if (!sample || typeof sample !== 'object') return 0;
-    const ms = Number(sample.timestamp_ms ?? sample.timestampMs);
-    if (Number.isFinite(ms) && ms > 0) return ms;
-    const ts = Number(sample.timestamp);
-    if (Number.isFinite(ts) && ts > 0) return ts;
-    if (typeof sample.timestamp_iso === 'string' && sample.timestamp_iso) {
-        const parsed = Date.parse(sample.timestamp_iso);
-        if (!Number.isNaN(parsed)) return parsed;
-    }
-    return 0;
+    return resolveTimestamp(sample);
 }
 
 function normalizeSample(raw) {
-    const timestampMs = Number(raw.timestamp_ms ?? raw.timestamp ?? 0);
-    let timestamp = Number(raw.timestamp ?? timestampMs);
-    const iso = typeof raw.timestamp_iso === 'string' ? raw.timestamp_iso : null;
-    if ((!Number.isFinite(timestamp) || timestamp <= 0) && iso) {
-        const parsed = Date.parse(iso);
-        if (!Number.isNaN(parsed)) timestamp = parsed;
-    }
+    const { timestamp, timestamp_ms, timestamp_iso } = resolveTimestampFields(raw);
 
     return {
         timestamp,
-        timestamp_ms: timestampMs,
-        timestamp_iso: iso,
+        timestamp_ms,
+        timestamp_iso,
         pack_voltage: Number(raw.pack_voltage ?? raw.pack_voltage_v ?? raw.packVoltage ?? raw.pack_voltage_V ?? 0),
         pack_current: Number(raw.pack_current ?? raw.pack_current_a ?? raw.packCurrent ?? 0),
         state_of_charge: Number(raw.state_of_charge ?? raw.state_of_charge_pct ?? raw.soc ?? 0),
@@ -896,17 +882,23 @@ function updateUartDashboard(status) {
 
     if (Array.isArray(status.events)) {
         const incoming = status.events
-            .map((event) => ({
-                message: event.message || event.description || event.summary || 'Événement UART',
-                type: event.type || event.level || 'info',
-                timestamp: Number(event.timestamp_ms ?? event.timestamp ?? Date.now()),
-            }))
+            .map((event) => {
+                const { timestamp, timestamp_ms } = resolveTimestampFields(event, Date.now());
+                return {
+                    message: event.message || event.description || event.summary || 'Événement UART',
+                    type: event.type || event.level || 'info',
+                    timestamp,
+                    timestamp_ms,
+                };
+            })
             .filter((event) => event.message);
 
         if (incoming.length > 0) {
-            const existingKeys = new Set(state.uartDashboard.events.map((evt) => `${evt.timestamp}|${evt.message}`));
+            const existingKeys = new Set(
+                state.uartDashboard.events.map((evt) => `${(evt.timestamp_ms ?? evt.timestamp) ?? 0}|${evt.message}`)
+            );
             incoming.forEach((event) => {
-                const key = `${event.timestamp}|${event.message}`;
+                const key = `${(event.timestamp_ms ?? event.timestamp) ?? 0}|${event.message}`;
                 if (!existingKeys.has(key)) {
                     state.uartDashboard.events.push(event);
                     existingKeys.add(key);
@@ -1107,7 +1099,7 @@ function updateUartDashboardEvents() {
 }
 
 function addUartDashboardEvent(message, type = 'info', timestamp = Date.now()) {
-    state.uartDashboard.events.push({ message, type, timestamp });
+    state.uartDashboard.events.push({ message, type, timestamp, timestamp_ms: timestamp });
     state.uartDashboard.events = state.uartDashboard.events.slice(-50);
     updateUartDashboardEvents();
 }
@@ -1512,7 +1504,7 @@ function updateCanDashboardEvents() {
 }
 
 function addCanDashboardEvent(message, type = 'info', timestamp = Date.now()) {
-    state.canDashboard.events.push({ message, type, timestamp });
+    state.canDashboard.events.push({ message, type, timestamp, timestamp_ms: timestamp });
     state.canDashboard.events = state.canDashboard.events.slice(-50);
     updateCanDashboardEvents();
 
