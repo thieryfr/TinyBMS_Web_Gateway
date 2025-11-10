@@ -142,6 +142,48 @@ Liste des tâches FreeRTOS.
 
 ---
 
+### History
+
+#### GET /api/history
+
+Retourne l'historique temps réel des échantillons de télémétrie mis en mémoire par le module de monitoring.
+
+- **Query params :** `limit` (optionnel, nombre maximum d'échantillons à retourner. Défaut : capacité tampon).
+- **Headers :** `Cache-Control: no-store`.
+
+**Response 200 :**
+```json
+{
+  "total": 512,
+  "samples": [
+    {
+      "timestamp": 1700000100000,
+      "timestamp_iso": "2023-11-14T12:15:00.000Z",
+      "pack_voltage": 52.13,
+      "pack_current": -11.42,
+      "state_of_charge": 78.5,
+      "state_of_health": 97.8,
+      "average_temperature": 24.6
+    }
+  ]
+}
+```
+
+**Champs :**
+
+- `total` : nombre total d'échantillons disponibles côté ESP32 (peut être supérieur au nombre renvoyé si `limit` est inférieur).
+- `samples[]` : liste ordonnée des échantillons les plus récents.
+  - `timestamp` : horodatage en millisecondes depuis l'époque Unix.
+  - `timestamp_iso` : représentation ISO 8601, lorsque fournie par le backend. Pour les historiques live, ce champ peut être `null`; il reste dérivable côté client via `new Date(timestamp).toISOString()`.
+  - `pack_voltage`, `pack_current`, `state_of_charge`, `state_of_health`, `average_temperature` : mesures normalisées (volts, ampères, pourcentages, degrés Celsius).
+
+**Notes :**
+
+- Lorsque disponibles, des métadonnées additionnelles (`interval_ms`, `capacity`, `returned`) peuvent compléter la réponse pour décrire l'intervalle échantillonné et la capacité du tampon. Ces champs sont optionnels.
+- Les archives exposées via `GET /api/history/archive` réutilisent le même schéma en ajoutant `file`, `total` et `returned`.
+
+---
+
 ### Configuration
 
 #### GET /api/config
