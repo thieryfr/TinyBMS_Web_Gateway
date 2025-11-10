@@ -113,11 +113,39 @@ Les campagnes de tests (unitaires, intégration CAN, essais sur banc Victron) so
 La mise en production standard suit la check-list `docs/operations.md#mise-en-production` avec vérification des versions `sdkconfig.defaults`, configuration Wi-Fi et sauvegarde des logs CAN.
 
 ## Documentation
-- `docs/architecture.md` : description détaillée de l'architecture logicielle et des flux de données.
-- `docs/pgn_conversions.md` : mapping PGN TinyBMS ↔ Victron et conversions d'unités.
-- `docs/pgn_mapping.xlsx` : feuille de calcul pour l'intégration CAN.
-- `docs/api_endpoints.md` : documentation des endpoints REST/WebSocket.
-- `docs/operations.md` : build, tests, validation et processus de mise en production.
+
+La documentation a été réorganisée pour refléter l'architecture actuelle du projet :
+
+### 📚 Documentation Principale (`docs/`)
+
+- **[INDEX.md](docs/INDEX.md)** : Point d'entrée principal avec navigation par catégories
+- **[QUICK_START.md](docs/QUICK_START.md)** : Guides rapides par rôle (Manager/Dev/Reviewer)
+- **[SUMMARY_FR.md](docs/SUMMARY_FR.md)** : Résumé exécutif en français
+
+### 🏗️ Architecture (`docs/architecture/`)
+
+- **[AUDIT_REPORT.md](docs/architecture/AUDIT_REPORT.md)** : Rapport d'audit sécurité/conformité
+- **[FILES_REFERENCE.md](docs/architecture/FILES_REFERENCE.md)** : Carte de navigation du code source
+- **[uart_can_analysis.md](docs/uart_can_analysis.md)** : Analyse complète des interactions UART/CAN
+
+### 🔌 Protocoles (`docs/protocols/`)
+
+- **[DOCUMENTATION_COMMUNICATIONS.md](docs/protocols/DOCUMENTATION_COMMUNICATIONS.md)** : Référence complète des protocoles (Modbus, CAN, REST API, WebSocket)
+- **[COMMUNICATION_REFERENCE.json](docs/protocols/COMMUNICATION_REFERENCE.json)** : Référence structurée JSON
+- **[tinybms_register_can_flow.md](docs/tinybms_register_can_flow.md)** : Flux de données UART → CAN
+- **[interaction_diagrams.md](docs/interaction_diagrams.md)** : Diagrammes de séquence détaillés
+
+### 📖 Guides (`docs/guides/`)
+
+- **[INTEGRATION_GUIDE.md](docs/guides/INTEGRATION_GUIDE.md)** : Procédures d'intégration
+- **[ota.md](docs/ota.md)** : Mise à jour firmware OTA
+- **[monitoring_diagnostics.md](docs/monitoring_diagnostics.md)** : Diagnostics et monitoring
+
+### 📦 Archives (`archive/`)
+
+- **reference/** : Documents historiques (PHASEs, plans, analyses obsolètes)
+- **reports/** : Rapports d'audit français (référence historique)
+- **docs/** : 54 fichiers de documentation archivés
 
 ## Interface web
 Les assets statiques sont disponibles dans `web/`. Ils seront intégrés dans une partition SPIFFS et servis via le module `web_server`.
