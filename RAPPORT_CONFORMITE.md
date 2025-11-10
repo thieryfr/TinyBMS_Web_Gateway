@@ -88,7 +88,7 @@ Suite à l'audit frontend-backend et à la création de la documentation complè
 | Paramètre | Valeur Code | Valeur Doc | Status |
 |-----------|-------------|------------|--------|
 | Keepalive ID | `0x305U` | `0x305U` | ✅ |
-| Bitrate | `250000 bps` | `250 000 bps` | ✅ |
+| Bitrate | `500000 bps` | `500 000 bps` | ✅ |
 | Keepalive DLC | `1U` | `1` | ✅ |
 | Task Priority | `tskIDLE_PRIORITY + 6` | N/A | ✅ |
 | RX Timeout | `10 ms` | N/A | ✅ |

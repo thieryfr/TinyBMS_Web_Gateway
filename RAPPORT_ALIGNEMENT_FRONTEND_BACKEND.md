@@ -209,50 +209,40 @@ Le projet présente un **alignement quasi-parfait** entre toutes les couches. Le
 ### Protocole CAN Victron - Spécifications
 
 **Configuration CAN:**
-- **Bitrate:** 250 kbit/s (TWAI_TIMING_CONFIG_250KBITS) ✅
+- **Bitrate:** 500 kbit/s (TWAI_TIMING_CONFIG_500KBITS) ✅
 - **GPIO TX:** Configurable (défaut GPIO 7) ✅
 - **GPIO RX:** Configurable (défaut GPIO 6) ✅
 - **Priorité:** 6 (standard Victron) ✅
 - **Source Address:** 0xE5 ✅
-- **Format ID:** Extended (29-bit) ✅
+- **Format ID:** Standard (11-bit) ✅
 
-### ✅ CAN IDs Victron (21 PGNs)
+### ✅ CAN IDs Victron (21 trames 11-bit)
 
-#### CAN IDs Standard (2)
+| CAN ID (11-bit) | Référence | DLC | Description | Période | Source | Statut |
+|-----------------|-----------|-----|-------------|---------|--------|--------|
+| **0x305** | Keepalive | 1 | Battement de cœur (0x00) | 1000ms | can_victron.c:29 | ✅ OK |
+| **0x307** | 0x307 | 3 | Handshake ("VIC") | Connexion | conversion_table.c:50 | ✅ OK |
+| **0x351** | 0x351 | 8 | CVL/CCL/DCL (Charge Limits) | 100ms | L51 | ✅ OK |
+| **0x355** | 0x355 | 8 | SOC/SOH | 1000ms | L52 | ✅ OK |
+| **0x356** | 0x356 | 8 | Voltage/Current/Temp | 1000ms | L53 | ✅ OK |
+| **0x35A** | 0x35A | 8 | Alarms/Warnings | Changement | L54 | ✅ OK |
+| 0x35E | 0x35E | 8 | Manufacturer String | Connexion | L55 | ✅ OK |
+| 0x35F | 0x35F | 8 | Battery Info (HW/FW) | Connexion | L56 | ✅ OK |
+| 0x370 | 0x370 | 8 | Battery Name Part 1 | Connexion | L57 | ✅ OK |
+| 0x371 | 0x371 | 8 | Battery Name Part 2 | Connexion | L58 | ✅ OK |
+| 0x372 | 0x372 | 8 | Module Status Counts | 1000ms | L59 | ✅ OK |
+| **0x373** | 0x373 | 8 | Cell Voltage/Temp Extremes | 1000ms | L60 | ✅ OK |
+| 0x374 | 0x374 | 2 | Min Cell ID | 1000ms | L61 | ✅ OK |
+| 0x375 | 0x375 | 2 | Max Cell ID | 1000ms | L62 | ✅ OK |
+| 0x376 | 0x376 | 2 | Min Temp ID | 1000ms | L63 | ✅ OK |
+| 0x377 | 0x377 | 2 | Max Temp ID | 1000ms | L64 | ✅ OK |
+| **0x378** | 0x378 | 8 | Energy Counters (Wh) | 10000ms | L65 | ✅ OK |
+| 0x379 | 0x379 | 8 | Installed Capacity (Ah) | Connexion | L66 | ✅ OK |
+| 0x380 | 0x380 | 8 | Serial Number Part 1 | Connexion | L67 | ✅ OK |
+| 0x381 | 0x381 | 8 | Serial Number Part 2 | Connexion | L68 | ✅ OK |
+| 0x382 | 0x382 | 8 | Battery Family | Connexion | L69 | ✅ OK |
 
-| PGN | CAN ID | DLC | Description | Période | Code | Statut |
-|-----|--------|-----|-------------|---------|------|--------|
-| 0x305 | **0x305** | 1 | **Keepalive** (Critical) | 1000ms | can_victron.c:29 | ✅ OK |
-| 0x307 | **0x307** | 8 | Handshake (Inverter ID) | 1000ms | conversion_table.c:50 | ✅ OK |
-
-**Note Critique:** Le keepalive 0x305 est **VITAL**. Si absent pendant 10s, le Victron coupe la communication.
-
-#### CAN IDs Extended (19)
-
-| PGN | CAN ID Étendu | Calc | Description | Période | Code | Statut |
-|-----|---------------|------|-------------|---------|------|--------|
-| **0x351** | **0x18FF51E5** | ✅ | **CVL/CCL/DCL** (Charge Limits) | 1000ms | L51 | ✅ OK |
-| **0x355** | **0x18FF55E5** | ✅ | **SOC/SOH** | 1000ms | L52 | ✅ OK |
-| **0x356** | **0x18FF56E5** | ✅ | **Voltage/Current/Temp** | 1000ms | L53 | ✅ OK |
-| **0x35A** | **0x18FF5AE5** | ✅ | **Alarms/Warnings** | 1000ms | L54 | ✅ OK |
-| 0x35E | 0x18FF5EE5 | ✅ | Manufacturer String | 2000ms | L55 | ✅ OK |
-| 0x35F | 0x18FF5FE5 | ✅ | Battery Info (HW/FW) | 2000ms | L56 | ✅ OK |
-| 0x370 | 0x18FF70E5 | ✅ | Battery Name Part 1 | 2000ms | L57 | ✅ OK |
-| 0x371 | 0x18FF71E5 | ✅ | Battery Name Part 2 | 2000ms | L58 | ✅ OK |
-| 0x372 | 0x18FF72E5 | ✅ | Module Status Counts | 1000ms | L59 | ✅ OK |
-| **0x373** | **0x18FF73E5** | ✅ | **Cell Voltage/Temp Extremes** | 1000ms | L60 | ✅ OK |
-| 0x374 | 0x18FF74E5 | ✅ | Min Cell ID | 1000ms | L61 | ✅ OK |
-| 0x375 | 0x18FF75E5 | ✅ | Max Cell ID | 1000ms | L62 | ✅ OK |
-| 0x376 | 0x18FF76E5 | ✅ | Min Temp ID | 1000ms | L63 | ✅ OK |
-| 0x377 | 0x18FF77E5 | ✅ | Max Temp ID | 1000ms | L64 | ✅ OK |
-| **0x378** | **0x18FF78E5** | ✅ | **Energy Counters** (Wh) | 1000ms | L65 | ✅ OK |
-| 0x379 | 0x18FF79E5 | ✅ | Installed Capacity (Ah) | 5000ms | L66 | ✅ OK |
-| 0x380 | 0x18FF80E5 | ✅ | Serial Number Part 1 | 5000ms | L67 | ✅ OK |
-| 0x381 | 0x18FF81E5 | ✅ | Serial Number Part 2 | 5000ms | L68 | ✅ OK |
-| 0x382 | 0x18FF82E5 | ✅ | Battery Family | 5000ms | L69 | ✅ OK |
-
-**Formule CAN ID Étendu:** `(Priority:6 << 26) | (PGN << 8) | SourceAddr:0xE5`
-**Exemple:** 0x351 → `(6 << 26) | (0x351 << 8) | 0xE5` = **0x18FF51E5** ✅
+**Note Critique:** Le keepalive 0x305 reste **VITAL** : absence >10s ⇒ coupure Victron.
 
 ### ✅ Validation Frontend - CAN IDs
 

@@ -133,53 +133,44 @@ Adresses polling 59 mots:
 ## 2. CAN ID VICTRON
 
 ### Configuration CAN générale
-- **Bitrate** : 250 000 bps
-- **Mode** : Extended Frame (29-bit)
+- **Bitrate** : 500 000 bps
+- **Mode** : Standard Frame (11-bit)
 - **GPIO TX** : GPIO 7
 - **GPIO RX** : GPIO 6
 - **Keepalive ID** : 0x305U
-- **Priority (tous)** : 6
-- **Source Address (tous)** : 0xE5U
+- **Priorité logique** : 6
+- **Source Address (données)** : 0xE5U
 
-### Formule CAN ID Extended (Victron PJ+ standard)
-```c
-// Voir conversion_table.c:73-74
-#define VICTRON_EXTENDED_ID(pgn) \
-    ((((uint32_t)VICTRON_PRIORITY) << 26) | \
-     ((uint32_t)(pgn) << 8) | \
-     (uint32_t)VICTRON_SOURCE_ADDRESS)
-```
+### Encodage ID (standard 11-bit)
+- Chaque trame utilise directement le PGN Victron (0x305–0x382) comme identifiant 11 bits.
+- Les bits de priorité (6) et l'adresse source (0xE5) restent documentés dans la charge utile et l'ordre d'envoi.
+- Aucun encapsulage 29 bits n'est désormais requis.
 
-Exemple pour PGN 0x351 (CVL/CCL/DCL):
-- Priority: 6 -> bits [31:26] = 000110
-- PGN: 0x351 -> bits [25:8] = 0000 0011 0101 0001
-- Source: 0xE5 -> bits [7:0] = 1110 0101
-- **Résultat**: 0x1851FEE5
+### Tableau complet des trames (Victron)
 
-### Tableau complet des PGN (Victron)
-
-| PGN | CAN ID Extended | Nom (Fonction) | Contenu/Structure | DLC | Fréquence d'envoi | Source fichier |
-|-----|-----------------|----------------|-------------------|-----|-------------------|----------------|
-| 0x307 | 0x18FFF5E5 | Handshake | "VIC" + info identité | 3 | Connexion initiale | conversion_table.c:50 |
-| 0x351 | 0x1851FEE5 | CVL/CCL/DCL | Charge Voltage Limit (2B), Charge Current Limit (2B), Discharge Current Limit (2B) | 8 | 100 ms (config) | conversion_table.c:51 |
-| 0x355 | 0x1855FEE5 | SOC/SOH | State of Charge (2B uint16, 0-10000=0-100%), State of Health (2B) | 8 | 1000 ms | conversion_table.c:52 |
-| 0x356 | 0x1856FEE5 | Voltage/Current | Voltage (2B signed), Current (2B signed), Temperature (2B) | 8 | 1000 ms | conversion_table.c:53 |
-| 0x35A | 0x185AFEE5 | Alarms | Bits d'alarme (8 bytes) | 8 | À la modification | conversion_table.c:54 |
-| 0x35E | 0x185EFEE5 | Manufacturer | Manufacturer ID (ASCII/bytes) | 8 | Connexion | conversion_table.c:55 |
-| 0x35F | 0x185FFEE5 | Battery Info | Model ID (2B), Firmware (2B), Capacity (2B) | 8 | Connexion | conversion_table.c:56 |
-| 0x370 | 0x1870FEE5 | BMS Name Part 1 | Nom batterie bytes [0:7] (ASCII) | 8 | Connexion | conversion_table.c:57 |
-| 0x371 | 0x1871FEE5 | BMS Name Part 2 | Nom batterie bytes [8:15] (ASCII) | 8 | Connexion | conversion_table.c:58 |
-| 0x372 | 0x1872FEE5 | Module Status | État des modules | 8 | 1000 ms | conversion_table.c:59 |
-| 0x373 | 0x1873FEE5 | Cell Extremes | Min/Max cell voltages, Min/Max temperatures | 8 | 1000 ms | conversion_table.c:60 |
-| 0x374 | 0x1874FEE5 | Min Cell ID | Cell ID avec voltage min (0-15) | 2 | 1000 ms | conversion_table.c:61 |
-| 0x375 | 0x1875FEE5 | Max Cell ID | Cell ID avec voltage max (0-15) | 2 | 1000 ms | conversion_table.c:62 |
-| 0x376 | 0x1876FEE5 | Min Temp ID | ID source température min | 2 | 1000 ms | conversion_table.c:63 |
-| 0x377 | 0x1877FEE5 | Max Temp ID | ID source température max | 2 | 1000 ms | conversion_table.c:64 |
-| 0x378 | 0x1878FEE5 | Energy Counters | Énergie chargée (4B), déchargée (4B) en Wh | 8 | 10 000 ms | conversion_table.c:65 |
-| 0x379 | 0x1879FEE5 | Installed Capacity | Capacité nominale (Ah) | 8 | Connexion | conversion_table.c:66 |
-| 0x380 | 0x1880FEE5 | Serial Part 1 | Série bytes [0:7] (ASCII) | 8 | Connexion | conversion_table.c:67 |
-| 0x381 | 0x1881FEE5 | Serial Part 2 | Série bytes [8:15] (ASCII) | 8 | Connexion | conversion_table.c:68 |
-| 0x382 | 0x1882FEE5 | Battery Family | Famille batterie (texte) | 8 | Connexion | conversion_table.c:69 |
+| CAN ID (11-bit) | Référence PGN | Nom (Fonction) | Contenu/Structure | DLC | Fréquence d'envoi | Source fichier |
+|-----------------|----------------|----------------|-------------------|-----|-------------------|----------------|
+| 0x305 | Keepalive | Keepalive | 1 byte 0x00 | 1 | 1000 ms | can_victron.c:29 |
+| 0x307 | 0x307 | Handshake | "VIC" + info identité | 3 | Connexion initiale | conversion_table.c:50 |
+| 0x351 | 0x351 | CVL/CCL/DCL | Charge Voltage Limit (2B), Charge Current Limit (2B), Discharge Current Limit (2B) | 8 | 100 ms (config) | conversion_table.c:51 |
+| 0x355 | 0x355 | SOC/SOH | State of Charge (2B uint16, 0-10000=0-100%), State of Health (2B) | 8 | 1000 ms | conversion_table.c:52 |
+| 0x356 | 0x356 | Voltage/Current | Voltage (2B signed), Current (2B signed), Temperature (2B) | 8 | 1000 ms | conversion_table.c:53 |
+| 0x35A | 0x35A | Alarms | Bits d'alarme (8 bytes) | 8 | À la modification | conversion_table.c:54 |
+| 0x35E | 0x35E | Manufacturer | Manufacturer ID (ASCII/bytes) | 8 | Connexion | conversion_table.c:55 |
+| 0x35F | 0x35F | Battery Info | Model ID (2B), Firmware (2B), Capacity (2B) | 8 | Connexion | conversion_table.c:56 |
+| 0x370 | 0x370 | BMS Name Part 1 | Nom batterie bytes [0:7] (ASCII) | 8 | Connexion | conversion_table.c:57 |
+| 0x371 | 0x371 | BMS Name Part 2 | Nom batterie bytes [8:15] (ASCII) | 8 | Connexion | conversion_table.c:58 |
+| 0x372 | 0x372 | Module Status | État des modules | 8 | 1000 ms | conversion_table.c:59 |
+| 0x373 | 0x373 | Cell Extremes | Min/Max cell voltages, Min/Max temperatures | 8 | 1000 ms | conversion_table.c:60 |
+| 0x374 | 0x374 | Min Cell ID | Cell ID avec voltage min (0-15) | 2 | 1000 ms | conversion_table.c:61 |
+| 0x375 | 0x375 | Max Cell ID | Cell ID avec voltage max (0-15) | 2 | 1000 ms | conversion_table.c:62 |
+| 0x376 | 0x376 | Min Temp ID | ID source température min | 2 | 1000 ms | conversion_table.c:63 |
+| 0x377 | 0x377 | Max Temp ID | ID source température max | 2 | 1000 ms | conversion_table.c:64 |
+| 0x378 | 0x378 | Energy Counters | Énergie chargée (4B), déchargée (4B) en Wh | 8 | 10 000 ms | conversion_table.c:65 |
+| 0x379 | 0x379 | Installed Capacity | Capacité nominale (Ah) | 8 | Connexion | conversion_table.c:66 |
+| 0x380 | 0x380 | Serial Part 1 | Série bytes [0:7] (ASCII) | 8 | Connexion | conversion_table.c:67 |
+| 0x381 | 0x381 | Serial Part 2 | Série bytes [8:15] (ASCII) | 8 | Connexion | conversion_table.c:68 |
+| 0x382 | 0x382 | Battery Family | Famille batterie (texte) | 8 | Connexion | conversion_table.c:69 |
 
 ### Message Keepalive
 ```c
@@ -314,7 +305,7 @@ Message type:
   "label": "CAN frame sent: CVL_CCL_DCL (0x351)",
   "data": {
     "pgn": "0x351",
-    "can_id": "0x1851FEE5",
+    "can_id": "0x351",
     "dlc": 8,
     "payload": "XX XX XX XX XX XX XX XX"
   }

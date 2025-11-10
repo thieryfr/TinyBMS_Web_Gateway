@@ -38,15 +38,15 @@ REGISTRES RÉSUMÉ (45):
 TOTAL: 59 mots polled, 45 registres uniques
 
 ================================================================================
-2. CAN ID VICTRON (25 PGN, bitrate 250kbps)
+2. CAN ID VICTRON (25 PGN, bitrate 500kbps)
 ================================================================================
 
 FICHIERS CLÉS:
   /home/user/TinyBMS-GW/main/can_publisher/conversion_table.c
     → Lines 50-69: PGN definitions (VICTRON_PGN_*)
     → Lines 325-1300: Encodeurs (functions)
-    → Formule CAN ID: ((PRIORITY << 26) | (PGN << 8) | SOURCE_ADDRESS)
-    → PRIORITY=6, SOURCE_ADDRESS=0xE5
+    → Identifiants 11-bit: utilisation directe des PGN (0x305–0x382)
+    → Priorité logique=6, Source address=0xE5 (métadonnées)
 
   /home/user/TinyBMS-GW/main/can_victron/can_victron.c
     → Keepalive ID: 0x305
@@ -59,13 +59,14 @@ FICHIERS CLÉS:
     → Keepalive timeout: 10000ms
 
 PGN TABLE (19 PGN):
-  0x307 (0x18FFF5E5): Handshake ("VIC")
-  0x351 (0x1851FEE5): CVL/CCL/DCL (charge limits)
-  0x355 (0x1855FEE5): SOC/SOH
-  0x356 (0x1856FEE5): Voltage/Current/Temperature
-  0x35A (0x185AFEE5): Alarms
-  0x35E (0x185EFEE5): Manufacturer
-  0x35F (0x185FFEE5): Battery Info
+  0x305: Keepalive (0x00)
+  0x307: Handshake ("VIC")
+  0x351: CVL/CCL/DCL (charge limits)
+  0x355: SOC/SOH
+  0x356: Voltage/Current/Temperature
+  0x35A: Alarms
+  0x35E: Manufacturer
+  0x35F: Battery Info
   0x370-0x371: BMS Name (Part 1-2)
   0x372: Module Status
   0x373: Cell Extremes

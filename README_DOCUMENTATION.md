@@ -123,8 +123,8 @@ Bienvenue ! Vous trouverez ici une **documentation exhaustive** de tous les prot
 - `0x0131-0x0140` : Configuration batterie
 
 ### Protocole CAN Victron
-- **Bitrate** : 250 kbps
-- **Format** : Extended (29-bit)
+- **Bitrate** : 500 kbps
+- **Format** : Standard (11-bit)
 - **PGN** : 19 messages différents
 - **Keepalive** : 0x305 (1000 ms)
 

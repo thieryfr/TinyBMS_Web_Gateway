@@ -86,9 +86,9 @@ Le catalogue complet (plus de 40 registres configurables) reste disponible dans 
 
 ### 4.1 Paramètres bus et format de trame
 
-- Le driver `can_victron` initialise l'interface TWAI ESP-IDF avec la configuration `TWAI_TIMING_CONFIG_250KBITS()`, soit un débit de **250 kbit/s**. Ce choix est également reflété dans la constante `CAN_VICTRON_BITRATE_BPS` à 250 000.【F:main/can_victron/can_victron.c†L29-L42】【F:main/can_victron/can_victron.c†L445-L455】
-- Les trames dont l'identifiant dépasse 0x7FF sont marquées en mode **29 bits (extended)** avant émission (`TWAI_MSG_FLAG_EXTD`). Seules les trames de keepalive Victron (ID 0x305) restent en 11 bits standard.【F:main/can_victron/can_victron.c†L525-L536】【F:main/can_victron/can_victron.c†L836-L848】
-- Les PGN Victron sont convertis en identifiants 29 bits via `VICTRON_EXTENDED_ID`, en combinant priorité, PGN et adresse source conformément au format Victron CAN-bus.【F:main/can_publisher/conversion_table.c†L60-L75】【F:main/can_publisher/conversion_table.c†L1342-L1499】
+- Le driver `can_victron` initialise l'interface TWAI ESP-IDF avec la configuration `TWAI_TIMING_CONFIG_500KBITS()`, soit un débit de **500 kbit/s**. Ce choix est également reflété dans la constante `CAN_VICTRON_BITRATE_BPS` à 500 000.【F:main/can_victron/can_victron.c†L29-L42】【F:main/can_victron/can_victron.c†L445-L455】
+- Les trames utilisent désormais systématiquement le format **11 bits standard** (aucun flag `TWAI_MSG_FLAG_EXTD`). Le keepalive 0x305 et tous les PGN Victron reposent directement sur leur identifiant 11 bits.【F:main/can_victron/can_victron.c†L525-L536】【F:main/can_publisher/conversion_table.c†L1342-L1499】
+- Les PGN Victron sont alignés sur les identifiants 0x305–0x382 ; la priorité (6) et l'adresse source (0xE5) restent documentées dans les données/évènements sans être encodées dans l'ID CAN.【F:main/can_publisher/conversion_table.c†L56-L86】【F:main/can_victron/can_victron.c†L300-L420】
 
 ### 4.2 Trames émises
 
@@ -96,20 +96,20 @@ Le tableau suivant récapitule les PGN/ID transmis, leur période et les donnée
 
 | PGN / ID CAN | DLC | Période | Encodeur | Registres / champs TinyBMS |
 | --- | --- | --- | --- | --- |
-| 0x307 (standard) | 8 | 1 s | `encode_inverter_identifier` | Version HW (0x01F4), firmware public (0x01F5), ASCII handshake config.【F:main/can_publisher/conversion_table.c†L760-L821】【F:main/can_publisher/conversion_table.c†L1342-L1353】
-| 0x351 (0x18FF51E5) | 8 | 1 s | `encode_charge_limits` | Tension pack / seuils (0x0024, 0x013B), limites courant (0x0066–0x0131), calcul CVL/CCL/DCL.【F:main/can_publisher/conversion_table.c†L792-L848】【F:main/can_publisher/conversion_table.c†L1353-L1362】
-| 0x355 (0x18FF55E5) | 8 | 1 s | `encode_soc_soh` | SOC 0x002E, SOH 0x002D + version haute résolution.【F:main/can_publisher/conversion_table.c†L848-L893】【F:main/can_publisher/conversion_table.c†L1362-L1371】
-| 0x356 (0x18FF56E5) | 8 | 1 s | `encode_voltage_current_temperature` | Tension/courant/température MOSFET (0x0024–0x0030).【F:main/can_publisher/conversion_table.c†L893-L940】【F:main/can_publisher/conversion_table.c†L1371-L1380】
-| 0x35A (0x18FF5AE5) | 8 | 1 s | `encode_alarm_status` | Bits statut 0x0032–0x0034 + limites thermiques (0x013F–0x0140).【F:main/can_publisher/conversion_table.c†L914-L1006】【F:main/can_publisher/conversion_table.c†L1380-L1389】
-| 0x35E (0x18FF5EE5) | 8 | 2 s | `encode_manufacturer_string` | Fenêtre ASCII 0x01F4/0x01F5 ou config.【F:main/can_publisher/conversion_table.c†L1006-L1044】【F:main/can_publisher/conversion_table.c†L1389-L1398】
-| 0x35F (0x18FF5FE5) | 8 | 2 s | `encode_battery_identification` | HW/FW (0x01F4–0x01F6), capacité 0x0132, numéro série fallback.【F:main/can_publisher/conversion_table.c†L1044-L1110】【F:main/can_publisher/conversion_table.c†L1398-L1407】
-| 0x370 / 0x371 (0x18FF70/71E5) | 8 | 2 s | `encode_battery_name_part1/2` | Fenêtre ASCII 0x01F6–0x01F9 ou config.【F:main/can_publisher/conversion_table.c†L640-L725】【F:main/can_publisher/conversion_table.c†L1407-L1424】
-| 0x372 (0x18FF72E5) | 8 | 1 s | `encode_module_status_counts` | Alarmes/warnings, uptime, cycles (0x0020, 0x0032-0x0034).【F:main/can_publisher/conversion_table.c†L1110-L1158】【F:main/can_publisher/conversion_table.c†L1424-L1433】
+| 0x307 | 3 | 1 s | `encode_inverter_identifier` | Version HW (0x01F4), firmware public (0x01F5), ASCII handshake config.【F:main/can_publisher/conversion_table.c†L760-L821】【F:main/can_publisher/conversion_table.c†L1342-L1353】
+| 0x351 | 8 | 1 s | `encode_charge_limits` | Tension pack / seuils (0x0024, 0x013B), limites courant (0x0066–0x0131), calcul CVL/CCL/DCL.【F:main/can_publisher/conversion_table.c†L792-L848】【F:main/can_publisher/conversion_table.c†L1353-L1362】
+| 0x355 | 8 | 1 s | `encode_soc_soh` | SOC 0x002E, SOH 0x002D + version haute résolution.【F:main/can_publisher/conversion_table.c†L848-L893】【F:main/can_publisher/conversion_table.c†L1362-L1371】
+| 0x356 | 8 | 1 s | `encode_voltage_current_temperature` | Tension/courant/température MOSFET (0x0024–0x0030).【F:main/can_publisher/conversion_table.c†L893-L940】【F:main/can_publisher/conversion_table.c†L1371-L1380】
+| 0x35A | 8 | 1 s | `encode_alarm_status` | Bits statut 0x0032–0x0034 + limites thermiques (0x013F–0x0140).【F:main/can_publisher/conversion_table.c†L914-L1006】【F:main/can_publisher/conversion_table.c†L1380-L1389】
+| 0x35E | 8 | 2 s | `encode_manufacturer_string` | Fenêtre ASCII 0x01F4/0x01F5 ou config.【F:main/can_publisher/conversion_table.c†L1006-L1044】【F:main/can_publisher/conversion_table.c†L1389-L1398】
+| 0x35F | 8 | 2 s | `encode_battery_identification` | HW/FW (0x01F4–0x01F6), capacité 0x0132, numéro série fallback.【F:main/can_publisher/conversion_table.c†L1044-L1110】【F:main/can_publisher/conversion_table.c†L1398-L1407】
+| 0x370 / 0x371 | 8 | 2 s | `encode_battery_name_part1/2` | Fenêtre ASCII 0x01F6–0x01F9 ou config.【F:main/can_publisher/conversion_table.c†L640-L725】【F:main/can_publisher/conversion_table.c†L1407-L1424】
+| 0x372 | 8 | 1 s | `encode_module_status_counts` | Alarmes/warnings, uptime, cycles (0x0020, 0x0032-0x0034).【F:main/can_publisher/conversion_table.c†L1110-L1158】【F:main/can_publisher/conversion_table.c†L1424-L1433】
 | 0x373–0x377 | 8 | 1 s | `encode_cell_voltage_temperature_extremes`, `encode_min/max_cell_identifier`, `encode_min/max_temp_identifier` | Cellules min/max (0x0000–0x000F), températures pack (0x0071).【F:main/can_publisher/conversion_table.c†L940-L1006】【F:main/can_publisher/conversion_table.c†L1158-L1326】
-| 0x378 (0x18FF78E5) | 8 | 1 s | `encode_energy_counters` | Intégration courant/puissance (dérivée des champs pack).【F:main/can_publisher/conversion_table.c†L300-L738】【F:main/can_publisher/conversion_table.c†L1326-L1342】
-| 0x379 (0x18FF79E5) | 8 | 5 s | `encode_installed_capacity` | Capacité installée (0x0132) et heuristiques énergie.【F:main/can_publisher/conversion_table.c†L806-L848】【F:main/can_publisher/conversion_table.c†L1342-L1353】
-| 0x380 / 0x381 (0x18FF80/81E5) | 8 | 5 s | `encode_serial_number_part1/2` | Fenêtre ASCII 0x01FA–0x01FF.【F:main/can_publisher/conversion_table.c†L738-L768】【F:main/can_publisher/conversion_table.c†L1353-L1371】
-| 0x382 (0x18FF82E5) | 8 | 5 s | `encode_battery_family` | Fenêtre ASCII 0x01F8–0x01FF ou config.【F:main/can_publisher/conversion_table.c†L726-L738】【F:main/can_publisher/conversion_table.c†L1371-L1389】
+| 0x378 | 8 | 1 s | `encode_energy_counters` | Intégration courant/puissance (dérivée des champs pack).【F:main/can_publisher/conversion_table.c†L300-L738】【F:main/can_publisher/conversion_table.c†L1326-L1342】
+| 0x379 | 8 | 5 s | `encode_installed_capacity` | Capacité installée (0x0132) et heuristiques énergie.【F:main/can_publisher/conversion_table.c†L806-L848】【F:main/can_publisher/conversion_table.c†L1342-L1353】
+| 0x380 / 0x381 | 8 | 5 s | `encode_serial_number_part1/2` | Fenêtre ASCII 0x01FA–0x01FF.【F:main/can_publisher/conversion_table.c†L738-L768】【F:main/can_publisher/conversion_table.c†L1353-L1371】
+| 0x382 | 8 | 5 s | `encode_battery_family` | Fenêtre ASCII 0x01F8–0x01FF ou config.【F:main/can_publisher/conversion_table.c†L726-L738】【F:main/can_publisher/conversion_table.c†L1371-L1389】
 
 ## 5. Distribution vers MQTT et Web UI
 
