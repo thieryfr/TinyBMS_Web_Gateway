@@ -6,6 +6,7 @@ import { CanCharts, estimateCanBusOccupancy } from '/src/js/charts/canCharts.js'
 import { initChart } from '/src/js/charts/base.js';
 import { SystemStatus } from '/src/js/systemStatus.js';
 import { resolveTimestampFields, resolveTimestamp } from '/src/js/utils/timestamps.js';
+import { normalizeSample, parseHistoryResponse } from '/src/js/utils/history.js';
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
@@ -33,6 +34,7 @@ const state = {
     telemetry: null,
     history: [],
     liveHistory: [],
+    liveHistoryMeta: { total: 0, returned: 0, interval_ms: null, capacity: null },
     historyLimit: 120,
     historySource: 'live',
     archives: [],
@@ -322,20 +324,6 @@ function resolveSampleTimestamp(sample) {
     return resolveTimestamp(sample);
 }
 
-function normalizeSample(raw) {
-    const { timestamp, timestamp_ms, timestamp_iso } = resolveTimestampFields(raw);
-
-    return {
-        timestamp,
-        timestamp_ms,
-        timestamp_iso,
-        pack_voltage: Number(raw.pack_voltage ?? raw.pack_voltage_v ?? raw.packVoltage ?? raw.pack_voltage_V ?? 0),
-        pack_current: Number(raw.pack_current ?? raw.pack_current_a ?? raw.packCurrent ?? 0),
-        state_of_charge: Number(raw.state_of_charge ?? raw.state_of_charge_pct ?? raw.soc ?? 0),
-        state_of_health: Number(raw.state_of_health ?? raw.state_of_health_pct ?? raw.soh ?? 0),
-        average_temperature: Number(raw.average_temperature ?? raw.average_temperature_c ?? raw.temperature ?? 0),
-    };
-}
 
 function formatTimestamp(timestamp) {
     return new Date(timestamp).toLocaleString();
@@ -1710,11 +1698,16 @@ async function fetchLiveHistory(limit = 120) {
     try {
         const res = await fetch(`/api/history?limit=${limit}`);
         const data = await res.json();
-        state.liveHistory = data.entries || [];
+        const { samples, total, metadata } = parseHistoryResponse(data);
+
+        state.liveHistory = samples;
+        state.liveHistoryMeta = metadata;
+
         if (state.historyChart) {
             state.historyChart.setData(state.liveHistory);
         }
-        return data;
+
+        return { ...data, samples, total };
     } catch (error) {
         console.error('[API] fetchLiveHistory error:', error);
         throw error;
