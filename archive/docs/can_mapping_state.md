@@ -1,6 +1,6 @@
 # État du mapping TinyBMS ↔ Victron CAN
 
-Ce document consolide les résultats de l’audit automatique (`tools/audit_mapping.py`) et des vérifications manuelles effectuées dans le firmware. Il sert de référence pour suivre l’intégration des nouveaux fichiers de mapping (`docs/UART_CAN_mapping.xlsx`, `docs/TinyBMS_CAN_BMS_mapping.json`).
+Ce document consolide les résultats de l’audit automatique (`tools/audit_mapping.py`) et des vérifications manuelles effectuées dans le firmware. Il sert de référence pour suivre l’intégration des nouveaux fichiers de mapping (`docs/UART_CAN_mapping.json`, `docs/TinyBMS_CAN_BMS_mapping.json`).
 
 ## 1. Synthèse de l’audit
 
@@ -54,6 +54,6 @@ Ce document consolide les résultats de l’audit automatique (`tools/audit_mapp
    - Couvrir ces trames via l’outillage `tools/audit_mapping.py` afin que les régressions soient détectées automatiquement.
 
 3. **Documentation**
-   - Mettre à jour les matrices Excel/JSON et la documentation utilisateur (PGN détaillés) pour refléter les nouveaux encodages.
+   - Mettre à jour les matrices JSON de référence et la documentation utilisateur (PGN détaillés) pour refléter les nouveaux encodages.
 
 Ce plan cible désormais uniquement les éléments encore ouverts (keepalive / identifiant onduleur et validation système).
