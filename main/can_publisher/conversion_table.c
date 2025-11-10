@@ -232,6 +232,19 @@ void can_publisher_conversion_reset_state(void)
     }
 }
 
+void can_publisher_conversion_ingest_sample(const uart_bms_live_data_t *sample)
+{
+    if (sample == NULL) {
+        return;
+    }
+
+    if (s_energy_mutex == NULL) {
+        (void)ensure_energy_storage_ready();
+    }
+
+    update_energy_counters(sample);
+}
+
 void can_publisher_conversion_set_energy_state(double charged_wh, double discharged_wh)
 {
     set_energy_state_internal(charged_wh, discharged_wh, false);
@@ -1242,8 +1255,6 @@ static bool encode_energy_counters(const uart_bms_live_data_t *data, can_publish
     if (data == NULL || frame == NULL) {
         return false;
     }
-
-    update_energy_counters(data);
 
     memset(frame->data, 0, sizeof(frame->data));
 

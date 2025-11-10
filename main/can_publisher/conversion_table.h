@@ -16,6 +16,7 @@
  * - Related persistence state variables
  *
  * **Thread-Safe Functions** (mutex-protected energy operations):
+ * - can_publisher_conversion_ingest_sample() - Integrate incoming TinyBMS sample
  * - can_publisher_conversion_set_energy_state() - Atomic state update
  * - can_publisher_conversion_get_energy_state() - Atomic state read
  * - can_publisher_conversion_persist_energy_state() - NVS write
@@ -29,7 +30,7 @@
  * reads mutex-protected energy state.
  *
  * **Concurrency Pattern**:
- * - BMS callback thread: Calls update_energy_counters() to integrate power
+ * - BMS callback thread: Calls can_publisher_conversion_ingest_sample() to integrate power
  * - CAN publisher thread: Calls encode_energy_counters() to read for frames
  * - Persistence thread: Periodically saves to NVS
  *
@@ -69,6 +70,7 @@ extern const can_publisher_channel_t g_can_publisher_channels[];
 extern const size_t g_can_publisher_channel_count;
 
 void can_publisher_conversion_reset_state(void);
+void can_publisher_conversion_ingest_sample(const uart_bms_live_data_t *sample);
 void can_publisher_conversion_set_energy_state(double charged_wh, double discharged_wh);
 void can_publisher_conversion_get_energy_state(double *charged_wh, double *discharged_wh);
 esp_err_t can_publisher_conversion_restore_energy_state(void);

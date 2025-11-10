@@ -131,6 +131,8 @@ static uint64_t uart_bms_timestamp_ms(void)
 
 static void uart_bms_notify_listeners(const uart_bms_live_data_t *data)
 {
+    can_publisher_conversion_ingest_sample(data);
+
     // Copier les callbacks dans un buffer local sous mutex
     ListenerEntry local_listeners[UART_BMS_LISTENER_SLOTS];
 

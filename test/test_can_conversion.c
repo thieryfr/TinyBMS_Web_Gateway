@@ -583,6 +583,40 @@ TEST_CASE("can_conversion_energy_counters_accumulate", "[can][unit]")
                                            ((uint32_t)frame.data[7] << 24)));
 }
 
+TEST_CASE("can_conversion_energy_counters_ingest_without_can", "[can][unit]")
+{
+    uart_bms_live_data_t data = make_nominal_sample();
+
+    can_publisher_conversion_reset_state();
+
+    can_publisher_conversion_ingest_sample(&data);
+
+    const double interval_hours = 600000.0 / 3600000.0;
+
+    data.timestamp_ms += 600000U;
+    data.pack_current_a = 20.0f;
+    double expected_charge_wh = (double)data.pack_voltage_v * 20.0 * interval_hours;
+
+    can_publisher_conversion_ingest_sample(&data);
+
+    double charged = 0.0;
+    double discharged = 0.0;
+    can_publisher_conversion_get_energy_state(&charged, &discharged);
+
+    TEST_ASSERT_DOUBLE_WITHIN(0.5, expected_charge_wh, charged);
+    TEST_ASSERT_DOUBLE_WITHIN(0.1, 0.0, discharged);
+
+    data.timestamp_ms += 600000U;
+    data.pack_current_a = -30.0f;
+    double expected_discharge_wh = (double)data.pack_voltage_v * 30.0 * interval_hours;
+
+    can_publisher_conversion_ingest_sample(&data);
+    can_publisher_conversion_get_energy_state(&charged, &discharged);
+
+    TEST_ASSERT_DOUBLE_WITHIN(0.5, expected_charge_wh, charged);
+    TEST_ASSERT_DOUBLE_WITHIN(0.5, expected_discharge_wh, discharged);
+}
+
 TEST_CASE("can_conversion_installed_capacity_sources", "[can][unit]")
 {
     uart_bms_live_data_t data = make_nominal_sample();
