@@ -1,7 +1,7 @@
 """Utilities to normalize and audit the TinyBMS UART↔CAN mapping files.
 
-This script extracts a unified tabular view from the Excel spreadsheet
-``docs/UART_CAN_mapping.xlsx`` and the JSON specification
+This script extracts a unified tabular view from the JSON reference mapping
+``docs/UART_CAN_mapping.json`` and the JSON specification
 ``docs/TinyBMS_CAN_BMS_mapping.json``.  It also performs a few consistency
 checks to highlight potential issues before code reviews.
 
@@ -15,12 +15,10 @@ from __future__ import annotations
 import csv
 import json
 import re
-import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
-from zipfile import ZipFile
+from typing import Dict, List, Optional
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,78 +26,11 @@ DOCS_DIR = REPO_ROOT / "docs"
 ARCHIVE_DOCS_DIR = REPO_ROOT / "archive" / "docs"
 
 
-# ---------------------------------------------------------------------------
-# Excel parsing helpers
-
-
-NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-
-
-def _read_xlsx_rows(path: Path) -> List[List[Optional[str]]]:
-    """Return the rows from the first worksheet of an XLSX file.
-
-    Only the minimal functionality that we need for this repository is
-    implemented so we do not depend on heavy third-party packages.
-    """
-
-    with ZipFile(path) as zf:
-        shared_strings: List[str] = []
-        if "xl/sharedStrings.xml" in zf.namelist():
-            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
-            for si in root.findall("main:si", NS):
-                text = "".join(t.text or "" for t in si.findall(".//main:t", NS))
-                shared_strings.append(text)
-
-        sheet = ET.fromstring(zf.read("xl/worksheets/sheet1.xml"))
-        rows: List[List[Optional[str]]] = []
-
-        for row in sheet.findall(".//main:sheetData/main:row", NS):
-            values: Dict[int, Optional[str]] = {}
-            for cell in row.findall("main:c", NS):
-                coord = cell.attrib["r"]
-                col_label = "".join(ch for ch in coord if ch.isalpha())
-                col_index = 0
-                for ch in col_label:
-                    col_index = col_index * 26 + ord(ch) - ord("A") + 1
-
-                value: Optional[str] = None
-                if (v_elem := cell.find("main:v", NS)) is not None:
-                    raw_value = v_elem.text or ""
-                    if cell.attrib.get("t") == "s":
-                        value = shared_strings[int(raw_value)]
-                    else:
-                        # Numeric cells are left as strings – the downstream logic
-                        # converts them if necessary.
-                        value = raw_value
-                elif (inline := cell.find("main:is", NS)) is not None:
-                    value = "".join(t.text or "" for t in inline.findall(".//main:t", NS))
-
-                if value is not None:
-                    values[col_index] = value
-
-            if values:
-                max_col = max(values)
-                row_values = [values.get(i) for i in range(1, max_col + 1)]
-                rows.append(row_values)
-
-    return rows
-
-
-def _normalize_header(raw_header: Iterable[Optional[str]]) -> List[str]:
-    header: List[str] = []
-    for cell in raw_header:
-        key = (cell or "").strip()
-        key = key.replace(" ", "_")
-        header.append(key)
-    return header
-
-
 def load_uart_can_mapping(path: Path) -> List[Dict[str, Optional[str]]]:
-    rows = _read_xlsx_rows(path)
-    if not rows:
-        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError("UART↔CAN reference mapping must be a list of records")
 
-    header = _normalize_header(rows[0])
     normalized: List[Dict[str, Optional[str]]] = []
     carry_columns = {
         "Victron_ID_0x3xx",
@@ -107,11 +38,15 @@ def load_uart_can_mapping(path: Path) -> List[Dict[str, Optional[str]]]:
         "Victron_Description",
     }
     last_values: Dict[str, Optional[str]] = {}
-    for row in rows[1:]:
-        if all(cell in (None, "") for cell in row):
-            continue
 
-        record = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
+    for raw_record in data:
+        if not isinstance(raw_record, dict):
+            raise ValueError("Each UART↔CAN mapping entry must be an object")
+
+        record: Dict[str, Optional[str]] = {
+            key: value if value not in ("", None) else None
+            for key, value in raw_record.items()
+        }
 
         mapping_type_value = record.get("Mapping_Type")
         scale_to_can = record.get("Scale_Tiny_To_CAN")
@@ -228,7 +163,7 @@ class NormalizedRow:
         }
 
 
-def normalize_excel(records: List[Dict[str, Optional[str]]]) -> List[NormalizedRow]:
+def normalize_reference(records: List[Dict[str, Optional[str]]]) -> List[NormalizedRow]:
     normalized: List[NormalizedRow] = []
 
     for row in records:
@@ -269,7 +204,7 @@ def normalize_excel(records: List[Dict[str, Optional[str]]]) -> List[NormalizedR
 
         normalized.append(
             NormalizedRow(
-                source="excel",
+                source="reference",
                 can_id=row.get("Victron_ID_0x3xx"),
                 victron_field=victron_field,
                 bytes=bytes_value,
@@ -367,14 +302,14 @@ def detect_missing_formulas(rows: List[NormalizedRow]) -> List[NormalizedRow]:
     ]
 
 
-def compare_sources(excel_rows: List[NormalizedRow], json_rows: List[NormalizedRow]) -> Dict[str, List[str]]:
+def compare_sources(reference_rows: List[NormalizedRow], json_rows: List[NormalizedRow]) -> Dict[str, List[str]]:
     findings: Dict[str, List[str]] = defaultdict(list)
 
-    excel_index: Dict[tuple, NormalizedRow] = {}
-    for row in excel_rows:
+    reference_index: Dict[tuple, NormalizedRow] = {}
+    for row in reference_rows:
         key = (_safe_int(row.tiny_reg), row.can_id, row.bytes)
         if key[0] is not None:
-            excel_index[key] = row
+            reference_index[key] = row
 
     json_index: Dict[tuple, NormalizedRow] = {}
     for row in json_rows:
@@ -382,9 +317,9 @@ def compare_sources(excel_rows: List[NormalizedRow], json_rows: List[NormalizedR
         if key[0] is not None:
             json_index[key] = row
 
-    shared_keys = set(excel_index) & set(json_index)
-    missing_in_json = set(excel_index) - set(json_index)
-    missing_in_excel = set(json_index) - set(excel_index)
+    shared_keys = set(reference_index) & set(json_index)
+    missing_in_json = set(reference_index) - set(json_index)
+    missing_in_reference = set(json_index) - set(reference_index)
 
     if missing_in_json:
         for key in sorted(missing_in_json):
@@ -393,38 +328,38 @@ def compare_sources(excel_rows: List[NormalizedRow], json_rows: List[NormalizedR
                 f"UART reg {reg} @ CAN {can_id or '?'} bytes {byte_range or '?'} missing in JSON"
             )
 
-    if missing_in_excel:
-        for key in sorted(missing_in_excel):
+    if missing_in_reference:
+        for key in sorted(missing_in_reference):
             reg, can_id, byte_range = key
-            findings["missing_in_excel"].append(
-                f"UART reg {reg} @ CAN {can_id or '?'} bytes {byte_range or '?'} missing in Excel"
+            findings["missing_in_reference"].append(
+                f"UART reg {reg} @ CAN {can_id or '?'} bytes {byte_range or '?'} missing in reference mapping"
             )
 
     for key in sorted(shared_keys):
-        excel_row = excel_index[key]
+        reference_row = reference_index[key]
         json_row = json_index[key]
 
-        if _clean(excel_row.unit) != _clean(json_row.unit):
+        if _clean(reference_row.unit) != _clean(json_row.unit):
             findings["unit_mismatch"].append(
                 _format_keyed_message(
                     key,
-                    f"unit mismatch Excel={excel_row.unit!r} JSON={json_row.unit!r}",
+                    f"unit mismatch Reference={reference_row.unit!r} JSON={json_row.unit!r}",
                 )
             )
 
-        if _clean(excel_row.scale) != _clean(json_row.scale):
+        if _clean(reference_row.scale) != _clean(json_row.scale):
             findings["scale_mismatch"].append(
                 _format_keyed_message(
                     key,
-                    f"scale mismatch Excel={excel_row.scale!r} JSON={json_row.scale!r}",
+                    f"scale mismatch Reference={reference_row.scale!r} JSON={json_row.scale!r}",
                 )
             )
 
-        if _clean(excel_row.mapping_type) != _clean(json_row.mapping_type):
+        if _clean(reference_row.mapping_type) != _clean(json_row.mapping_type):
             findings["mapping_type_mismatch"].append(
                 _format_keyed_message(
                     key,
-                    f"mapping type mismatch Excel={excel_row.mapping_type!r} JSON={json_row.mapping_type!r}",
+                    f"mapping type mismatch Reference={reference_row.mapping_type!r} JSON={json_row.mapping_type!r}",
                 )
             )
 
@@ -524,19 +459,19 @@ def write_report(
 
 
 def main() -> None:
-    excel_records = load_uart_can_mapping(DOCS_DIR / "UART_CAN_mapping.xlsx")
+    reference_records = load_uart_can_mapping(DOCS_DIR / "UART_CAN_mapping.json")
     json_records = load_can_json(DOCS_DIR / "TinyBMS_CAN_BMS_mapping.json")
 
-    excel_rows = normalize_excel(excel_records)
+    reference_rows = normalize_reference(reference_records)
     json_rows = normalize_json(json_records)
 
-    combined = excel_rows + json_rows
+    combined = reference_rows + json_rows
 
     write_csv(combined, ARCHIVE_DOCS_DIR / "mapping_normalized.csv")
 
     duplicates = detect_duplicates(combined)
     missing_formulas = detect_missing_formulas(combined)
-    cross_findings = compare_sources(excel_rows, json_rows)
+    cross_findings = compare_sources(reference_rows, json_rows)
 
     write_report(
         ARCHIVE_DOCS_DIR / "mapping_audit.md",
