@@ -2,7 +2,7 @@ const MQTT_CONFIG_ENDPOINT = '/api/mqtt/config';
 const MQTT_STATUS_ENDPOINT = '/api/mqtt/status';
 const MQTT_TEST_ENDPOINT = '/api/mqtt/test';
 const DEFAULT_NETWORK_ERROR_MESSAGE = 'Impossible de contacter le serveur.';
-const SYSTEM_RUNTIME_ENDPOINTS = ['/api/monitoring/runtime', '/api/metrics/runtime'];
+const SYSTEM_RUNTIME_ENDPOINTS = ['/api/metrics/runtime'];
 const MQTT_SUCCESS_EVENTS = new Set(['connected', 'published', 'subscribed', 'data']);
 
 const NUMERIC_VALIDATION_RULES = {

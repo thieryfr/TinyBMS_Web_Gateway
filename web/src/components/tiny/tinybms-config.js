@@ -900,7 +900,7 @@ export class TinyBMSConfigManager {
                 if (progressContainer) progressContainer.style.display = 'block';
                 if (statusText) statusText.textContent = 'Uploading firmware...';
 
-                const response = await fetch('/api/tinybms/firmware/update', {
+                const response = await fetch('/api/ota', {
                     method: 'POST',
                     body: formData,
                 });
@@ -956,8 +956,10 @@ export class TinyBMSConfigManager {
         try {
             this.showNotification('Redémarrage du BMS en cours...', 'info');
 
-            const response = await fetch('/api/tinybms/restart', {
+            const response = await fetch('/api/system/restart', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: 'bms' }),
             });
 
             if (!response.ok) {
