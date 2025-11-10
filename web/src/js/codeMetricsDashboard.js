@@ -3,10 +3,10 @@ import { normalizeEventBusMetrics, coerceNumber } from './codeMetricsUtils.js';
 const REFRESH_INTERVAL_MS = 10000;
 
 const ENDPOINTS = {
-    runtime: ['/api/monitoring/runtime', '/api/metrics/runtime'],
-    eventBus: ['/api/monitoring/event-bus', '/api/event-bus/metrics'],
-    tasks: ['/api/monitoring/tasks', '/api/system/tasks'],
-    modules: ['/api/monitoring/modules', '/api/system/modules'],
+    runtime: ['/api/metrics/runtime'],
+    eventBus: ['/api/event-bus/metrics'],
+    tasks: ['/api/system/tasks'],
+    modules: ['/api/system/modules'],
 };
 
 const FALLBACK_DATA = {
