@@ -40,6 +40,9 @@
 #define UART_BMS_MAX_FRAME_SIZE  128
 #define UART_BMS_LISTENER_SLOTS  4
 #define UART_BMS_EVENT_BUFFERS   4
+
+#define UART_BMS_SYSTEM_CONTROL_REGISTER      0x0086U
+#define UART_BMS_SYSTEM_CONTROL_RESTART_VALUE 0xA55AU
 namespace {
 
 constexpr char kTag[] = "uart_bms";
@@ -958,6 +961,19 @@ cleanup:
     if (readback_raw != nullptr) {
         *readback_raw = raw_value;
     }
+    return ESP_OK;
+#endif
+}
+
+esp_err_t uart_bms_request_restart(uint32_t timeout_ms)
+{
+#ifdef ESP_PLATFORM
+    return uart_bms_write_register(UART_BMS_SYSTEM_CONTROL_REGISTER,
+                                   UART_BMS_SYSTEM_CONTROL_RESTART_VALUE,
+                                   NULL,
+                                   timeout_ms);
+#else
+    (void)timeout_ms;
     return ESP_OK;
 #endif
 }

@@ -8,6 +8,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 
 // Import mock data generators
 const telemetry = require('./mock-data/telemetry');
@@ -252,23 +253,99 @@ app.post('/api/registers', (req, res) => {
 
 /**
  * POST /api/ota
- * Mock OTA firmware upload (not functional in test server)
+ * Parse multipart upload and simulate OTA programming
  */
 app.post('/api/ota', (req, res) => {
-  // Simulate OTA progress
-  const totalSize = parseInt(req.headers['content-length']) || 1024000;
-  let progress = 0;
+  const contentType = req.headers['content-type'] || '';
+  const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
 
-  const interval = setInterval(() => {
-    progress += 10;
-    broadcastEvent('ota_progress', { progress, total: 100 });
+  if (!boundaryMatch) {
+    return res.status(400).json({ status: 'error', message: 'Missing multipart boundary' });
+  }
 
-    if (progress >= 100) {
-      clearInterval(interval);
-      broadcastEvent('ota_complete', { success: true });
-      res.json({ success: true, message: 'OTA simulation complete' });
+  const boundary = `--${boundaryMatch[1]}`;
+  const chunks = [];
+
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    try {
+      const buffer = Buffer.concat(chunks);
+      const boundaryBuffer = Buffer.from(boundary);
+      const start = buffer.indexOf(boundaryBuffer);
+      if (start === -1) {
+        return res.status(400).json({ status: 'error', message: 'Boundary not found' });
+      }
+
+      const headerEndSequence = Buffer.from('\r\n\r\n');
+      let cursor = start + boundaryBuffer.length + 2; // Skip boundary + CRLF
+      const headerEnd = buffer.indexOf(headerEndSequence, cursor);
+      if (headerEnd === -1) {
+        return res.status(400).json({ status: 'error', message: 'Multipart headers incomplete' });
+      }
+
+      const headerText = buffer.slice(cursor, headerEnd).toString('utf8');
+      if (!/name="firmware"/i.test(headerText)) {
+        return res.status(400).json({ status: 'error', message: 'Multipart field must be named firmware' });
+      }
+
+      cursor = headerEnd + headerEndSequence.length;
+      const nextBoundary = Buffer.from(`\r\n${boundary}`);
+      let dataEnd = buffer.indexOf(nextBoundary, cursor);
+      if (dataEnd === -1) {
+        return res.status(400).json({ status: 'error', message: 'Multipart terminator missing' });
+      }
+
+      const firmwareBuffer = buffer.slice(cursor, dataEnd);
+      const bytes = firmwareBuffer.length;
+      const crc32 = crypto.createHash('sha256').update(firmwareBuffer).digest('hex').slice(0, 8).toUpperCase();
+
+      broadcastEvent('ota_ready', { bytes, crc32, filename: 'mock.bin' });
+
+      res.json({
+        status: 'ok',
+        bytes,
+        crc32,
+        partition: 'ota_mock',
+        version: 'mock-1.0.0',
+        reboot_required: true
+      });
+    } catch (error) {
+      console.error('Failed to parse OTA upload', error);
+      res.status(500).json({ status: 'error', message: 'Unable to parse OTA payload' });
     }
-  }, 500);
+  });
+});
+
+/**
+ * POST /api/system/restart
+ * Simulate restart orchestration
+ */
+app.post('/api/system/restart', (req, res) => {
+  const target = (req.body && typeof req.body.target === 'string') ? req.body.target.toLowerCase() : 'bms';
+  const delayMs = (req.body && Number.isFinite(req.body.delay_ms)) ? Number(req.body.delay_ms) : 750;
+
+  const bmsAttempted = target !== 'gateway';
+  const gatewayRestart = target === 'gateway' ? true : false;
+
+  if (gatewayRestart) {
+    broadcastEvent('system_restart', { target: 'gateway', delay_ms: delayMs });
+    return res.status(202).json({
+      status: 'scheduled',
+      bms_attempted: false,
+      bms_status: 'skipped',
+      gateway_restart: true,
+      delay_ms: delayMs
+    });
+  }
+
+  broadcastEvent('system_restart', { target: 'bms', delay_ms: delayMs });
+  res.json({
+    status: 'scheduled',
+    bms_attempted: bmsAttempted,
+    bms_status: 'ok',
+    gateway_restart: false,
+    delay_ms: 0
+  });
 });
 
 // ============================================================================

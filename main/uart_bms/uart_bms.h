@@ -99,6 +99,19 @@ esp_err_t uart_bms_write_register(uint16_t address,
                                   uint16_t *readback_raw,
                                   uint32_t timeout_ms);
 
+/**
+ * @brief Request a soft restart of the TinyBMS main controller.
+ *
+ * The command is delivered using the vendor system-control register documented
+ * in the TinyBMS UART protocol specification. The function blocks until the
+ * acknowledgement frame is received or the timeout expires.
+ *
+ * @param timeout_ms Optional response timeout (0 selects the default).
+ * @return ESP_OK when the controller acknowledged the restart command, or an
+ *         esp_err_t reason otherwise.
+ */
+esp_err_t uart_bms_request_restart(uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

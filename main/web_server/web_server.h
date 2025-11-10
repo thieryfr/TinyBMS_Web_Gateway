@@ -15,6 +15,7 @@
  *   - GET  /api/event-bus/metrics
  *   - GET  /api/system/tasks
  *   - GET  /api/system/modules
+ *   - POST /api/system/restart
  *   - GET  /api/status
  *   - GET  /api/config
  *   - POST /api/config
@@ -28,7 +29,10 @@
  *   curl -sS http://${HOST}/api/config | jq
  *   curl -sS -X POST http://${HOST}/api/config -H 'Content-Type: application/json' \
  *        -d '{"demo":true}'
- *   curl -sS -X POST http://${HOST}/api/ota --data-binary @firmware.bin
+ *   curl -sS -X POST http://${HOST}/api/ota -H 'Content-Type: multipart/form-data' \
+ *        -F 'firmware=@tinybms_web_gateway.bin;type=application/octet-stream'
+ *   curl -sS -X POST http://${HOST}/api/system/restart -d '{"target":"gateway"}' \
+ *        -H 'Content-Type: application/json'
  */
 void web_server_init(void);
 
