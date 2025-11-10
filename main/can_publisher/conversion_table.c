@@ -68,11 +68,6 @@
 #define VICTRON_PGN_SERIAL_PART2     0x381U
 #define VICTRON_PGN_BATTERY_FAMILY   0x382U
 
-#define VICTRON_PRIORITY             6U
-#define VICTRON_SOURCE_ADDRESS       0xE5U
-#define VICTRON_EXTENDED_ID(pgn) \
-    ((((uint32_t)VICTRON_PRIORITY) << 26) | ((uint32_t)(pgn) << 8) | (uint32_t)VICTRON_SOURCE_ADDRESS)
-
 // CAN configuration defaults are now centralized in can_config_defaults.h
 
 #ifndef CONFIG_TINYBMS_CAN_SERIAL_NUMBER
@@ -573,6 +568,7 @@ static bool encode_battery_identification(const uart_bms_live_data_t *data,
     }
 
     memset(frame->data, 0, sizeof(frame->data));
+    frame->dlc = 8U;
 
     uint16_t model_id = (uint16_t)data->hardware_version |
                         (uint16_t)((uint16_t)data->hardware_changes_version << 8U);
@@ -766,6 +762,7 @@ static bool encode_inverter_identifier(const uart_bms_live_data_t *data, can_pub
     }
 
     memset(frame->data, 0, sizeof(frame->data));
+    frame->dlc = 8U;
 
     uint16_t model_id = (uint16_t)data->hardware_version |
                         (uint16_t)((uint16_t)data->hardware_changes_version << 8U);
@@ -1350,7 +1347,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_CVL_CCL_DCL,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_CVL_CCL_DCL),
+        .can_id = VICTRON_PGN_CVL_CCL_DCL,
         .dlc = 8,
         .fill_fn = encode_charge_limits,
         .description = "Victron charge/discharge limits",
@@ -1358,7 +1355,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_SOC_SOH,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_SOC_SOH),
+        .can_id = VICTRON_PGN_SOC_SOH,
         .dlc = 8,
         .fill_fn = encode_soc_soh,
         .description = "Victron SOC/SOH",
@@ -1366,7 +1363,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_VOLTAGE_CURRENT,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_VOLTAGE_CURRENT),
+        .can_id = VICTRON_PGN_VOLTAGE_CURRENT,
         .dlc = 8,
         .fill_fn = encode_voltage_current_temperature,
         .description = "Victron voltage/current/temperature",
@@ -1374,7 +1371,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_ALARMS,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_ALARMS),
+        .can_id = VICTRON_PGN_ALARMS,
         .dlc = 8,
         .fill_fn = encode_alarm_status,
         .description = "Victron alarm summary",
@@ -1382,7 +1379,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MANUFACTURER,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MANUFACTURER),
+        .can_id = VICTRON_PGN_MANUFACTURER,
         .dlc = 8,
         .fill_fn = encode_manufacturer_string,
         .description = "Victron manufacturer string",
@@ -1390,7 +1387,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_BATTERY_INFO,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BATTERY_INFO),
+        .can_id = VICTRON_PGN_BATTERY_INFO,
         .dlc = 8,
         .fill_fn = encode_battery_identification,
         .description = "Victron battery identification",
@@ -1398,7 +1395,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_BMS_NAME_PART1,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BMS_NAME_PART1),
+        .can_id = VICTRON_PGN_BMS_NAME_PART1,
         .dlc = 8,
         .fill_fn = encode_battery_name_part1,
         .description = "Victron battery info part 1",
@@ -1406,7 +1403,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_BMS_NAME_PART2,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BMS_NAME_PART2),
+        .can_id = VICTRON_PGN_BMS_NAME_PART2,
         .dlc = 8,
         .fill_fn = encode_battery_name_part2,
         .description = "Victron battery info part 2",
@@ -1414,7 +1411,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MODULE_STATUS,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MODULE_STATUS),
+        .can_id = VICTRON_PGN_MODULE_STATUS,
         .dlc = 8,
         .fill_fn = encode_module_status_counts,
         .description = "Victron module status counts",
@@ -1422,7 +1419,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_CELL_EXTREMES,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_CELL_EXTREMES),
+        .can_id = VICTRON_PGN_CELL_EXTREMES,
         .dlc = 8,
         .fill_fn = encode_cell_voltage_temperature_extremes,
         .description = "Victron cell voltage & temperature extremes",
@@ -1430,7 +1427,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MIN_CELL_ID,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MIN_CELL_ID),
+        .can_id = VICTRON_PGN_MIN_CELL_ID,
         .dlc = 8,
         .fill_fn = encode_min_cell_identifier,
         .description = "Victron min cell identifier",
@@ -1438,7 +1435,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MAX_CELL_ID,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MAX_CELL_ID),
+        .can_id = VICTRON_PGN_MAX_CELL_ID,
         .dlc = 8,
         .fill_fn = encode_max_cell_identifier,
         .description = "Victron max cell identifier",
@@ -1446,7 +1443,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MIN_TEMP_ID,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MIN_TEMP_ID),
+        .can_id = VICTRON_PGN_MIN_TEMP_ID,
         .dlc = 8,
         .fill_fn = encode_min_temp_identifier,
         .description = "Victron min temperature identifier",
@@ -1454,7 +1451,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_MAX_TEMP_ID,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_MAX_TEMP_ID),
+        .can_id = VICTRON_PGN_MAX_TEMP_ID,
         .dlc = 8,
         .fill_fn = encode_max_temp_identifier,
         .description = "Victron max temperature identifier",
@@ -1462,7 +1459,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_ENERGY_COUNTERS,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_ENERGY_COUNTERS),
+        .can_id = VICTRON_PGN_ENERGY_COUNTERS,
         .dlc = 8,
         .fill_fn = encode_energy_counters,
         .description = "Victron energy counters",
@@ -1470,7 +1467,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_INSTALLED_CAP,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_INSTALLED_CAP),
+        .can_id = VICTRON_PGN_INSTALLED_CAP,
         .dlc = 8,
         .fill_fn = encode_installed_capacity,
         .description = "Victron installed capacity",
@@ -1478,7 +1475,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_SERIAL_PART1,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_SERIAL_PART1),
+        .can_id = VICTRON_PGN_SERIAL_PART1,
         .dlc = 8,
         .fill_fn = encode_serial_number_part1,
         .description = "Victron serial number part 1",
@@ -1486,7 +1483,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_SERIAL_PART2,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_SERIAL_PART2),
+        .can_id = VICTRON_PGN_SERIAL_PART2,
         .dlc = 8,
         .fill_fn = encode_serial_number_part2,
         .description = "Victron serial number part 2",
@@ -1494,7 +1491,7 @@ const can_publisher_channel_t g_can_publisher_channels[] = {
     },
     {
         .pgn = VICTRON_PGN_BATTERY_FAMILY,
-        .can_id = VICTRON_EXTENDED_ID(VICTRON_PGN_BATTERY_FAMILY),
+        .can_id = VICTRON_PGN_BATTERY_FAMILY,
         .dlc = 8,
         .fill_fn = encode_battery_family,
         .description = "Victron battery family",

@@ -56,6 +56,17 @@ static const can_publisher_channel_t *find_channel(uint16_t pgn)
     return NULL;
 }
 
+TEST_CASE("can_conversion_channel_ids_are_standard", "[can][unit]")
+{
+    for (size_t i = 0; i < g_can_publisher_channel_count; ++i) {
+        const can_publisher_channel_t *channel = &g_can_publisher_channels[i];
+        TEST_ASSERT_NOT_NULL(channel);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(0x7FFU, channel->can_id);
+        TEST_ASSERT_EQUAL_UINT16(channel->pgn, (uint16_t)channel->can_id);
+        TEST_ASSERT_EQUAL_UINT8(8U, channel->dlc);
+    }
+}
+
 static void append_register(uart_bms_live_data_t *data, uint16_t address, uint16_t value)
 {
     TEST_ASSERT_NOT_NULL(data);
@@ -171,6 +182,7 @@ TEST_CASE("can_conversion_inverter_identifier", "[can][unit]")
     };
 
     TEST_ASSERT_TRUE(channel->fill_fn(&data, &frame));
+    TEST_ASSERT_EQUAL_UINT16(channel->pgn, channel->can_id);
     TEST_ASSERT_EQUAL_UINT8(data.hardware_version, frame.data[0]);
     TEST_ASSERT_EQUAL_UINT8(data.hardware_changes_version, frame.data[1]);
     TEST_ASSERT_EQUAL_UINT8(data.firmware_version, frame.data[2]);
