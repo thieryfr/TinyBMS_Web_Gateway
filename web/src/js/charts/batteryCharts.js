@@ -647,8 +647,8 @@ export class BatteryRealtimeCharts {
     // Extract register values
     const overvoltage_mv = registers.overvoltage_cutoff_mv || DEFAULT_OVERVOLTAGE_MV;
     const undervoltage_mv = registers.undervoltage_cutoff_mv || DEFAULT_UNDERVOLTAGE_MV;
-    const peak_discharge_a = registers.peak_discharge_current_a || DEFAULT_PEAK_DISCHARGE_A;
-    const charge_overcurrent_a = registers.charge_overcurrent_a || DEFAULT_CHARGE_OVERCURRENT_A;
+    const peak_discharge_a = registers.peak_discharge_current_limit_a || DEFAULT_PEAK_DISCHARGE_A;
+    const charge_overcurrent_a = registers.charge_overcurrent_limit_a || DEFAULT_CHARGE_OVERCURRENT_A;
 
     // Calculate nominal operating voltage (middle of under/over voltage range)
     const nominal_voltage_mv = (overvoltage_mv + undervoltage_mv) / 2;
@@ -708,7 +708,7 @@ export class BatteryRealtimeCharts {
     this.updateAxisLimits(registers);
     this.updateGauge(soc, soh);
     this.updateSparkline({ voltage, current });
-    this.updateCellChart(voltagesMv);
+    this.updateCellChart(voltagesMv, registers);
     this.updateTemperatureGauge(temperature);
     this.updateRemainingGauge(estimatedTimeLeftSeconds);
   }
@@ -826,10 +826,14 @@ export class BatteryRealtimeCharts {
     }
   }
 
-  updateCellChart(voltagesMv) {
+  updateCellChart(voltagesMv, registers = {}) {
     if (!this.cellChart) {
       return;
     }
+
+    // Use dynamic cutoff values from BMS registers
+    const underVoltageCutoff = registers.undervoltage_cutoff_mv || DEFAULT_UNDERVOLTAGE_MV;
+    const overVoltageCutoff = registers.overvoltage_cutoff_mv || DEFAULT_OVERVOLTAGE_MV;
 
     if (!Array.isArray(voltagesMv) || voltagesMv.length === 0) {
       this.cellVoltages = [];
@@ -919,6 +923,10 @@ export class BatteryRealtimeCharts {
       title: { show: false },
       tooltip: { formatter: tooltipFormatter },
       xAxis: { data: categories },
+      yAxis: {
+        min: underVoltageCutoff * 0.9,
+        max: overVoltageCutoff * 1.1,
+      },
       series: [
         {
           data: chartData,
@@ -932,6 +940,44 @@ export class BatteryRealtimeCharts {
               const sign = inBalance >= 0 ? '+' : '';
               return `${sign}${inBalance.toFixed(0)}`;
             },
+          },
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            data: [
+              {
+                name: 'Under-voltage',
+                yAxis: underVoltageCutoff,
+                lineStyle: {
+                  color: '#5da5da',
+                  type: 'dashed',
+                  width: 2,
+                },
+                label: {
+                  show: true,
+                  position: 'insideEndTop',
+                  formatter: `Under-voltage: ${underVoltageCutoff} mV`,
+                  color: '#5da5da',
+                  fontSize: 10,
+                },
+              },
+              {
+                name: 'Over-voltage',
+                yAxis: overVoltageCutoff,
+                lineStyle: {
+                  color: '#f25f5c',
+                  type: 'dashed',
+                  width: 2,
+                },
+                label: {
+                  show: true,
+                  position: 'insideEndBottom',
+                  formatter: `Over-voltage: ${overVoltageCutoff} mV`,
+                  color: '#f25f5c',
+                  fontSize: 10,
+                },
+              },
+            ],
           },
         },
       ],
