@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flux de Communication - TinyBMS Gateway</title>
+    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico" />
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="../assets/css/tabler.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+    <style>
+      /* Styles pour le diagramme de flux */
+      .flow-diagram {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-radius: 12px;
+        padding: 2rem;
+        margin: 1.5rem 0;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .flow-node {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .flow-node:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(59, 130, 246, 0.5);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+      }
+
+      .flow-node.active {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.1);
+      }
+
+      .flow-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 2rem;
+        margin: 1rem 0;
+      }
+
+      .flow-arrow.bidirectional {
+        position: relative;
+      }
+
+      .flow-label {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 0.5rem;
+      }
+
+      .protocol-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin: 0.5rem 0.25rem;
+      }
+
+      .protocol-badge.modbus { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+      .protocol-badge.can { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+      .protocol-badge.websocket { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+      .protocol-badge.rest { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+
+      .data-table {
+        font-size: 0.875rem;
+      }
+
+      .data-table th {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 0.75rem !important;
+      }
+
+      .data-table td {
+        padding: 0.75rem !important;
+        vertical-align: middle;
+      }
+
+      .data-table tbody tr {
+        transition: background-color 0.2s ease;
+      }
+
+      .data-table tbody tr:hover {
+        background: rgba(59, 130, 246, 0.05);
+      }
+
+      .address-code {
+        font-family: 'Courier New', monospace;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        color: #22c55e;
+        font-weight: 600;
+      }
+
+      .search-box {
+        max-width: 400px;
+      }
+
+      .filter-buttons .btn {
+        margin: 0.25rem;
+      }
+
+      .metric-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+      }
+
+      .metric-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #3b82f6;
+      }
+
+      .metric-label {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        margin-top: 0.25rem;
+      }
+
+      .flow-connection {
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .flow-connection::before {
+        content: '';
+        position: absolute;
+        width: 2px;
+        height: 100%;
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.3));
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+      }
+
+      .collapsible-section {
+        margin-top: 2rem;
+      }
+
+      .section-header {
+        cursor: pointer;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        transition: background 0.2s ease;
+      }
+
+      .section-header:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .section-content {
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+      }
+
+      .section-content.collapsed {
+        max-height: 0;
+      }
+    </style>
+  </head>
+  <body class="theme-dark">
+    <div class="page">
+      <!-- Header simplifié -->
+      <header class="navbar navbar-expand-md navbar-dark">
+        <div class="container-xl">
+          <a href="./index.html" class="navbar-brand">
+            <i class="ti ti-arrow-left me-2"></i>
+            Retour au Dashboard
+          </a>
+          <h1 class="navbar-brand px-0 mx-auto">
+            <i class="ti ti-topology-star-3 me-2"></i>
+            Flux de Communication
+          </h1>
+        </div>
+      </header>
+
+      <main class="page-body">
+        <div class="container-xl">
+
+          <!-- Métriques globales -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="metric-value">45</div>
+                <div class="metric-label">Registres Modbus</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="metric-value">19</div>
+                <div class="metric-label">CAN PGN Victron</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="metric-value">15+</div>
+                <div class="metric-label">Endpoints REST</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="metric-value">5</div>
+                <div class="metric-label">WebSocket Endpoints</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diagramme de flux interactif -->
+          <div class="card mb-4">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-topology-star-3 me-2"></i>Diagramme des Flux de Données</h3>
+            </div>
+            <div class="card-body">
+              <div class="flow-diagram">
+                <div class="row">
+                  <div class="col-12">
+                    <div class="flow-node" data-target="modbus" onclick="highlightFlow('modbus')">
+                      <i class="ti ti-battery-charging-2 fs-1 mb-2" style="color: #ec4899;"></i>
+                      <h4>TinyBMS Battery</h4>
+                      <div class="flow-label">Système BMS Physique</div>
+                      <div class="mt-2">
+                        <span class="protocol-badge modbus">Modbus RTU</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flow-connection">
+                  <div class="flow-arrow">
+                    <div class="text-center">
+                      <i class="ti ti-arrow-down"></i>
+                      <div class="flow-label">UART • 115200 baud • 250ms polling</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="flow-node active" data-target="gateway" onclick="highlightFlow('gateway')">
+                      <i class="ti ti-cpu fs-1 mb-2" style="color: #3b82f6;"></i>
+                      <h4>ESP32 Gateway</h4>
+                      <div class="flow-label">Conversion et Routage</div>
+                      <div class="mt-2">
+                        <span class="protocol-badge modbus">UART Parser</span>
+                        <span class="protocol-badge can">CAN Publisher</span>
+                        <span class="protocol-badge websocket">WebSocket</span>
+                        <span class="protocol-badge rest">REST API</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row mt-4">
+                  <div class="col-md-6">
+                    <div class="flow-connection">
+                      <div class="flow-arrow">
+                        <div class="text-center">
+                          <i class="ti ti-arrow-down"></i>
+                          <div class="flow-label">CAN Bus • 250 kbps • 19 PGN</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flow-node" data-target="victron" onclick="highlightFlow('victron')">
+                      <i class="ti ti-plug-connected fs-1 mb-2" style="color: #22c55e;"></i>
+                      <h4>Victron Cerbo GX</h4>
+                      <div class="flow-label">Système Victron</div>
+                      <div class="mt-2">
+                        <span class="protocol-badge can">CAN Extended</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <div class="flow-connection">
+                      <div class="flow-arrow bidirectional">
+                        <div class="text-center">
+                          <i class="ti ti-arrows-up-down"></i>
+                          <div class="flow-label">HTTP/WS • Port 80 • JSON</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flow-node" data-target="web" onclick="highlightFlow('web')">
+                      <i class="ti ti-browser fs-1 mb-2" style="color: #f97316;"></i>
+                      <h4>Interface Web</h4>
+                      <div class="flow-label">Client Navigateur</div>
+                      <div class="mt-2">
+                        <span class="protocol-badge rest">REST API</span>
+                        <span class="protocol-badge websocket">WebSocket</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Onglets de documentation -->
+          <div class="card">
+            <div class="card-header">
+              <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                <li class="nav-item">
+                  <a class="nav-link active" data-bs-toggle="tab" href="#tab-modbus" role="tab">
+                    <i class="ti ti-database me-2"></i>Registres Modbus (45)
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" data-bs-toggle="tab" href="#tab-can" role="tab">
+                    <i class="ti ti-network me-2"></i>CAN Victron (19 PGN)
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" data-bs-toggle="tab" href="#tab-api" role="tab">
+                    <i class="ti ti-api me-2"></i>APIs Web
+                  </a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" data-bs-toggle="tab" href="#tab-docs" role="tab">
+                    <i class="ti ti-file-text me-2"></i>Documentation
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div class="card-body">
+              <div class="tab-content">
+
+                <!-- Onglet Modbus -->
+                <div class="tab-pane fade show active" id="tab-modbus" role="tabpanel">
+                  <div class="mb-3">
+                    <input type="text" class="form-control search-box" id="modbus-search" placeholder="🔍 Rechercher un registre...">
+                  </div>
+
+                  <h4 class="mb-3">Registres Modbus/UART BMS</h4>
+                  <div class="alert alert-info">
+                    <i class="ti ti-info-circle me-2"></i>
+                    <strong>Protocole:</strong> Modbus RTU sur UART •
+                    <strong>Polling:</strong> 250 ms •
+                    <strong>Total:</strong> 59 mots (45 registres uniques) •
+                    <strong>Timeout:</strong> 200 ms
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table table-bordered data-table" id="modbus-table">
+                      <thead>
+                        <tr>
+                          <th>Registre</th>
+                          <th>Adresse</th>
+                          <th>Type</th>
+                          <th>Mots</th>
+                          <th>Échelle</th>
+                          <th>Unité</th>
+                          <th>Description</th>
+                          <th>Catégorie</th>
+                        </tr>
+                      </thead>
+                      <tbody id="modbus-tbody">
+                        <!-- Données chargées dynamiquement -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Onglet CAN -->
+                <div class="tab-pane fade" id="tab-can" role="tabpanel">
+                  <div class="mb-3">
+                    <input type="text" class="form-control search-box" id="can-search" placeholder="🔍 Rechercher un PGN...">
+                  </div>
+
+                  <h4 class="mb-3">Messages CAN Victron</h4>
+                  <div class="alert alert-info">
+                    <i class="ti ti-info-circle me-2"></i>
+                    <strong>Protocole:</strong> Victron J1939-like •
+                    <strong>Bitrate:</strong> 250 kbps •
+                    <strong>Format:</strong> Extended (29-bit) •
+                    <strong>Source:</strong> 0xE5
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table table-bordered data-table" id="can-table">
+                      <thead>
+                        <tr>
+                          <th>PGN</th>
+                          <th>CAN ID Extended</th>
+                          <th>Nom</th>
+                          <th>Description</th>
+                          <th>DLC</th>
+                          <th>Période (ms)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="can-tbody">
+                        <!-- Données chargées dynamiquement -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Onglet API -->
+                <div class="tab-pane fade" id="tab-api" role="tabpanel">
+                  <h4 class="mb-3">APIs REST et WebSocket</h4>
+
+                  <div class="collapsible-section">
+                    <div class="section-header" onclick="toggleSection('rest-section')">
+                      <h5 class="mb-0">
+                        <i class="ti ti-chevron-down me-2" id="rest-section-icon"></i>
+                        Endpoints REST API (15+)
+                      </h5>
+                    </div>
+                    <div class="section-content" id="rest-section">
+                      <div class="table-responsive">
+                        <table class="table table-bordered data-table">
+                          <thead>
+                            <tr>
+                              <th>Méthode</th>
+                              <th>Endpoint</th>
+                              <th>Description</th>
+                            </tr>
+                          </thead>
+                          <tbody id="rest-tbody">
+                            <!-- Données chargées dynamiquement -->
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="collapsible-section">
+                    <div class="section-header" onclick="toggleSection('ws-section')">
+                      <h5 class="mb-0">
+                        <i class="ti ti-chevron-down me-2" id="ws-section-icon"></i>
+                        WebSocket Endpoints (5)
+                      </h5>
+                    </div>
+                    <div class="section-content" id="ws-section">
+                      <div class="table-responsive">
+                        <table class="table table-bordered data-table">
+                          <thead>
+                            <tr>
+                              <th>Endpoint</th>
+                              <th>Type</th>
+                              <th>Description</th>
+                              <th>Fréquence</th>
+                            </tr>
+                          </thead>
+                          <tbody id="ws-tbody">
+                            <!-- Données chargées dynamiquement -->
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Onglet Documentation -->
+                <div class="tab-pane fade" id="tab-docs" role="tabpanel">
+                  <h4 class="mb-3">Documentation Complète</h4>
+
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <div class="card">
+                        <div class="card-body">
+                          <h5 class="card-title"><i class="ti ti-file-text me-2"></i>README_DOCUMENTATION.md</h5>
+                          <p class="text-muted">Index principal et guide de démarrage rapide</p>
+                          <a href="../README_DOCUMENTATION.md" class="btn btn-primary btn-sm" target="_blank">
+                            <i class="ti ti-external-link me-1"></i>Ouvrir
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-md-6">
+                      <div class="card">
+                        <div class="card-body">
+                          <h5 class="card-title"><i class="ti ti-file-text me-2"></i>DOCUMENTATION_COMMUNICATIONS.md</h5>
+                          <p class="text-muted">Documentation détaillée (21 KB) avec tous les tableaux</p>
+                          <a href="../DOCUMENTATION_COMMUNICATIONS.md" class="btn btn-primary btn-sm" target="_blank">
+                            <i class="ti ti-external-link me-1"></i>Ouvrir
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-md-6">
+                      <div class="card">
+                        <div class="card-body">
+                          <h5 class="card-title"><i class="ti ti-json me-2"></i>COMMUNICATION_REFERENCE.json</h5>
+                          <p class="text-muted">Données structurées (15 KB) pour parsing programmatique</p>
+                          <a href="../COMMUNICATION_REFERENCE.json" class="btn btn-primary btn-sm" target="_blank">
+                            <i class="ti ti-external-link me-1"></i>Ouvrir
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-md-6">
+                      <div class="card">
+                        <div class="card-body">
+                          <h5 class="card-title"><i class="ti ti-file-code me-2"></i>FILES_REFERENCE.md</h5>
+                          <p class="text-muted">Référence rapide des fichiers source (9 KB)</p>
+                          <a href="../FILES_REFERENCE.md" class="btn btn-primary btn-sm" target="_blank">
+                            <i class="ti ti-external-link me-1"></i>Ouvrir
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="alert alert-success mt-4">
+                    <h5><i class="ti ti-info-circle me-2"></i>Guide d'utilisation</h5>
+                    <ul class="mb-0">
+                      <li>Pour comprendre les <strong>registres Modbus</strong>, consultez DOCUMENTATION_COMMUNICATIONS.md § 1</li>
+                      <li>Pour comprendre les <strong>messages CAN</strong>, consultez DOCUMENTATION_COMMUNICATIONS.md § 2</li>
+                      <li>Pour comprendre les <strong>APIs</strong>, consultez DOCUMENTATION_COMMUNICATIONS.md § 3</li>
+                      <li>Pour le <strong>parsing programmatique</strong>, utilisez COMMUNICATION_REFERENCE.json</li>
+                      <li>Pour naviguer dans le <strong>code source</strong>, consultez FILES_REFERENCE.md</li>
+                    </ul>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+
+    <script src="../assets/js/tabler.min.js"></script>
+    <script>
+      // Données Modbus
+      const modbusData = [
+        // Tensions cellules
+        { register: 'CELL_VOLTAGE_01-16', address: '0x0000-0x000F', type: 'UINT16', words: 16, scale: '0.1', unit: 'mV', description: '16 tensions individuelles', category: 'Cellules' },
+
+        // Données primaires
+        { register: 'LIFETIME_COUNTER', address: '0x0020', type: 'UINT32', words: 2, scale: '1.0', unit: 's', description: 'Uptime du BMS', category: 'Primaires' },
+        { register: 'ESTIMATED_TIME_LEFT', address: '0x0022', type: 'UINT32', words: 2, scale: '1.0', unit: 's', description: 'Temps avant épuisement', category: 'Primaires' },
+        { register: 'PACK_VOLTAGE', address: '0x0024', type: 'FLOAT32', words: 2, scale: '1.0', unit: 'V', description: 'Tension totale pack', category: 'Primaires' },
+        { register: 'PACK_CURRENT', address: '0x0026', type: 'FLOAT32', words: 2, scale: '1.0', unit: 'A', description: 'Courant pack (>0=charge)', category: 'Primaires' },
+        { register: 'MIN_CELL_VOLTAGE', address: '0x0028', type: 'UINT16', words: 1, scale: '1.0', unit: 'mV', description: 'Min des 16 cellules', category: 'Primaires' },
+        { register: 'MAX_CELL_VOLTAGE', address: '0x0029', type: 'UINT16', words: 1, scale: '1.0', unit: 'mV', description: 'Max des 16 cellules', category: 'Primaires' },
+        { register: 'EXTERNAL_TEMP_1', address: '0x002A', type: 'INT16', words: 1, scale: '0.1', unit: '°C', description: 'Capteur externe 1', category: 'Primaires' },
+        { register: 'EXTERNAL_TEMP_2', address: '0x002B', type: 'INT16', words: 1, scale: '0.1', unit: '°C', description: 'Capteur externe 2', category: 'Primaires' },
+        { register: 'STATE_OF_HEALTH', address: '0x002D', type: 'UINT16', words: 1, scale: '0.002', unit: '%', description: 'SOH (0-100%)', category: 'Primaires' },
+        { register: 'STATE_OF_CHARGE', address: '0x002E', type: 'UINT32', words: 2, scale: '0.000001', unit: '%', description: 'SOC haute précision', category: 'Primaires' },
+        { register: 'INTERNAL_TEMPERATURE', address: '0x0030', type: 'INT16', words: 1, scale: '0.1', unit: '°C', description: 'Température MOS', category: 'Primaires' },
+        { register: 'SYSTEM_STATUS', address: '0x0032', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: '0=offline, 1=online', category: 'Primaires' },
+        { register: 'NEED_BALANCING', address: '0x0033', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: 'Flag équilibrage', category: 'Primaires' },
+        { register: 'REAL_BALANCING_BITS', address: '0x0034', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: 'Bits équilibrage actifs', category: 'Primaires' },
+
+        // Limites
+        { register: 'MAX_DISCHARGE_CURRENT', address: '0x0066', type: 'UINT16', words: 1, scale: '0.1', unit: 'A', description: 'Courant décharge max', category: 'Limites' },
+        { register: 'MAX_CHARGE_CURRENT', address: '0x0067', type: 'UINT16', words: 1, scale: '0.1', unit: 'A', description: 'Courant charge max', category: 'Limites' },
+        { register: 'PACK_TEMP_MIN_MAX', address: '0x0071', type: 'INT8_PAIR', words: 1, scale: '1.0', unit: '°C', description: 'Min (LSB), Max (MSB)', category: 'Limites' },
+
+        // Configuration
+        { register: 'PEAK_DISCHARGE_CUTOFF', address: '0x0131', type: 'UINT16', words: 1, scale: '1.0', unit: 'A', description: 'Limite pic décharge', category: 'Config' },
+        { register: 'BATTERY_CAPACITY', address: '0x0132', type: 'UINT16', words: 1, scale: '0.01', unit: 'Ah', description: 'Capacité nominale', category: 'Config' },
+        { register: 'SERIES_CELL_COUNT', address: '0x0133', type: 'UINT16', words: 1, scale: '1.0', unit: 'cell', description: 'Nb cellules série', category: 'Config' },
+        { register: 'OVERVOLTAGE_CUTOFF', address: '0x013B', type: 'UINT16', words: 1, scale: '1.0', unit: 'mV', description: 'Seuil surtension', category: 'Config' },
+        { register: 'UNDERVOLTAGE_CUTOFF', address: '0x013C', type: 'UINT16', words: 1, scale: '1.0', unit: 'mV', description: 'Seuil sous-tension', category: 'Config' },
+        { register: 'DISCHARGE_OVERCURRENT_CUTOFF', address: '0x013D', type: 'UINT16', words: 1, scale: '1.0', unit: 'A', description: 'Seuil surcourant décharge', category: 'Config' },
+        { register: 'CHARGE_OVERCURRENT_CUTOFF', address: '0x013E', type: 'UINT16', words: 1, scale: '1.0', unit: 'A', description: 'Seuil surcourant charge', category: 'Config' },
+        { register: 'OVERHEAT_CUTOFF', address: '0x013F', type: 'INT16', words: 1, scale: '1.0', unit: '°C', description: 'Seuil temp haute', category: 'Config' },
+        { register: 'LOW_TEMP_CHARGE_CUTOFF', address: '0x0140', type: 'INT16', words: 1, scale: '1.0', unit: '°C', description: 'Seuil temp basse', category: 'Config' },
+
+        // Version
+        { register: 'HW_VERSION', address: '0x01F4', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: 'Version hardware', category: 'Version' },
+        { register: 'FW_VERSION', address: '0x01F5', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: 'Version firmware', category: 'Version' },
+        { register: 'INTERNAL_FW_VERSION', address: '0x01F6', type: 'UINT16', words: 1, scale: '1.0', unit: '-', description: 'Version interne', category: 'Version' }
+      ];
+
+      // Données CAN
+      const canData = [
+        { pgn: '0x307', canId: '0x18FFF5E5', name: 'Handshake', description: '"VIC" + info identité', dlc: 3, period: 'Connexion' },
+        { pgn: '0x351', canId: '0x1851FEE5', name: 'CVL/CCL/DCL', description: 'Charge Voltage/Current Limit, Discharge Current Limit', dlc: 8, period: '100' },
+        { pgn: '0x355', canId: '0x1855FEE5', name: 'SOC/SOH', description: 'State of Charge (0-10000=0-100%), State of Health', dlc: 8, period: '1000' },
+        { pgn: '0x356', canId: '0x1856FEE5', name: 'Voltage/Current', description: 'Voltage, Current, Temperature', dlc: 8, period: '1000' },
+        { pgn: '0x35A', canId: '0x185AFEE5', name: 'Alarms', description: 'Bits d\'alarme (8 bytes)', dlc: 8, period: 'Change' },
+        { pgn: '0x35E', canId: '0x185EFEE5', name: 'Manufacturer', description: 'Manufacturer ID (ASCII/bytes)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x35F', canId: '0x185FFEE5', name: 'Battery Info', description: 'Model ID, Firmware, Capacity', dlc: 8, period: 'Connexion' },
+        { pgn: '0x370', canId: '0x1870FEE5', name: 'BMS Name Part 1', description: 'Nom batterie bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x371', canId: '0x1871FEE5', name: 'BMS Name Part 2', description: 'Nom batterie bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x372', canId: '0x1872FEE5', name: 'Module Status', description: 'État des modules', dlc: 8, period: '1000' },
+        { pgn: '0x373', canId: '0x1873FEE5', name: 'Cell Extremes', description: 'Min/Max cell voltages, Min/Max temperatures', dlc: 8, period: '1000' },
+        { pgn: '0x374', canId: '0x1874FEE5', name: 'Min Cell ID', description: 'Cell ID avec voltage min (0-15)', dlc: 2, period: '1000' },
+        { pgn: '0x375', canId: '0x1875FEE5', name: 'Max Cell ID', description: 'Cell ID avec voltage max (0-15)', dlc: 2, period: '1000' },
+        { pgn: '0x376', canId: '0x1876FEE5', name: 'Min Temp ID', description: 'ID source température min', dlc: 2, period: '1000' },
+        { pgn: '0x377', canId: '0x1877FEE5', name: 'Max Temp ID', description: 'ID source température max', dlc: 2, period: '1000' },
+        { pgn: '0x378', canId: '0x1878FEE5', name: 'Energy Counters', description: 'Énergie chargée, déchargée (Wh)', dlc: 8, period: '10000' },
+        { pgn: '0x379', canId: '0x1879FEE5', name: 'Installed Capacity', description: 'Capacité nominale (Ah)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x380', canId: '0x1880FEE5', name: 'Serial Part 1', description: 'Série bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x381', canId: '0x1881FEE5', name: 'Serial Part 2', description: 'Série bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' }
+      ];
+
+      // Données REST API
+      const restData = [
+        { method: 'GET', endpoint: '/api/status', description: 'État global système (BMS, CAN, System)' },
+        { method: 'GET', endpoint: '/api/config', description: 'Configuration actuelle' },
+        { method: 'POST', endpoint: '/api/config', description: 'Mettre à jour configuration' },
+        { method: 'GET', endpoint: '/api/metrics/runtime', description: 'Métriques runtime système' },
+        { method: 'GET', endpoint: '/api/event-bus/metrics', description: 'Statistiques bus événements' },
+        { method: 'GET', endpoint: '/api/system/tasks', description: 'Liste tasks FreeRTOS' },
+        { method: 'GET', endpoint: '/api/system/modules', description: 'État des modules' },
+        { method: 'POST', endpoint: '/api/system/restart', description: 'Redémarrer système' },
+        { method: 'GET', endpoint: '/api/can/status', description: 'État CAN (TX/RX frames, errors)' },
+        { method: 'GET', endpoint: '/api/alerts/config', description: 'Configuration des alertes' },
+        { method: 'POST', endpoint: '/api/alerts/config', description: 'Mettre à jour config alertes' },
+        { method: 'GET', endpoint: '/api/alerts/active', description: 'Alertes actives' },
+        { method: 'GET', endpoint: '/api/alerts/history', description: 'Historique alertes (limit=N)' },
+        { method: 'GET', endpoint: '/api/mqtt/config', description: 'Configuration MQTT' },
+        { method: 'POST', endpoint: '/api/ota', description: 'Upload firmware' }
+      ];
+
+      // Données WebSocket
+      const wsData = [
+        { endpoint: '/ws/telemetry', type: 'Télémétrie BMS', description: 'Données BMS en temps réel (voltage, current, SOC, etc.)', frequency: '250 ms' },
+        { endpoint: '/ws/events', type: 'Événements', description: 'Événements système (can.frame.sent, mqtt.connected, etc.)', frequency: 'On event' },
+        { endpoint: '/ws/uart', type: 'UART Raw', description: 'Données UART brutes du TinyBMS', frequency: '250 ms' },
+        { endpoint: '/ws/can', type: 'CAN Frames', description: 'Trames CAN envoyées/reçues', frequency: '100 ms' },
+        { endpoint: '/ws/alerts', type: 'Alertes', description: 'Alertes et notifications (INFO, WARNING, ERROR, CRITICAL)', frequency: 'On alert' }
+      ];
+
+      // Remplir les tableaux
+      function populateModbusTable() {
+        const tbody = document.getElementById('modbus-tbody');
+        tbody.innerHTML = modbusData.map(row => `
+          <tr>
+            <td><code>${row.register}</code></td>
+            <td><span class="address-code">${row.address}</span></td>
+            <td><span class="badge bg-secondary">${row.type}</span></td>
+            <td>${row.words}</td>
+            <td>${row.scale}</td>
+            <td><strong>${row.unit}</strong></td>
+            <td>${row.description}</td>
+            <td><span class="badge bg-primary">${row.category}</span></td>
+          </tr>
+        `).join('');
+      }
+
+      function populateCanTable() {
+        const tbody = document.getElementById('can-tbody');
+        tbody.innerHTML = canData.map(row => `
+          <tr>
+            <td><span class="address-code">${row.pgn}</span></td>
+            <td><span class="address-code">${row.canId}</span></td>
+            <td><strong>${row.name}</strong></td>
+            <td>${row.description}</td>
+            <td>${row.dlc}</td>
+            <td><span class="badge bg-info">${row.period} ms</span></td>
+          </tr>
+        `).join('');
+      }
+
+      function populateRestTable() {
+        const tbody = document.getElementById('rest-tbody');
+        tbody.innerHTML = restData.map(row => `
+          <tr>
+            <td><span class="badge ${row.method === 'GET' ? 'bg-success' : 'bg-warning'}">${row.method}</span></td>
+            <td><code>${row.endpoint}</code></td>
+            <td>${row.description}</td>
+          </tr>
+        `).join('');
+      }
+
+      function populateWsTable() {
+        const tbody = document.getElementById('ws-tbody');
+        tbody.innerHTML = wsData.map(row => `
+          <tr>
+            <td><code>${row.endpoint}</code></td>
+            <td><span class="badge bg-primary">${row.type}</span></td>
+            <td>${row.description}</td>
+            <td><span class="badge bg-info">${row.frequency}</span></td>
+          </tr>
+        `).join('');
+      }
+
+      // Recherche
+      document.getElementById('modbus-search')?.addEventListener('input', (e) => {
+        const filter = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#modbus-tbody tr');
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(filter) ? '' : 'none';
+        });
+      });
+
+      document.getElementById('can-search')?.addEventListener('input', (e) => {
+        const filter = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#can-tbody tr');
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(filter) ? '' : 'none';
+        });
+      });
+
+      // Highlight flow
+      function highlightFlow(target) {
+        document.querySelectorAll('.flow-node').forEach(node => {
+          node.classList.remove('active');
+        });
+        document.querySelector(`[data-target="${target}"]`)?.classList.add('active');
+      }
+
+      // Toggle sections
+      function toggleSection(sectionId) {
+        const section = document.getElementById(sectionId);
+        const icon = document.getElementById(`${sectionId}-icon`);
+        if (section.classList.contains('collapsed')) {
+          section.classList.remove('collapsed');
+          section.style.maxHeight = section.scrollHeight + 'px';
+          icon.classList.remove('ti-chevron-right');
+          icon.classList.add('ti-chevron-down');
+        } else {
+          section.classList.add('collapsed');
+          section.style.maxHeight = '0';
+          icon.classList.remove('ti-chevron-down');
+          icon.classList.add('ti-chevron-right');
+        }
+      }
+
+      // Initialisation
+      document.addEventListener('DOMContentLoaded', () => {
+        populateModbusTable();
+        populateCanTable();
+        populateRestTable();
+        populateWsTable();
+      });
+    </script>
+  </body>
+</html>
