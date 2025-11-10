@@ -84,6 +84,14 @@ Le catalogue complet (plus de 40 registres configurables) reste disponible dans 
 
 ## 4. Correspondance CAN Victron
 
+### 4.1 Paramètres bus et format de trame
+
+- Le driver `can_victron` initialise l'interface TWAI ESP-IDF avec la configuration `TWAI_TIMING_CONFIG_250KBITS()`, soit un débit de **250 kbit/s**. Ce choix est également reflété dans la constante `CAN_VICTRON_BITRATE_BPS` à 250 000.【F:main/can_victron/can_victron.c†L29-L42】【F:main/can_victron/can_victron.c†L445-L455】
+- Les trames dont l'identifiant dépasse 0x7FF sont marquées en mode **29 bits (extended)** avant émission (`TWAI_MSG_FLAG_EXTD`). Seules les trames de keepalive Victron (ID 0x305) restent en 11 bits standard.【F:main/can_victron/can_victron.c†L525-L536】【F:main/can_victron/can_victron.c†L836-L848】
+- Les PGN Victron sont convertis en identifiants 29 bits via `VICTRON_EXTENDED_ID`, en combinant priorité, PGN et adresse source conformément au format Victron CAN-bus.【F:main/can_publisher/conversion_table.c†L60-L75】【F:main/can_publisher/conversion_table.c†L1342-L1499】
+
+### 4.2 Trames émises
+
 Le tableau suivant récapitule les PGN/ID transmis, leur période et les données TinyBMS utilisées.
 
 | PGN / ID CAN | DLC | Période | Encodeur | Registres / champs TinyBMS |
