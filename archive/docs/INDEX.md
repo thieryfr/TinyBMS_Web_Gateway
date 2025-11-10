@@ -49,7 +49,7 @@
 | Document | Description | Protocoles couverts |
 |----------|-------------|---------------------|
 | [protocols/DOCUMENTATION_COMMUNICATIONS.md](protocols/DOCUMENTATION_COMMUNICATIONS.md) | Référence complète des protocoles (21 KB) | Modbus RTU, CAN Victron, REST API, WebSocket |
-| [protocols/COMMUNICATION_REFERENCE.json](protocols/COMMUNICATION_REFERENCE.json) | Référence structurée JSON (14 KB) | Format machine-readable |
+| [../docs/COMMUNICATION_REFERENCE.json](../docs/COMMUNICATION_REFERENCE.json) | Référence structurée JSON (14 KB) | Format machine-readable |
 | [tinybms_register_can_flow.md](tinybms_register_can_flow.md) | Flux de données UART → CAN (120 lignes) | Conversion des registres |
 | [interaction_diagrams.md](interaction_diagrams.md) | 8 diagrammes de séquence détaillés (661 lignes) | Flux temps réel |
 

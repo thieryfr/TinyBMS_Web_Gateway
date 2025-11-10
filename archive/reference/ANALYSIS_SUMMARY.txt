@@ -188,7 +188,7 @@ FICHIERS DE DOCUMENTATION CRÉÉS:
      → APIs REST et WebSocket avec exemples JSON
      → Formats de données et structures
 
-  2. /home/user/TinyBMS-GW/COMMUNICATION_REFERENCE.json
+  2. /home/user/TinyBMS-GW/docs/COMMUNICATION_REFERENCE.json
      → Données structurées en JSON
      → Tables PGN, endpoints API, WebSocket
      → Facile à parser programmatiquement
