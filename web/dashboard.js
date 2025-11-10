@@ -1893,7 +1893,12 @@ function disconnectAllWebSockets() {
     activeWebSockets.clear();
 }
 
-function handleTelemetryMessage(data) {
+function handleTelemetryMessage(payload) {
+    const data = payload && typeof payload === 'object' && payload.battery ? payload.battery : payload;
+    if (!data) {
+        return;
+    }
+
     state.telemetry = data;
     updateBatteryDisplay(data);
 
