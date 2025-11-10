@@ -1048,8 +1048,12 @@ static bool encode_alarm_status(const uart_bms_live_data_t *data, can_publisher_
     bytes[6] = encode_2bit_field(bytes[6], 1U, 0x3U);
     bytes[6] = encode_2bit_field(bytes[6], 2U, 0x3U);
     bytes[6] = encode_2bit_field(bytes[6], 3U, 0x3U);
-    bytes[7] = encode_2bit_field(bytes[7], 2U, 0x3U);
-    bytes[7] = encode_2bit_field(bytes[7], 3U, 0x3U);
+
+    // Byte 7, bits 2-3: System status (online/offline)
+    // 01 = online (system OK), 10 = offline
+    // Since we're actively sending data, the system is online
+    bytes[7] = encode_2bit_field(bytes[7], 1U, 0x1U);  // System online
+    bytes[7] = encode_2bit_field(bytes[7], 3U, 0x3U);  // Reserved bits
 
     for (size_t i = 0; i < sizeof(bytes); ++i) {
         frame->data[i] = bytes[i];
@@ -1337,14 +1341,8 @@ static bool encode_battery_family(const uart_bms_live_data_t *data, can_publishe
 
 
 const can_publisher_channel_t g_can_publisher_channels[] = {
-    {
-        .pgn = VICTRON_CAN_HANDSHAKE_ID,
-        .can_id = VICTRON_CAN_HANDSHAKE_ID,
-        .dlc = 8,
-        .fill_fn = encode_inverter_identifier,
-        .description = "Victron inverter identifier handshake",
-        .period_ms = 1000U,
-    },
+    // Note: 0x307 handshake is RECEIVED from GX device, not transmitted by BMS
+    // The handshake reception is handled in can_victron.c
     {
         .pgn = VICTRON_PGN_CVL_CCL_DCL,
         .can_id = VICTRON_PGN_CVL_CCL_DCL,

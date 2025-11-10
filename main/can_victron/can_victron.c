@@ -27,7 +27,8 @@
 #define CAN_VICTRON_JSON_SIZE     256
 
 #define CAN_VICTRON_KEEPALIVE_ID         0x305U
-#define CAN_VICTRON_KEEPALIVE_DLC        1U
+#define CAN_VICTRON_KEEPALIVE_DLC        8U
+#define CAN_VICTRON_HANDSHAKE_ID         0x307U
 #define CAN_VICTRON_TASK_STACK           4096
 #define CAN_VICTRON_TASK_PRIORITY        (tskIDLE_PRIORITY + 6)
 #define CAN_VICTRON_TASK_DELAY_MS        50U
@@ -644,6 +645,27 @@ static void can_victron_handle_rx_message(const twai_message_t *message)
                                       dlc,
                                       data_length,
                                       desc,
+                                      CAN_VICTRON_DIRECTION_RX,
+                                      timestamp);
+    } else if (!is_extended && identifier == CAN_VICTRON_HANDSHAKE_ID) {
+        // Handle 0x307 handshake from GX device (inverter to BMS)
+        // Expected format: 8 bytes containing "VIC" string signature
+        if (dlc >= 3 && payload != NULL) {
+            // Validate "VIC" signature at bytes 4-6 (0-indexed: bytes 4, 5, 6)
+            if (dlc >= 7 && payload[4] == 'V' && payload[5] == 'I' && payload[6] == 'C') {
+                ESP_LOGI(TAG, "Received valid 0x307 handshake with 'VIC' signature from GX device");
+            } else {
+                ESP_LOGW(TAG, "Received 0x307 handshake but missing 'VIC' signature (dlc=%zu)", dlc);
+            }
+        } else {
+            ESP_LOGW(TAG, "Received 0x307 handshake with insufficient data (dlc=%zu)", dlc);
+        }
+
+        (void)can_victron_emit_events(identifier,
+                                      payload,
+                                      dlc,
+                                      data_length,
+                                      "Victron GX handshake",
                                       CAN_VICTRON_DIRECTION_RX,
                                       timestamp);
     }
