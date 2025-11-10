@@ -12,7 +12,7 @@ export class TinyBMSConfigManager {
             peripheralsSettings: {},
         };
         this.originalConfig = null;
-        this.registers = new Map(); // Map of register number -> value
+        this.registers = new Map(); // Map of register number -> register descriptor/value
 
         // Register mapping: field-id -> register number
         this.registerMap = {
@@ -50,6 +50,43 @@ export class TinyBMSConfigManager {
             'single-port-switch-type': 341,
             'broadcast': 342,
             'protocol': 343,
+        };
+
+        this.registerKeyMap = {
+            300: 'fully_charged_voltage_mv',
+            301: 'fully_discharged_voltage_mv',
+            303: 'early_balancing_threshold_mv',
+            304: 'charge_finished_current_ma',
+            305: 'peak_discharge_current_a',
+            306: 'battery_capacity_ah',
+            307: 'cell_count',
+            308: 'allowed_disbalance_mv',
+            310: 'charger_startup_delay_s',
+            311: 'charger_disable_delay_s',
+            315: 'overvoltage_cutoff_mv',
+            316: 'undervoltage_cutoff_mv',
+            317: 'discharge_overcurrent_a',
+            318: 'charge_overcurrent_a',
+            319: 'overheat_cutoff_c',
+            320: 'low_temp_charge_cutoff_c',
+            321: 'charge_restart_level_percent',
+            322: 'battery_max_cycles',
+            323: 'state_of_health_permille',
+            328: 'state_of_charge_permille',
+            329: 'invert_ext_current_sensor',
+            330: 'charger_type',
+            331: 'load_switch_type',
+            332: 'automatic_recovery_count',
+            333: 'charger_switch_type',
+            334: 'ignition_source',
+            335: 'charger_detection_source',
+            337: 'precharge_pin',
+            338: 'precharge_duration',
+            339: 'temperature_sensor_type',
+            340: 'operation_mode',
+            341: 'single_port_switch_type',
+            342: 'broadcast_interval',
+            343: 'communication_protocol',
         };
     }
 
@@ -171,9 +208,19 @@ export class TinyBMSConfigManager {
             const data = await response.json();
             const registers = data.registers || [];
 
-            // Store register values in map
+            this.registers.clear();
+
             registers.forEach(reg => {
-                this.registers.set(reg.address, reg.current_user_value);
+                const key = reg.key || this.registerKeyMap[reg.address];
+                const currentValue =
+                    typeof reg.current_user_value !== 'undefined'
+                        ? reg.current_user_value
+                        : reg.value;
+                this.registers.set(reg.address, {
+                    ...reg,
+                    key,
+                    current_user_value: currentValue,
+                });
             });
 
             // Display current values in spans
@@ -193,7 +240,8 @@ export class TinyBMSConfigManager {
      */
     displayCurrentValues() {
         Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
-            const value = this.registers.get(registerNum);
+            const register = this.registers.get(registerNum);
+            const value = this.getRegisterUserValue(register);
             if (value !== undefined) {
                 const currentSpan = document.getElementById(`current-${fieldId}`);
                 if (currentSpan) {
@@ -229,7 +277,8 @@ export class TinyBMSConfigManager {
         try {
             // Use register values to populate form
             Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
-                const value = this.registers.get(registerNum);
+                const register = this.registers.get(registerNum);
+                const value = this.getRegisterUserValue(register);
                 if (value !== undefined) {
                     this.setFieldValue(fieldId, value);
                 }
@@ -343,10 +392,173 @@ export class TinyBMSConfigManager {
 
         if (field.type === 'checkbox') {
             return field.checked;
-        } else if (field.type === 'number') {
-            return parseFloat(field.value);
-        } else {
-            return field.value;
+        }
+
+        if (field.type === 'number') {
+            const value = field.value.trim();
+            return value === '' ? null : parseFloat(value);
+        }
+
+        if (field.tagName === 'SELECT') {
+            const selectedValue = field.value;
+            if (selectedValue === '') {
+                return null;
+            }
+            const numeric = Number(selectedValue);
+            return Number.isNaN(numeric) ? selectedValue : numeric;
+        }
+
+        const value = field.value.trim();
+        if (value === '') {
+            return null;
+        }
+
+        const numeric = Number(value);
+        return Number.isNaN(numeric) ? value : numeric;
+    }
+
+    getRegisterUserValue(register) {
+        if (!register) {
+            return undefined;
+        }
+
+        if (register.current_user_value !== undefined && register.current_user_value !== null) {
+            return register.current_user_value;
+        }
+
+        if (register.value !== undefined && register.value !== null) {
+            return register.value;
+        }
+
+        return undefined;
+    }
+
+    normalizeValueForRegister(register, rawValue) {
+        if (rawValue === null || typeof rawValue === 'undefined') {
+            return null;
+        }
+
+        if (typeof rawValue === 'boolean') {
+            return rawValue ? 1 : 0;
+        }
+
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            if (trimmed === '') {
+                return null;
+            }
+            const numeric = Number(trimmed);
+            return Number.isNaN(numeric) ? trimmed : numeric;
+        }
+
+        if (typeof rawValue === 'number') {
+            if (register && (register.is_enum || Array.isArray(register.enum) || Array.isArray(register.enum_options))) {
+                return Number.isNaN(rawValue) ? rawValue : Math.trunc(rawValue);
+            }
+
+            if (register && typeof register.precision === 'number' && Number.isFinite(register.precision)) {
+                const factor = Math.pow(10, register.precision);
+                if (factor > 0 && Number.isFinite(factor)) {
+                    return Math.round(rawValue * factor) / factor;
+                }
+            }
+
+            return rawValue;
+        }
+
+        return rawValue;
+    }
+
+    buildRegisterUpdates(fieldIds) {
+        const updates = [];
+
+        fieldIds.forEach(fieldId => {
+            const registerNum = this.registerMap[fieldId];
+            if (registerNum === undefined) {
+                return;
+            }
+
+            const register = this.registers.get(registerNum);
+            const key = register?.key || this.registerKeyMap[registerNum];
+            if (!key) {
+                console.warn(`No key found for register ${registerNum} (${fieldId})`);
+                return;
+            }
+
+            const rawValue = this.getFieldValue(fieldId);
+            const value = this.normalizeValueForRegister(register, rawValue);
+            if (value === null || typeof value === 'undefined') {
+                return;
+            }
+            if (typeof value === 'number' && Number.isNaN(value)) {
+                return;
+            }
+
+            const currentValue = this.getRegisterUserValue(register);
+            let hasChanged = true;
+            if (currentValue !== undefined && currentValue !== null) {
+                if (typeof value === 'number' && typeof currentValue === 'number') {
+                    hasChanged = Math.abs(value - currentValue) > 1e-6;
+                } else {
+                    hasChanged = value !== currentValue;
+                }
+            }
+
+            if (!hasChanged) {
+                return;
+            }
+
+            updates.push({
+                address: registerNum,
+                key,
+                value,
+                fieldId,
+            });
+        });
+
+        return updates;
+    }
+
+    async sendRegisterUpdates(updates) {
+        const responses = [];
+        for (const update of updates) {
+            const body = JSON.stringify({
+                key: update.key,
+                value: update.value,
+            });
+
+            const response = await fetch('/api/registers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body,
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Registre ${update.key}: ${errorText || response.statusText}`);
+            }
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (jsonError) {
+                // Response without JSON body; ignore
+            }
+
+            responses.push({ ...update, payload });
+        }
+
+        return responses;
+    }
+
+    applyLocalRegisterUpdate(address, value) {
+        const register = this.registers.get(address);
+        if (register) {
+            register.current_user_value = value;
+            register.value = value;
+            this.registers.set(address, register);
         }
     }
 
@@ -444,47 +656,26 @@ export class TinyBMSConfigManager {
      * Upload registers to BMS via /api/registers
      */
     async uploadRegisters(category, fieldIds) {
+        const updates = this.buildRegisterUpdates(fieldIds);
+
+        if (updates.length === 0) {
+            this.showNotification(`Aucune modification détectée pour ${category}`, 'info');
+            return;
+        }
+
         try {
             this.showNotification(`Envoi des paramètres ${category} au BMS...`, 'info');
 
-            // Collect register changes
-            const registerChanges = {};
+            await this.sendRegisterUpdates(updates);
 
-            fieldIds.forEach(fieldId => {
-                const registerNum = this.registerMap[fieldId];
-                if (registerNum !== undefined) {
-                    const value = this.getFieldValue(fieldId);
-                    if (value !== null && value !== undefined) {
-                        // Use register number as key
-                        registerChanges[registerNum] = value;
-                    }
-                }
+            updates.forEach(update => {
+                this.applyLocalRegisterUpdate(update.address, update.value);
             });
 
-            console.log('Sending register changes:', registerChanges);
+            this.displayCurrentValues();
+            this.updateConfigTrackingInfo();
 
-            const response = await fetch('/api/registers', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(registerChanges),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Erreur ${response.status}: ${errorText}`);
-            }
-
-            const result = await response.json();
-            this.showNotification(`✓ Configuration ${category} enregistrée avec succès (${Object.keys(registerChanges).length} registres)`, 'success');
-
-            // Reload registers and display updated values
-            setTimeout(async () => {
-                await this.loadRegisters();
-                await this.loadConfiguration();
-            }, 1000);
-
+            this.showNotification(`✓ Configuration ${category} enregistrée avec succès (${updates.length} registre${updates.length > 1 ? 's' : ''})`, 'success');
         } catch (error) {
             console.error(`Error uploading ${category} settings:`, error);
             this.showNotification(`✗ Erreur lors de l'enregistrement: ${error.message}`, 'danger');
@@ -654,50 +845,27 @@ export class TinyBMSConfigManager {
                 'protocol',
             ];
 
-            // Collect register changes
-            const registerChanges = {};
-            let changedCount = 0;
-
-            allFieldIds.forEach(fieldId => {
-                const registerNum = this.registerMap[fieldId];
-                if (registerNum !== undefined) {
-                    const value = this.getFieldValue(fieldId);
-                    if (value !== null && value !== undefined) {
-                        // Use register number as key
-                        registerChanges[registerNum] = value;
-                        changedCount++;
-                    }
-                }
-            });
-
-            console.log('Sending complete configuration:', registerChanges);
-
-            const response = await fetch('/api/registers', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(registerChanges),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Erreur ${response.status}: ${errorText}`);
+            const updates = this.buildRegisterUpdates(allFieldIds);
+            if (updates.length === 0) {
+                this.showNotification('Aucune modification à envoyer', 'info');
+                return;
             }
 
-            const result = await response.json();
-            this.showNotification(`✓ Configuration complète envoyée avec succès (${changedCount} registres)`, 'success');
+            await this.sendRegisterUpdates(updates);
+
+            updates.forEach(update => {
+                this.applyLocalRegisterUpdate(update.address, update.value);
+            });
+
+            this.displayCurrentValues();
+            this.updateConfigTrackingInfo();
+
+            this.showNotification(`✓ Configuration complète envoyée avec succès (${updates.length} registre${updates.length > 1 ? 's' : ''})`, 'success');
 
             const statusEl = document.getElementById('config-status-text');
             if (statusEl) {
-                statusEl.textContent = `Configuration uploaded to BMS (${changedCount} registers)`;
+                statusEl.textContent = `Configuration uploaded to BMS (${updates.length} registers)`;
             }
-
-            // Reload registers and display updated values
-            setTimeout(async () => {
-                await this.loadRegisters();
-                await this.loadConfiguration();
-            }, 1000);
 
         } catch (error) {
             console.error('Error uploading configuration:', error);
@@ -876,7 +1044,8 @@ export class TinyBMSConfigManager {
         const differences = [];
 
         Object.entries(this.registerMap).forEach(([fieldId, registerNum]) => {
-            const currentValue = this.registers.get(registerNum);
+            const register = this.registers.get(registerNum);
+            const currentValue = this.getRegisterUserValue(register);
             const formValue = this.getFieldValue(fieldId);
 
             if (currentValue !== undefined && formValue !== null && formValue !== undefined) {

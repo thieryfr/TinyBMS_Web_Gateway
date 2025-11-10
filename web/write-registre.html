@@ -794,6 +794,43 @@
             }
         };
 
+        const REGISTER_KEYS = {
+            300: 'fully_charged_voltage_mv',
+            301: 'fully_discharged_voltage_mv',
+            303: 'early_balancing_threshold_mv',
+            304: 'charge_finished_current_ma',
+            305: 'peak_discharge_current_a',
+            306: 'battery_capacity_ah',
+            307: 'cell_count',
+            308: 'allowed_disbalance_mv',
+            310: 'charger_startup_delay_s',
+            311: 'charger_disable_delay_s',
+            315: 'overvoltage_cutoff_mv',
+            316: 'undervoltage_cutoff_mv',
+            317: 'discharge_overcurrent_a',
+            318: 'charge_overcurrent_a',
+            319: 'overheat_cutoff_c',
+            320: 'low_temp_charge_cutoff_c',
+            321: 'charge_restart_level_percent',
+            322: 'battery_max_cycles',
+            323: 'state_of_health_permille',
+            328: 'state_of_charge_permille',
+            329: 'invert_ext_current_sensor',
+            330: 'charger_type',
+            331: 'load_switch_type',
+            332: 'automatic_recovery_count',
+            333: 'charger_switch_type',
+            334: 'ignition_source',
+            335: 'charger_detection_source',
+            337: 'precharge_pin',
+            338: 'precharge_duration',
+            339: 'temperature_sensor_type',
+            340: 'operation_mode',
+            341: 'single_port_switch_type',
+            342: 'broadcast_interval',
+            343: 'communication_protocol'
+        };
+
         let currentRegisters = {};
 
         // Charger les registres au démarrage
@@ -807,8 +844,11 @@
 
                 // Stocker les valeurs actuelles
                 if (data.registers) {
+                    currentRegisters = {};
                     data.registers.forEach(reg => {
-                        currentRegisters[reg.address] = reg.current_user_value;
+                        const key = reg.key || REGISTER_KEYS[reg.address];
+                        const value = typeof reg.current_user_value !== 'undefined' ? reg.current_user_value : reg.value;
+                        currentRegisters[reg.address] = { value, key };
                     });
                 }
 
@@ -844,7 +884,8 @@
             }
 
             const reg = REGISTERS[regNum];
-            const currentValue = currentRegisters[regNum];
+            const registerInfo = currentRegisters[regNum];
+            const currentValue = registerInfo ? registerInfo.value : undefined;
 
             // Afficher les détails
             document.getElementById('register-details').style.display = 'block';
@@ -971,6 +1012,13 @@
                 return;
             }
 
+            const registerInfo = currentRegisters[regNum] || {};
+            const registerKey = registerInfo.key || REGISTER_KEYS[regNum];
+            if (!registerKey) {
+                showStatus(`Clé introuvable pour le registre ${regNum}`, 'error');
+                return;
+            }
+
             try {
                 showStatus('Envoi de la configuration...', 'info');
                 document.getElementById('write-button').disabled = true;
@@ -981,7 +1029,8 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        [regNum]: value
+                        key: registerKey,
+                        value: value
                     }),
                 });
 
@@ -990,7 +1039,19 @@
                     throw new Error(`Erreur ${response.status}: ${errorText}`);
                 }
 
-                const result = await response.json();
+                try {
+                    await response.json();
+                } catch (jsonError) {
+                    // Certaines versions du firmware renvoient un corps vide
+                }
+
+                currentRegisters[regNum] = {
+                    value,
+                    key: registerKey
+                };
+
+                onRegisterChange({ target: { value: regNum } });
+
                 showStatus(`✓ Registre ${regNum} mis à jour avec succès!\nValeur: ${displayValue} ${reg.unit || ''}`, 'success');
 
                 // Recharger les registres
