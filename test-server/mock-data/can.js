@@ -1,4 +1,4 @@
-const CAN_BITRATE_BPS = 250000;
+const CAN_BITRATE_BPS = 500000;
 const OCCUPANCY_WINDOW_MS = 60000;
 
 const state = {

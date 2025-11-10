@@ -125,8 +125,8 @@
   },
   "can_messages": {
     "protocol": "Victron J1939-like (PGN based)",
-    "bitrate_bps": 250000,
-    "frame_format": "Extended (29-bit)",
+    "bitrate_bps": 500000,
+    "frame_format": "Standard (11-bit)",
     "gpio": {
       "tx": 7,
       "rx": 6
@@ -140,7 +140,7 @@
     "pgn_table": [
       {
         "pgn": "0x351",
-        "can_id_extended": "0x1851FEE5",
+        "can_id": "0x351",
         "name": "CVL/CCL/DCL",
         "description": "Charge Voltage Limit / Charge Current Limit / Discharge Current Limit",
         "dlc": 8,
@@ -154,7 +154,7 @@
       },
       {
         "pgn": "0x355",
-        "can_id_extended": "0x1855FEE5",
+        "can_id": "0x355",
         "name": "SOC/SOH",
         "description": "State of Charge and State of Health",
         "dlc": 8,
@@ -167,7 +167,7 @@
       },
       {
         "pgn": "0x356",
-        "can_id_extended": "0x1856FEE5",
+        "can_id": "0x356",
         "name": "Voltage/Current",
         "description": "Pack voltage and current with temperature",
         "dlc": 8,
@@ -181,7 +181,7 @@
       },
       {
         "pgn": "0x35A",
-        "can_id_extended": "0x185AFEE5",
+        "can_id": "0x35A",
         "name": "Alarms",
         "description": "Alarm bits and status flags",
         "dlc": 8,
@@ -190,7 +190,7 @@
       },
       {
         "pgn": "0x373",
-        "can_id_extended": "0x1873FEE5",
+        "can_id": "0x373",
         "name": "Cell Extremes",
         "description": "Minimum and maximum cell voltages and temperatures",
         "dlc": 8,
@@ -205,7 +205,7 @@
       },
       {
         "pgn": "0x378",
-        "can_id_extended": "0x1878FEE5",
+        "can_id": "0x378",
         "name": "Energy Counters",
         "description": "Energy charged and discharged",
         "dlc": 8,

@@ -289,7 +289,7 @@
                       <div class="flow-arrow">
                         <div class="text-center">
                           <i class="ti ti-arrow-down"></i>
-                          <div class="flow-label">CAN Bus • 250 kbps • 19 PGN</div>
+                          <div class="flow-label">CAN Bus • 500 kbps • 19 trames (11-bit)</div>
                         </div>
                       </div>
                     </div>
@@ -299,7 +299,7 @@
                       <h4>Victron Cerbo GX</h4>
                       <div class="flow-label">Système Victron</div>
                       <div class="mt-2">
-                        <span class="protocol-badge can">CAN Extended</span>
+                        <span class="protocol-badge can">CAN 11-bit</span>
                       </div>
                     </div>
                   </div>
@@ -404,8 +404,8 @@
                   <div class="alert alert-info">
                     <i class="ti ti-info-circle me-2"></i>
                     <strong>Protocole:</strong> Victron J1939-like •
-                    <strong>Bitrate:</strong> 250 kbps •
-                    <strong>Format:</strong> Extended (29-bit) •
+                    <strong>Bitrate:</strong> 500 kbps •
+                    <strong>Format:</strong> Standard (11-bit) •
                     <strong>Source:</strong> 0xE5
                   </div>
 
@@ -414,7 +414,7 @@
                       <thead>
                         <tr>
                           <th>PGN</th>
-                          <th>CAN ID Extended</th>
+                          <th>CAN ID (11-bit)</th>
                           <th>Nom</th>
                           <th>Description</th>
                           <th>DLC</th>
@@ -605,25 +605,26 @@
 
       // Données CAN
       const canData = [
-        { pgn: '0x307', canId: '0x18FFF5E5', name: 'Handshake', description: '"VIC" + info identité', dlc: 3, period: 'Connexion' },
-        { pgn: '0x351', canId: '0x1851FEE5', name: 'CVL/CCL/DCL', description: 'Charge Voltage/Current Limit, Discharge Current Limit', dlc: 8, period: '100' },
-        { pgn: '0x355', canId: '0x1855FEE5', name: 'SOC/SOH', description: 'State of Charge (0-10000=0-100%), State of Health', dlc: 8, period: '1000' },
-        { pgn: '0x356', canId: '0x1856FEE5', name: 'Voltage/Current', description: 'Voltage, Current, Temperature', dlc: 8, period: '1000' },
-        { pgn: '0x35A', canId: '0x185AFEE5', name: 'Alarms', description: 'Bits d\'alarme (8 bytes)', dlc: 8, period: 'Change' },
-        { pgn: '0x35E', canId: '0x185EFEE5', name: 'Manufacturer', description: 'Manufacturer ID (ASCII/bytes)', dlc: 8, period: 'Connexion' },
-        { pgn: '0x35F', canId: '0x185FFEE5', name: 'Battery Info', description: 'Model ID, Firmware, Capacity', dlc: 8, period: 'Connexion' },
-        { pgn: '0x370', canId: '0x1870FEE5', name: 'BMS Name Part 1', description: 'Nom batterie bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
-        { pgn: '0x371', canId: '0x1871FEE5', name: 'BMS Name Part 2', description: 'Nom batterie bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' },
-        { pgn: '0x372', canId: '0x1872FEE5', name: 'Module Status', description: 'État des modules', dlc: 8, period: '1000' },
-        { pgn: '0x373', canId: '0x1873FEE5', name: 'Cell Extremes', description: 'Min/Max cell voltages, Min/Max temperatures', dlc: 8, period: '1000' },
-        { pgn: '0x374', canId: '0x1874FEE5', name: 'Min Cell ID', description: 'Cell ID avec voltage min (0-15)', dlc: 2, period: '1000' },
-        { pgn: '0x375', canId: '0x1875FEE5', name: 'Max Cell ID', description: 'Cell ID avec voltage max (0-15)', dlc: 2, period: '1000' },
-        { pgn: '0x376', canId: '0x1876FEE5', name: 'Min Temp ID', description: 'ID source température min', dlc: 2, period: '1000' },
-        { pgn: '0x377', canId: '0x1877FEE5', name: 'Max Temp ID', description: 'ID source température max', dlc: 2, period: '1000' },
-        { pgn: '0x378', canId: '0x1878FEE5', name: 'Energy Counters', description: 'Énergie chargée, déchargée (Wh)', dlc: 8, period: '10000' },
-        { pgn: '0x379', canId: '0x1879FEE5', name: 'Installed Capacity', description: 'Capacité nominale (Ah)', dlc: 8, period: 'Connexion' },
-        { pgn: '0x380', canId: '0x1880FEE5', name: 'Serial Part 1', description: 'Série bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
-        { pgn: '0x381', canId: '0x1881FEE5', name: 'Serial Part 2', description: 'Série bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' }
+        { pgn: 'Keepalive', canId: '0x305', name: 'Keepalive', description: 'Battement de cœur Victron (payload 0x00)', dlc: 1, period: '1000' },
+        { pgn: '0x307', canId: '0x307', name: 'Handshake', description: '"VIC" + info identité', dlc: 3, period: 'Connexion' },
+        { pgn: '0x351', canId: '0x351', name: 'CVL/CCL/DCL', description: 'Charge Voltage/Current Limit, Discharge Current Limit', dlc: 8, period: '100' },
+        { pgn: '0x355', canId: '0x355', name: 'SOC/SOH', description: 'State of Charge (0-10000=0-100%), State of Health', dlc: 8, period: '1000' },
+        { pgn: '0x356', canId: '0x356', name: 'Voltage/Current', description: 'Voltage, Current, Temperature', dlc: 8, period: '1000' },
+        { pgn: '0x35A', canId: '0x35A', name: 'Alarms', description: 'Bits d\'alarme (8 bytes)', dlc: 8, period: 'Change' },
+        { pgn: '0x35E', canId: '0x35E', name: 'Manufacturer', description: 'Manufacturer ID (ASCII/bytes)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x35F', canId: '0x35F', name: 'Battery Info', description: 'Model ID, Firmware, Capacity', dlc: 8, period: 'Connexion' },
+        { pgn: '0x370', canId: '0x370', name: 'BMS Name Part 1', description: 'Nom batterie bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x371', canId: '0x371', name: 'BMS Name Part 2', description: 'Nom batterie bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x372', canId: '0x372', name: 'Module Status', description: 'État des modules', dlc: 8, period: '1000' },
+        { pgn: '0x373', canId: '0x373', name: 'Cell Extremes', description: 'Min/Max cell voltages, Min/Max temperatures', dlc: 8, period: '1000' },
+        { pgn: '0x374', canId: '0x374', name: 'Min Cell ID', description: 'Cell ID avec voltage min (0-15)', dlc: 2, period: '1000' },
+        { pgn: '0x375', canId: '0x375', name: 'Max Cell ID', description: 'Cell ID avec voltage max (0-15)', dlc: 2, period: '1000' },
+        { pgn: '0x376', canId: '0x376', name: 'Min Temp ID', description: 'ID source température min', dlc: 2, period: '1000' },
+        { pgn: '0x377', canId: '0x377', name: 'Max Temp ID', description: 'ID source température max', dlc: 2, period: '1000' },
+        { pgn: '0x378', canId: '0x378', name: 'Energy Counters', description: 'Énergie chargée, déchargée (Wh)', dlc: 8, period: '10000' },
+        { pgn: '0x379', canId: '0x379', name: 'Installed Capacity', description: 'Capacité nominale (Ah)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x380', canId: '0x380', name: 'Serial Part 1', description: 'Série bytes [0:7] (ASCII)', dlc: 8, period: 'Connexion' },
+        { pgn: '0x381', canId: '0x381', name: 'Serial Part 2', description: 'Série bytes [8:15] (ASCII)', dlc: 8, period: 'Connexion' }
       ];
 
       // Données REST API

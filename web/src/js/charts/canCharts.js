@@ -5,7 +5,9 @@ const MAX_ID_ROWS = 8;
 
 function formatCanId(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return `0x${value.toString(16).toUpperCase().padStart(3, '0')}`;
+    const hex = value.toString(16).toUpperCase();
+    const width = value <= 0x7FF ? 3 : hex.length;
+    return `0x${hex.padStart(width, '0')}`;
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -15,13 +17,17 @@ function formatCanId(value) {
     if (/^0x/i.test(trimmed)) {
       const parsed = Number.parseInt(trimmed, 16);
       if (Number.isFinite(parsed)) {
-        return `0x${parsed.toString(16).toUpperCase()}`;
+        const hex = parsed.toString(16).toUpperCase();
+        const width = parsed <= 0x7FF ? 3 : hex.length;
+        return `0x${hex.padStart(width, '0')}`;
       }
       return trimmed.toUpperCase();
     }
     const parsedDec = Number.parseInt(trimmed, 10);
     if (Number.isFinite(parsedDec)) {
-      return `0x${parsedDec.toString(16).toUpperCase()}`;
+      const hex = parsedDec.toString(16).toUpperCase();
+      const width = parsedDec <= 0x7FF ? 3 : hex.length;
+      return `0x${hex.padStart(width, '0')}`;
     }
     return trimmed.toUpperCase();
   }
@@ -87,8 +93,8 @@ function resolveFrameLength(frame) {
   return 0;
 }
 
-export function estimateCanBusOccupancy(frames, { bitrate = 250000, windowSeconds = 60 } = {}) {
-  const safeBitrate = Number.isFinite(bitrate) && bitrate > 0 ? bitrate : 250000;
+export function estimateCanBusOccupancy(frames, { bitrate = 500000, windowSeconds = 60 } = {}) {
+  const safeBitrate = Number.isFinite(bitrate) && bitrate > 0 ? bitrate : 500000;
   const safeWindow = Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds : 60;
 
   if (!Array.isArray(frames) || frames.length === 0) {
