@@ -742,6 +742,29 @@ static bool s_nvs_initialised = false;
 // NOTE: Currently protects write operations (setters) only.
 // TODO: Full thread safety requires protecting all config structure access
 static SemaphoreHandle_t s_config_mutex = NULL;
+static const TickType_t CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS = pdMS_TO_TICKS(1000);
+
+static esp_err_t config_manager_lock(TickType_t timeout)
+{
+    if (s_config_mutex == NULL) {
+        ESP_LOGE(TAG, "Config mutex not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_config_mutex, timeout) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire config mutex");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    return ESP_OK;
+}
+
+static void config_manager_unlock(void)
+{
+    if (s_config_mutex != NULL) {
+        xSemaphoreGive(s_config_mutex);
+    }
+}
 
 static bool config_manager_json_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
 {
@@ -1203,7 +1226,7 @@ static void config_manager_publish_register_change(const config_manager_register
     }
 }
 
-static esp_err_t config_manager_build_config_snapshot(void)
+static esp_err_t config_manager_build_config_snapshot_locked(void)
 {
     config_manager_ensure_topics_loaded();
 
@@ -1333,6 +1356,18 @@ static esp_err_t config_manager_build_config_snapshot(void)
 
     s_config_length = offset;
     return ESP_OK;
+}
+
+static esp_err_t config_manager_build_config_snapshot(void)
+{
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
+    esp_err_t result = config_manager_build_config_snapshot_locked();
+    config_manager_unlock();
+    return result;
 }
 
 static void config_manager_load_register_defaults(void)
@@ -1564,6 +1599,11 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
 
     cJSON_Delete(root);
 
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
     char previous_device_name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
     config_manager_copy_string(previous_device_name,
                                sizeof(previous_device_name),
@@ -1601,7 +1641,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         uart_bms_set_poll_interval_ms(s_uart_poll_interval_ms);
     }
 
-    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    esp_err_t snapshot_err = config_manager_build_config_snapshot_locked();
     if (snapshot_err == ESP_OK) {
         config_manager_publish_config_snapshot();
     }
@@ -1613,6 +1653,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         }
     }
 
+    config_manager_unlock();
     return snapshot_err;
 }
 
@@ -1777,26 +1818,30 @@ void config_manager_init(void)
 uint32_t config_manager_get_uart_poll_interval_ms(void)
 {
     config_manager_ensure_initialised();
-    return s_uart_poll_interval_ms;
+
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning default UART interval due to lock failure");
+        return UART_BMS_DEFAULT_POLL_INTERVAL_MS;
+    }
+
+    uint32_t interval = s_uart_poll_interval_ms;
+    config_manager_unlock();
+    return interval;
 }
 
 esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
 {
     config_manager_ensure_initialised();
 
-    if (s_config_mutex == NULL) {
-        ESP_LOGE(TAG, "Config mutex not initialized");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    if (xSemaphoreTake(s_config_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
-        ESP_LOGW(TAG, "Failed to acquire config mutex");
-        return ESP_ERR_TIMEOUT;
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
     }
 
     uint32_t clamped = config_manager_clamp_poll_interval(interval_ms);
     if (clamped == s_uart_poll_interval_ms) {
-        xSemaphoreGive(s_config_mutex);
+        config_manager_unlock();
         uart_bms_set_poll_interval_ms(clamped);
         return ESP_OK;
     }
@@ -1809,7 +1854,7 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
         ESP_LOGW(TAG, "Failed to persist UART poll interval: %s", esp_err_to_name(persist_err));
     }
 
-    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    esp_err_t snapshot_err = config_manager_build_config_snapshot_locked();
     if (snapshot_err == ESP_OK) {
         config_manager_publish_config_snapshot();
         if (persist_err == ESP_OK && s_config_file_loaded) {
@@ -1820,7 +1865,7 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
         }
     }
 
-    xSemaphoreGive(s_config_mutex);
+    config_manager_unlock();
 
     if (persist_err != ESP_OK) {
         return persist_err;
@@ -1837,7 +1882,16 @@ const config_manager_uart_pins_t *config_manager_get_uart_pins(void)
 const mqtt_client_config_t *config_manager_get_mqtt_client_config(void)
 {
     config_manager_ensure_initialised();
-    return &s_mqtt_config;
+
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning MQTT client config without lock");
+        return &s_mqtt_config;
+    }
+
+    const mqtt_client_config_t *config = &s_mqtt_config;
+    config_manager_unlock();
+    return config;
 }
 
 esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *config)
@@ -1847,6 +1901,11 @@ esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *conf
     }
 
     config_manager_ensure_initialised();
+
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
 
     mqtt_client_config_t updated = s_mqtt_config;
     config_manager_copy_string(updated.broker_uri, sizeof(updated.broker_uri), config->broker_uri);
@@ -1870,24 +1929,35 @@ esp_err_t config_manager_set_mqtt_client_config(const mqtt_client_config_t *conf
     esp_err_t err = config_manager_store_mqtt_config_to_nvs(&updated);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to persist MQTT configuration: %s", esp_err_to_name(err));
+        config_manager_unlock();
         return err;
     }
 
     s_mqtt_config = updated;
 
-    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    esp_err_t snapshot_err = config_manager_build_config_snapshot_locked();
     if (snapshot_err == ESP_OK) {
         config_manager_publish_config_snapshot();
     } else {
         ESP_LOGW(TAG, "Failed to rebuild configuration snapshot: %s", esp_err_to_name(snapshot_err));
     }
+    config_manager_unlock();
     return snapshot_err;
 }
 
 const config_manager_mqtt_topics_t *config_manager_get_mqtt_topics(void)
 {
     config_manager_ensure_initialised();
-    return &s_mqtt_topics;
+
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning MQTT topics without lock");
+        return &s_mqtt_topics;
+    }
+
+    const config_manager_mqtt_topics_t *topics = &s_mqtt_topics;
+    config_manager_unlock();
+    return topics;
 }
 
 esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *topics)
@@ -1898,6 +1968,11 @@ esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *top
 
     config_manager_ensure_initialised();
 
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
     config_manager_mqtt_topics_t updated = s_mqtt_topics;
     config_manager_copy_topics(&updated, topics);
     config_manager_sanitise_mqtt_topics(&updated);
@@ -1905,17 +1980,19 @@ esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *top
     esp_err_t err = config_manager_store_mqtt_topics_to_nvs(&updated);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to persist MQTT topics: %s", esp_err_to_name(err));
+        config_manager_unlock();
         return err;
     }
 
     s_mqtt_topics = updated;
 
-    esp_err_t snapshot_err = config_manager_build_config_snapshot();
+    esp_err_t snapshot_err = config_manager_build_config_snapshot_locked();
     if (snapshot_err == ESP_OK) {
         config_manager_publish_config_snapshot();
     } else {
         ESP_LOGW(TAG, "Failed to rebuild configuration snapshot after topic update: %s", esp_err_to_name(snapshot_err));
     }
+    config_manager_unlock();
     return snapshot_err;
 }
 
@@ -1927,15 +2004,23 @@ esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_
 
     config_manager_ensure_initialised();
 
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
     if (s_config_length + 1 > buffer_size) {
+        config_manager_unlock();
         return ESP_ERR_INVALID_SIZE;
     }
 
-    memcpy(buffer, s_config_json, s_config_length + 1);
+    size_t length = s_config_length;
+    memcpy(buffer, s_config_json, length + 1);
     if (out_length != NULL) {
-        *out_length = s_config_length;
+        *out_length = length;
     }
 
+    config_manager_unlock();
     return ESP_OK;
 }
 
@@ -1982,13 +2067,21 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
 
     config_manager_ensure_initialised();
 
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
+    esp_err_t result = ESP_OK;
     size_t offset = 0;
+
     if (!config_manager_json_append(buffer,
                                     buffer_size,
                                     &offset,
                                     "{\"total\":%zu,\"registers\":[",
                                     s_register_count)) {
-        return ESP_ERR_INVALID_SIZE;
+        result = ESP_ERR_INVALID_SIZE;
+        goto cleanup;
     }
 
     for (size_t i = 0; i < s_register_count; ++i) {
@@ -2010,8 +2103,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
         if (!config_manager_json_append(buffer,
                                         buffer_size,
                                         &offset,
-                                        "%s{\"key\":\"%s\",\"label\":\"%s\",\"unit\":\"%s\",\"group\":\"%s\","
-                                        "\"type\":\"%s\",\"access\":\"%s\",\"address\":%u,\"scale\":%.6f,"
+                                        "%s{\"key\":\"%s\",\"label\":\"%s\",\"unit\":\"%s\",\"group\":\"%s\","\
+                                        "\"type\":\"%s\",\"access\":\"%s\",\"address\":%u,\"scale\":%.6f,"\
                                         "\"precision\":%u,\"value\":%.*f,\"raw\":%u,\"default\":%.*f",
                                         (i == 0) ? "" : ",",
                                         desc->key,
@@ -2028,7 +2121,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                         (unsigned)raw_value,
                                         is_enum ? 0 : desc->precision,
                                         default_user)) {
-            return ESP_ERR_INVALID_SIZE;
+            result = ESP_ERR_INVALID_SIZE;
+            goto cleanup;
         }
 
         if (!is_enum) {
@@ -2039,7 +2133,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                             ",\"min\":%.*f",
                                             desc->precision,
                                             min_user)) {
-                return ESP_ERR_INVALID_SIZE;
+                result = ESP_ERR_INVALID_SIZE;
+                goto cleanup;
             }
             if (desc->has_max &&
                 !config_manager_json_append(buffer,
@@ -2048,7 +2143,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                             ",\"max\":%.*f",
                                             desc->precision,
                                             max_user)) {
-                return ESP_ERR_INVALID_SIZE;
+                result = ESP_ERR_INVALID_SIZE;
+                goto cleanup;
             }
             if (desc->step_raw > 0.0f &&
                 !config_manager_json_append(buffer,
@@ -2057,7 +2153,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                             ",\"step\":%.*f",
                                             desc->precision,
                                             step_user)) {
-                return ESP_ERR_INVALID_SIZE;
+                result = ESP_ERR_INVALID_SIZE;
+                goto cleanup;
             }
         }
 
@@ -2067,7 +2164,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                         &offset,
                                         ",\"comment\":\"%s\"",
                                         desc->comment)) {
-            return ESP_ERR_INVALID_SIZE;
+            result = ESP_ERR_INVALID_SIZE;
+            goto cleanup;
         }
 
         if (desc->enum_count > 0U) {
@@ -2075,7 +2173,8 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                             buffer_size,
                                             &offset,
                                             ",\"enum\":[")) {
-                return ESP_ERR_INVALID_SIZE;
+                result = ESP_ERR_INVALID_SIZE;
+                goto cleanup;
             }
             for (size_t e = 0; e < desc->enum_count; ++e) {
                 const config_manager_enum_entry_t *entry = &desc->enum_values[e];
@@ -2086,30 +2185,38 @@ esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, si
                                                 (e == 0) ? "" : ",",
                                                 (unsigned)entry->value,
                                                 entry->label != NULL ? entry->label : "")) {
-                    return ESP_ERR_INVALID_SIZE;
+                    result = ESP_ERR_INVALID_SIZE;
+                    goto cleanup;
                 }
             }
             if (!config_manager_json_append(buffer, buffer_size, &offset, "]")) {
-                return ESP_ERR_INVALID_SIZE;
+                result = ESP_ERR_INVALID_SIZE;
+                goto cleanup;
             }
         }
 
         if (!config_manager_json_append(buffer, buffer_size, &offset, "}")) {
-            return ESP_ERR_INVALID_SIZE;
+            result = ESP_ERR_INVALID_SIZE;
+            goto cleanup;
         }
     }
 
     if (!config_manager_json_append(buffer, buffer_size, &offset, "]}")) {
-        return ESP_ERR_INVALID_SIZE;
+        result = ESP_ERR_INVALID_SIZE;
+        goto cleanup;
     }
 
     if (out_length != NULL) {
         *out_length = offset;
     }
 
-    return ESP_OK;
+cleanup:
+    config_manager_unlock();
+    if (result != ESP_OK && out_length != NULL) {
+        *out_length = 0;
+    }
+    return result;
 }
-
 esp_err_t config_manager_apply_register_update_json(const char *json, size_t length)
 {
     if (json == NULL) {
@@ -2182,10 +2289,22 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
         return write_err;
     }
 
+    esp_err_t lock_err = config_manager_lock(CONFIG_MANAGER_MUTEX_TIMEOUT_TICKS);
+    if (lock_err != ESP_OK) {
+        return lock_err;
+    }
+
     s_register_raw_values[index] = readback_raw;
-    config_manager_publish_register_change(desc, readback_raw);
+
 #ifdef ESP_PLATFORM
     esp_err_t persist_err = config_manager_store_register_raw(desc->address, readback_raw);
+#endif
+
+    esp_err_t snapshot_err = config_manager_build_config_snapshot_locked();
+    config_manager_unlock();
+
+    config_manager_publish_register_change(desc, readback_raw);
+#ifdef ESP_PLATFORM
     if (persist_err != ESP_OK) {
         ESP_LOGW(TAG,
                  "Failed to persist register 0x%04X: %s",
@@ -2193,7 +2312,7 @@ esp_err_t config_manager_apply_register_update_json(const char *json, size_t len
                  esp_err_to_name(persist_err));
     }
 #endif
-    return config_manager_build_config_snapshot();
+    return snapshot_err;
 }
 
 void config_manager_deinit(void)
