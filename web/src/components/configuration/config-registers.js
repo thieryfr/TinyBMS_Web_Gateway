@@ -10,6 +10,42 @@ export class ConfigRegistersManager {
         this.originalValues = new Map();
         this.dirtyRegisters = new Set();
         this.containerElement = null;
+        this.registerKeyFallback = {
+            300: 'fully_charged_voltage_mv',
+            301: 'fully_discharged_voltage_mv',
+            303: 'early_balancing_threshold_mv',
+            304: 'charge_finished_current_ma',
+            305: 'peak_discharge_current_a',
+            306: 'battery_capacity_ah',
+            307: 'cell_count',
+            308: 'allowed_disbalance_mv',
+            310: 'charger_startup_delay_s',
+            311: 'charger_disable_delay_s',
+            315: 'overvoltage_cutoff_mv',
+            316: 'undervoltage_cutoff_mv',
+            317: 'discharge_overcurrent_a',
+            318: 'charge_overcurrent_a',
+            319: 'overheat_cutoff_c',
+            320: 'low_temp_charge_cutoff_c',
+            321: 'charge_restart_level_percent',
+            322: 'battery_max_cycles',
+            323: 'state_of_health_permille',
+            328: 'state_of_charge_permille',
+            329: 'invert_ext_current_sensor',
+            330: 'charger_type',
+            331: 'load_switch_type',
+            332: 'automatic_recovery_count',
+            333: 'charger_switch_type',
+            334: 'ignition_source',
+            335: 'charger_detection_source',
+            337: 'precharge_pin',
+            338: 'precharge_duration',
+            339: 'temperature_sensor_type',
+            340: 'operation_mode',
+            341: 'single_port_switch_type',
+            342: 'broadcast_interval',
+            343: 'communication_protocol',
+        };
     }
 
     /**
@@ -39,7 +75,20 @@ export class ConfigRegistersManager {
             }
 
             const data = await response.json();
-            this.registers = data.registers || [];
+            const registers = data.registers || [];
+
+            this.registers = registers.map(reg => {
+                const key = reg.key || this.registerKeyFallback[reg.address];
+                const currentValue =
+                    typeof reg.current_user_value !== 'undefined'
+                        ? reg.current_user_value
+                        : reg.value;
+                return {
+                    ...reg,
+                    key,
+                    current_user_value: currentValue,
+                };
+            });
 
             // Store original values
             this.originalValues.clear();
@@ -53,6 +102,88 @@ export class ConfigRegistersManager {
             console.error('Error loading registers:', error);
             this.showError('Impossible de charger les registres TinyBMS');
         }
+    }
+
+    getRegisterValue(register) {
+        if (!register) {
+            return undefined;
+        }
+
+        if (register.current_user_value !== undefined && register.current_user_value !== null) {
+            return register.current_user_value;
+        }
+
+        if (register.value !== undefined && register.value !== null) {
+            return register.value;
+        }
+
+        return undefined;
+    }
+
+    normalizeValue(register, rawValue) {
+        if (rawValue === null || typeof rawValue === 'undefined') {
+            return null;
+        }
+
+        if (typeof rawValue === 'boolean') {
+            return rawValue ? 1 : 0;
+        }
+
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            if (trimmed === '') {
+                return null;
+            }
+            const numeric = Number(trimmed);
+            return Number.isNaN(numeric) ? trimmed : numeric;
+        }
+
+        if (typeof rawValue === 'number') {
+            if (register && register.is_enum) {
+                return Number.isNaN(rawValue) ? rawValue : Math.trunc(rawValue);
+            }
+
+            if (register && typeof register.precision === 'number' && Number.isFinite(register.precision)) {
+                const factor = Math.pow(10, register.precision);
+                if (factor > 0 && Number.isFinite(factor)) {
+                    return Math.round(rawValue * factor) / factor;
+                }
+            }
+
+            return rawValue;
+        }
+
+        return rawValue;
+    }
+
+    parseInputValue(input, register) {
+        if (!input) {
+            return null;
+        }
+
+        if (input.type === 'checkbox') {
+            return input.checked ? 1 : 0;
+        }
+
+        if (input.tagName === 'SELECT') {
+            const numeric = Number(input.value);
+            if (!Number.isNaN(numeric)) {
+                return register && register.is_enum ? Math.trunc(numeric) : numeric;
+            }
+            return input.value;
+        }
+
+        const rawValue = input.value != null ? input.value.toString().trim() : '';
+        if (rawValue === '') {
+            return null;
+        }
+
+        const numeric = Number(rawValue);
+        if (!Number.isNaN(numeric)) {
+            return this.normalizeValue(register, numeric);
+        }
+
+        return rawValue;
     }
 
     /**
@@ -158,37 +289,51 @@ export class ConfigRegistersManager {
         const fieldId = `reg-${register.address}`;
         const isReadOnly = register.access === 'ro';
         const isDirty = this.dirtyRegisters.has(register.address);
+        const currentValue = this.getRegisterValue(register);
+        const enumOptions = register.enum_options || register.enum || [];
+        const isEnum = register.is_enum || (Array.isArray(enumOptions) && enumOptions.length > 0);
 
         let fieldHtml = '';
 
-        if (register.is_enum) {
-            // Enum field (select dropdown)
+        if (isEnum) {
+            const optionsHtml = enumOptions.map(opt => {
+                const optionValue = opt.value;
+                const isSelected = optionValue == currentValue;
+                return `
+                        <option value="${optionValue}" ${isSelected ? 'selected' : ''}>
+                            ${this.escapeHtml(opt.label || optionValue)}
+                        </option>`;
+            }).join('');
+
             fieldHtml = `
                 <select id="${fieldId}"
                         class="form-control ${isDirty ? 'is-dirty' : ''}"
                         data-address="${register.address}"
                         ${isReadOnly ? 'disabled' : ''}>
-                    ${register.enum_options.map(opt => `
-                        <option value="${opt.value}" ${opt.value == register.current_user_value ? 'selected' : ''}>
-                            ${this.escapeHtml(opt.label)}
-                        </option>
-                    `).join('')}
+                    ${optionsHtml}
                 </select>
             `;
         } else {
-            // Numeric field
             const inputType = 'number';
-            const step = register.step || 0.01;
+            const step = register.step || register.step_user || 0.01;
             const precision = register.precision || 2;
+            const numericValue = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
+            const displayValue = Number.isFinite(numericValue)
+                ? numericValue.toFixed(precision)
+                : (currentValue !== undefined ? currentValue : '');
+            const minCandidate = register.min_value !== undefined ? register.min_value : register.min;
+            const maxCandidate = register.max_value !== undefined ? register.max_value : register.max;
+            const minAttr = register.has_min && typeof minCandidate !== 'undefined' ? `min="${minCandidate}"` : '';
+            const maxAttr = register.has_max && typeof maxCandidate !== 'undefined' ? `max="${maxCandidate}"` : '';
 
             fieldHtml = `
                 <input type="${inputType}"
                        id="${fieldId}"
                        class="form-control ${isDirty ? 'is-dirty' : ''}"
                        data-address="${register.address}"
-                       value="${register.current_user_value.toFixed(precision)}"
-                       ${register.has_min ? `min="${register.min_value}"` : ''}
-                       ${register.has_max ? `max="${register.max_value}"` : ''}
+                       value="${displayValue}"
+                       ${minAttr}
+                       ${maxAttr}
                        step="${step}"
                        ${isReadOnly ? 'readonly' : ''}>
             `;
@@ -253,10 +398,23 @@ export class ConfigRegistersManager {
     handleInputChange(event) {
         const input = event.target;
         const address = parseInt(input.dataset.address);
+        const register = this.registers.find(r => r.address === address);
         const originalValue = this.originalValues.get(address);
-        const currentValue = parseFloat(input.value);
+        const currentValue = this.parseInputValue(input, register);
 
-        if (Math.abs(currentValue - originalValue) > 0.0001) {
+        let isDirty = false;
+        if (originalValue === undefined || originalValue === null) {
+            isDirty = currentValue !== null && currentValue !== undefined;
+        } else if (typeof originalValue === 'number' && typeof currentValue === 'number') {
+            const tolerance = register && typeof register.precision === 'number'
+                ? Math.pow(10, -(register.precision + 1))
+                : 0.0001;
+            isDirty = Math.abs(currentValue - originalValue) > tolerance;
+        } else {
+            isDirty = currentValue !== originalValue;
+        }
+
+        if (isDirty) {
             this.dirtyRegisters.add(address);
             input.classList.add('is-dirty');
         } else {
@@ -308,10 +466,17 @@ export class ConfigRegistersManager {
                 const register = this.registers.find(r => r.address === address);
 
                 if (register) {
-                    if (register.is_enum) {
+                    const enumOptions = register.enum_options || register.enum || [];
+                    const isEnum = register.is_enum || (Array.isArray(enumOptions) && enumOptions.length > 0);
+                    if (isEnum) {
                         input.value = originalValue;
                     } else {
-                        input.value = originalValue.toFixed(register.precision || 2);
+                        const numericValue = typeof originalValue === 'number' ? originalValue : parseFloat(originalValue);
+                        if (Number.isFinite(numericValue)) {
+                            input.value = numericValue.toFixed(register.precision || 2);
+                        } else {
+                            input.value = originalValue !== undefined ? originalValue : '';
+                        }
                     }
                 }
 
@@ -332,50 +497,103 @@ export class ConfigRegistersManager {
             return;
         }
 
-        // Collect changes
-        const changes = {};
+        const updates = [];
         this.dirtyRegisters.forEach(address => {
             const input = document.querySelector(`[data-address="${address}"]`);
-            if (input) {
-                const register = this.registers.find(r => r.address === address);
-                if (register) {
-                    changes[register.key || `0x${address.toString(16)}`] = parseFloat(input.value);
-                }
+            if (!input) {
+                return;
             }
+
+            const register = this.registers.find(r => r.address === address);
+            if (!register) {
+                return;
+            }
+
+            const key = register.key || this.registerKeyFallback[address] || `0x${address.toString(16)}`;
+            const value = this.parseInputValue(input, register);
+            if (value === null || typeof value === 'undefined') {
+                return;
+            }
+            if (typeof value === 'number' && Number.isNaN(value)) {
+                return;
+            }
+
+            updates.push({ address, key, value, input, register });
         });
+
+        if (updates.length === 0) {
+            this.showStatus('Aucune modification valide à enregistrer', 'warning');
+            return;
+        }
 
         try {
             this.showStatus('Enregistrement en cours...', 'info');
 
+            await this.sendRegisterUpdates(updates);
+
+            updates.forEach(({ address, value, input, register }) => {
+                const normalized = this.normalizeValue(register, value);
+                this.originalValues.set(address, normalized);
+                this.updateRegisterValue(register, normalized);
+
+                const enumOptions = register.enum_options || register.enum || [];
+                const isEnum = register.is_enum || (Array.isArray(enumOptions) && enumOptions.length > 0);
+
+                if (isEnum) {
+                    input.value = normalized;
+                } else if (typeof normalized === 'number') {
+                    input.value = normalized.toFixed(register.precision || 2);
+                } else if (normalized !== null && normalized !== undefined) {
+                    input.value = normalized;
+                }
+
+                input.classList.remove('is-dirty');
+            });
+
+            this.dirtyRegisters.clear();
+            this.updateToolbarState();
+            this.showStatus(`Configuration enregistrée avec succès (${updates.length} registre${updates.length > 1 ? 's' : ''})`, 'success');
+
+        } catch (error) {
+            console.error('Error saving registers:', error);
+            this.showStatus(`Erreur lors de l'enregistrement: ${error.message}`, 'danger');
+        }
+    }
+
+    async sendRegisterUpdates(updates) {
+        for (const update of updates) {
             const response = await fetch('/api/registers', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(changes),
+                body: JSON.stringify({
+                    key: update.key,
+                    value: update.value,
+                }),
             });
 
             if (!response.ok) {
-                throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`Registre ${update.key}: ${errorText || response.statusText}`);
             }
 
-            // Update original values
-            this.dirtyRegisters.forEach(address => {
-                const input = document.querySelector(`[data-address="${address}"]`);
-                if (input) {
-                    const newValue = parseFloat(input.value);
-                    this.originalValues.set(address, newValue);
-                    input.classList.remove('is-dirty');
-                }
-            });
+            try {
+                await response.json();
+            } catch (jsonError) {
+                // Some firmware versions return an empty body; ignore parsing errors
+            }
+        }
+    }
 
-            this.dirtyRegisters.clear();
-            this.updateToolbarState();
-            this.showStatus(`Configuration enregistrée avec succès (${Object.keys(changes).length} registres modifiés)`, 'success');
+    updateRegisterValue(register, value) {
+        if (!register) {
+            return;
+        }
 
-        } catch (error) {
-            console.error('Error saving registers:', error);
-            this.showStatus(`Erreur lors de l'enregistrement: ${error.message}`, 'danger');
+        register.current_user_value = value;
+        if (register.hasOwnProperty('value')) {
+            register.value = value;
         }
     }
 
