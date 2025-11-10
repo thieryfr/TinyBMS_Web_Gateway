@@ -1,0 +1,173 @@
+================================================================================
+REFERENCE DES CHEMINS ABSOLUS - TinyBMS-GW
+================================================================================
+
+DOCUMENTATION GÉNÉRÉE:
+  /home/user/TinyBMS-GW/README_DOCUMENTATION.md
+  /home/user/TinyBMS-GW/DOCUMENTATION_COMMUNICATIONS.md
+  /home/user/TinyBMS-GW/COMMUNICATION_REFERENCE.json
+  /home/user/TinyBMS-GW/FILES_REFERENCE.md
+  /home/user/TinyBMS-GW/ANALYSIS_SUMMARY.txt
+  /home/user/TinyBMS-GW/PATHS_REFERENCE.txt
+
+================================================================================
+FICHIERS MODBUS/UART BMS (45 registres)
+================================================================================
+
+Définitions registres:
+  /home/user/TinyBMS-GW/main/uart_bms/uart_bms_protocol.h
+
+Table registres (g_uart_bms_registers):
+  /home/user/TinyBMS-GW/main/uart_bms/uart_bms_protocol.c
+
+Structure de données (uart_bms_live_data_t):
+  /home/user/TinyBMS-GW/main/uart_bms/uart_bms.h
+
+Implémentation UART:
+  /home/user/TinyBMS-GW/main/uart_bms/uart_bms.cpp
+  /home/user/TinyBMS-GW/main/uart_bms/uart_bms.h
+
+Construction frames Modbus:
+  /home/user/TinyBMS-GW/main/uart_bms/uart_frame_builder.h
+  /home/user/TinyBMS-GW/main/uart_bms/uart_frame_builder.cpp
+
+Parsing réponses:
+  /home/user/TinyBMS-GW/main/uart_bms/uart_response_parser.h
+  /home/user/TinyBMS-GW/main/uart_bms/uart_response_parser.cpp
+
+================================================================================
+FICHIERS CAN VICTRON (19 PGN)
+================================================================================
+
+Définitions PGN (lignes 50-69):
+  /home/user/TinyBMS-GW/main/can_publisher/conversion_table.c
+
+Encodeurs CAN (lignes 325-1300+):
+  /home/user/TinyBMS-GW/main/can_publisher/conversion_table.c
+
+Interface conversion:
+  /home/user/TinyBMS-GW/main/can_publisher/conversion_table.h
+
+TWAI Driver (keepalive, thread safety):
+  /home/user/TinyBMS-GW/main/can_victron/can_victron.h
+  /home/user/TinyBMS-GW/main/can_victron/can_victron.c
+
+Publisher interface:
+  /home/user/TinyBMS-GW/main/can_publisher/can_publisher.h
+  /home/user/TinyBMS-GW/main/can_publisher/can_publisher.c
+
+CVL Controller (Charge Voltage Limit):
+  /home/user/TinyBMS-GW/main/can_publisher/cvl_controller.h
+  /home/user/TinyBMS-GW/main/can_publisher/cvl_controller.c
+
+CVL Types:
+  /home/user/TinyBMS-GW/main/can_publisher/cvl_types.h
+
+Configuration CAN defaults:
+  /home/user/TinyBMS-GW/main/include/can_config_defaults.h
+
+================================================================================
+FICHIERS WEB SERVER (REST API + WEBSOCKETS)
+================================================================================
+
+Déclaration endpoints (lignes 14-35):
+  /home/user/TinyBMS-GW/main/web_server/web_server.h
+
+Implémentation endpoints REST (lignes 2609-2700+):
+  /home/user/TinyBMS-GW/main/web_server/web_server.c
+
+Handlers WebSocket (lignes 2834-2878):
+  /home/user/TinyBMS-GW/main/web_server/web_server.c
+
+Déclaration handlers alertes:
+  /home/user/TinyBMS-GW/main/web_server/web_server_alerts.h
+
+Implémentation alertes:
+  /home/user/TinyBMS-GW/main/web_server/web_server_alerts.c
+
+Client API JavaScript (wrapper fetch):
+  /home/user/TinyBMS-GW/web/src/js/utils/fetchAPI.js
+
+UI Alertes:
+  /home/user/TinyBMS-GW/web/src/components/alerts/alerts.js
+
+Descriptions CAN (tooltips):
+  /home/user/TinyBMS-GW/web/src/js/utils/canTooltips.js
+
+================================================================================
+FICHIERS CONFIGURATION & MONITORING
+================================================================================
+
+Configuration management:
+  /home/user/TinyBMS-GW/main/config_manager/config_manager.h
+  /home/user/TinyBMS-GW/main/config_manager/config_manager.c
+
+Monitoring et status:
+  /home/user/TinyBMS-GW/main/monitoring/monitoring.h
+  /home/user/TinyBMS-GW/main/monitoring/monitoring.c
+
+Alert manager:
+  /home/user/TinyBMS-GW/main/alert_manager/alert_manager.h
+  /home/user/TinyBMS-GW/main/alert_manager/alert_manager.c
+
+System metrics:
+  /home/user/TinyBMS-GW/main/system_metrics/system_metrics.h
+  /home/user/TinyBMS-GW/main/system_metrics/system_metrics.c
+
+================================================================================
+FICHIERS INFRASTRUCTURE
+================================================================================
+
+Event bus interface:
+  /home/user/TinyBMS-GW/main/event_bus/event_bus.h
+  /home/user/TinyBMS-GW/main/event_bus/event_bus.c
+
+Event types:
+  /home/user/TinyBMS-GW/main/include/app_events.h
+
+Main initialization:
+  /home/user/TinyBMS-GW/main/app_main.c
+
+MQTT client:
+  /home/user/TinyBMS-GW/main/mqtt_client/mqtt_client.h
+  /home/user/TinyBMS-GW/main/mqtt_client/mqtt_client.c
+
+MQTT gateway:
+  /home/user/TinyBMS-GW/main/mqtt_gateway/mqtt_gateway.h
+  /home/user/TinyBMS-GW/main/mqtt_gateway/mqtt_gateway.c
+
+OTA update:
+  /home/user/TinyBMS-GW/main/ota_update/ota_update.h
+  /home/user/TinyBMS-GW/main/ota_update/ota_update.c
+
+System control:
+  /home/user/TinyBMS-GW/main/system_control/system_control.h
+  /home/user/TinyBMS-GW/main/system_control/system_control.c
+
+================================================================================
+COMMANDES UTILES
+================================================================================
+
+Rechercher un registre Modbus:
+  grep -n "0x00YY" /home/user/TinyBMS-GW/main/uart_bms/uart_bms_protocol.c
+
+Trouver un PGN CAN:
+  grep -n "0xPGN" /home/user/TinyBMS-GW/main/can_publisher/conversion_table.c
+
+Lister tous les endpoints API:
+  grep -n "\.uri = " /home/user/TinyBMS-GW/main/web_server/web_server.c
+
+Trouver les WebSocket handlers:
+  grep -n "/ws/" /home/user/TinyBMS-GW/main/web_server/web_server.c
+
+Compter les registres:
+  grep -c "\.id = UART_BMS_REGISTER_" /home/user/TinyBMS-GW/main/uart_bms/uart_bms_protocol.c
+
+Lister tous les PGN:
+  grep "VICTRON_PGN_" /home/user/TinyBMS-GW/main/can_publisher/conversion_table.c
+
+================================================================================
+Version: 1.0
+Generated: 2025-11-10
+Project: TinyBMS-GW (ESP32 Victron Gateway)
+================================================================================
