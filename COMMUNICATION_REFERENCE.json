@@ -1,0 +1,502 @@
+{
+  "project": {
+    "name": "TinyBMS-GW",
+    "description": "ESP32 Gateway for TinyBMS battery management system to Victron CAN",
+    "platform": "ESP32 (ESP-IDF)",
+    "version": "1.0",
+    "generated": "2025-11-10"
+  },
+  "modbus_registers": {
+    "protocol": "Modbus RTU over UART",
+    "total_registers": 45,
+    "word_count": 59,
+    "polling_interval_ms": 250,
+    "response_timeout_ms": 200,
+    "categories": {
+      "cell_voltages": {
+        "description": "Individual cell voltages (16 cells)",
+        "address_range": "0x0000-0x000F",
+        "registers": [
+          {
+            "id": "CELL_VOLTAGE_01",
+            "address": "0x0000",
+            "type": "UINT16",
+            "scale": 0.1,
+            "unit": "mV",
+            "description": "Cell 1 voltage"
+          },
+          {
+            "id": "CELL_VOLTAGE_16",
+            "address": "0x000F",
+            "type": "UINT16",
+            "scale": 0.1,
+            "unit": "mV",
+            "description": "Cell 16 voltage"
+          }
+        ]
+      },
+      "primary_data": {
+        "description": "Main operational data",
+        "address_range": "0x0020-0x0034",
+        "registers": [
+          {
+            "id": "LIFETIME_COUNTER",
+            "address": "0x0020",
+            "type": "UINT32",
+            "words": 2,
+            "scale": 1.0,
+            "unit": "seconds",
+            "description": "BMS uptime counter"
+          },
+          {
+            "id": "PACK_VOLTAGE",
+            "address": "0x0024",
+            "type": "FLOAT32",
+            "words": 2,
+            "scale": 1.0,
+            "unit": "V",
+            "description": "Total pack voltage"
+          },
+          {
+            "id": "PACK_CURRENT",
+            "address": "0x0026",
+            "type": "FLOAT32",
+            "words": 2,
+            "scale": 1.0,
+            "unit": "A",
+            "description": "Pack current (positive=charging)"
+          },
+          {
+            "id": "STATE_OF_CHARGE",
+            "address": "0x002E",
+            "type": "UINT32",
+            "words": 2,
+            "scale": 0.000001,
+            "unit": "%",
+            "description": "SOC with high precision (0.0001%)"
+          }
+        ]
+      },
+      "limits": {
+        "description": "Dynamic current and charge limits",
+        "address_range": "0x0066-0x0071",
+        "registers": [
+          {
+            "id": "MAX_DISCHARGE_CURRENT",
+            "address": "0x0066",
+            "type": "UINT16",
+            "scale": 0.1,
+            "unit": "A",
+            "description": "Maximum discharge current allowed"
+          },
+          {
+            "id": "MAX_CHARGE_CURRENT",
+            "address": "0x0067",
+            "type": "UINT16",
+            "scale": 0.1,
+            "unit": "A",
+            "description": "Maximum charge current allowed"
+          }
+        ]
+      },
+      "configuration": {
+        "description": "Battery configuration parameters",
+        "address_range": "0x0131-0x0140",
+        "registers": [
+          {
+            "id": "BATTERY_CAPACITY",
+            "address": "0x0132",
+            "type": "UINT16",
+            "scale": 0.01,
+            "unit": "Ah",
+            "description": "Total battery capacity"
+          },
+          {
+            "id": "OVERVOLTAGE_CUTOFF",
+            "address": "0x013B",
+            "type": "UINT16",
+            "scale": 1.0,
+            "unit": "mV",
+            "description": "Per-cell overvoltage threshold"
+          }
+        ]
+      }
+    }
+  },
+  "can_messages": {
+    "protocol": "Victron J1939-like (PGN based)",
+    "bitrate_bps": 250000,
+    "frame_format": "Extended (29-bit)",
+    "gpio": {
+      "tx": 7,
+      "rx": 6
+    },
+    "keepalive": {
+      "id": "0x305",
+      "interval_ms": 1000,
+      "timeout_ms": 10000,
+      "retry_interval_ms": 500
+    },
+    "pgn_table": [
+      {
+        "pgn": "0x351",
+        "can_id_extended": "0x1851FEE5",
+        "name": "CVL/CCL/DCL",
+        "description": "Charge Voltage Limit / Charge Current Limit / Discharge Current Limit",
+        "dlc": 8,
+        "payload": {
+          "byte_0_1": "CVL (Charge Voltage Limit) - UINT16, scale 0.1 V",
+          "byte_2_3": "CCL (Charge Current Limit) - UINT16, scale 0.1 A",
+          "byte_4_5": "DCL (Discharge Current Limit) - UINT16, scale 0.1 A"
+        },
+        "period_ms": 100,
+        "source_file": "conversion_table.c:51"
+      },
+      {
+        "pgn": "0x355",
+        "can_id_extended": "0x1855FEE5",
+        "name": "SOC/SOH",
+        "description": "State of Charge and State of Health",
+        "dlc": 8,
+        "payload": {
+          "byte_0_1": "SOC - UINT16, 0-10000 = 0-100%",
+          "byte_2_3": "SOH - UINT16"
+        },
+        "period_ms": 1000,
+        "source_file": "conversion_table.c:52"
+      },
+      {
+        "pgn": "0x356",
+        "can_id_extended": "0x1856FEE5",
+        "name": "Voltage/Current",
+        "description": "Pack voltage and current with temperature",
+        "dlc": 8,
+        "payload": {
+          "byte_0_1": "Voltage - INT16, scale 0.01 V",
+          "byte_2_3": "Current - INT16, scale 0.1 A",
+          "byte_4_5": "Temperature - INT16, scale 0.1 C"
+        },
+        "period_ms": 1000,
+        "source_file": "conversion_table.c:53"
+      },
+      {
+        "pgn": "0x35A",
+        "can_id_extended": "0x185AFEE5",
+        "name": "Alarms",
+        "description": "Alarm bits and status flags",
+        "dlc": 8,
+        "period_ms": "on_change",
+        "source_file": "conversion_table.c:54"
+      },
+      {
+        "pgn": "0x373",
+        "can_id_extended": "0x1873FEE5",
+        "name": "Cell Extremes",
+        "description": "Minimum and maximum cell voltages and temperatures",
+        "dlc": 8,
+        "payload": {
+          "byte_0_1": "Min cell voltage - UINT16",
+          "byte_2_3": "Max cell voltage - UINT16",
+          "byte_4": "Min temperature",
+          "byte_5": "Max temperature"
+        },
+        "period_ms": 1000,
+        "source_file": "conversion_table.c:60"
+      },
+      {
+        "pgn": "0x378",
+        "can_id_extended": "0x1878FEE5",
+        "name": "Energy Counters",
+        "description": "Energy charged and discharged",
+        "dlc": 8,
+        "payload": {
+          "byte_0_3": "Energy charged - UINT32 (Wh)",
+          "byte_4_7": "Energy discharged - UINT32 (Wh)"
+        },
+        "period_ms": 10000,
+        "source_file": "conversion_table.c:65"
+      }
+    ]
+  },
+  "rest_api": {
+    "base_url": "http://<device_ip>/api",
+    "endpoints": {
+      "system": [
+        {
+          "method": "GET",
+          "path": "/api/status",
+          "description": "Overall system status (BMS, CAN, System)",
+          "returns": "application/json",
+          "source_file": "web_server.c:2650-2655"
+        },
+        {
+          "method": "GET",
+          "path": "/api/config",
+          "description": "Current configuration",
+          "returns": "application/json",
+          "source_file": "web_server.c:2657-2663"
+        },
+        {
+          "method": "POST",
+          "path": "/api/config",
+          "description": "Update configuration",
+          "body": "application/json",
+          "source_file": "web_server.c:2665-2671"
+        }
+      ],
+      "metrics": [
+        {
+          "method": "GET",
+          "path": "/api/metrics/runtime",
+          "description": "Runtime metrics (memory, time, tasks)",
+          "returns": "application/json",
+          "source_file": "web_server.c:2609-2615"
+        },
+        {
+          "method": "GET",
+          "path": "/api/event-bus/metrics",
+          "description": "Event bus statistics",
+          "returns": "application/json",
+          "source_file": "web_server.c:2617-2623"
+        }
+      ],
+      "system_control": [
+        {
+          "method": "GET",
+          "path": "/api/system/tasks",
+          "description": "FreeRTOS tasks list",
+          "returns": "application/json",
+          "source_file": "web_server.c:2625-2631"
+        },
+        {
+          "method": "POST",
+          "path": "/api/system/restart",
+          "description": "Restart system",
+          "body": "application/json",
+          "example_body": {"target": "gateway"},
+          "source_file": "web_server.c:2641-2647"
+        }
+      ],
+      "can": [
+        {
+          "method": "GET",
+          "path": "/api/can/status",
+          "description": "CAN bus status (TX/RX frames, errors)",
+          "returns": "application/json"
+        }
+      ],
+      "alerts": [
+        {
+          "method": "GET",
+          "path": "/api/alerts/config",
+          "description": "Alert configuration",
+          "returns": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/alerts/active",
+          "description": "Active alerts",
+          "returns": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/alerts/history",
+          "description": "Alert history (query param: limit)",
+          "returns": "application/json"
+        }
+      ],
+      "ota": [
+        {
+          "method": "POST",
+          "path": "/api/ota",
+          "description": "Upload firmware",
+          "body": "multipart/form-data",
+          "field_name": "firmware",
+          "source_file": "web_server.c"
+        }
+      ]
+    }
+  },
+  "websockets": {
+    "base_url": "ws://<device_ip>",
+    "endpoints": [
+      {
+        "path": "/ws/telemetry",
+        "direction": "server->client",
+        "frequency_ms": 250,
+        "message_type": "telemetry",
+        "rate_limit_msg_per_sec": 10,
+        "payload": {
+          "type": "telemetry",
+          "timestamp_ms": "number",
+          "pack_voltage_v": "float",
+          "pack_current_a": "float",
+          "state_of_charge_pct": "float",
+          "cell_voltages_mv": "array<uint16>"
+        },
+        "source_file": "web_server.c:2834-2841"
+      },
+      {
+        "path": "/ws/events",
+        "direction": "server->client",
+        "frequency_ms": "on_event",
+        "message_type": "event",
+        "rate_limit_msg_per_sec": 10,
+        "payload": {
+          "type": "event",
+          "event_id": "string",
+          "timestamp_ms": "number",
+          "label": "string",
+          "data": "object"
+        },
+        "source_file": "web_server.c:2843-2850"
+      },
+      {
+        "path": "/ws/uart",
+        "direction": "server->client",
+        "frequency_ms": 250,
+        "message_type": "uart_data",
+        "rate_limit_msg_per_sec": 10,
+        "payload": {
+          "type": "uart_data",
+          "timestamp_ms": "number",
+          "bytes": "hex_string"
+        },
+        "source_file": "web_server.c:2852-2859"
+      },
+      {
+        "path": "/ws/can",
+        "direction": "server->client",
+        "frequency_ms": 100,
+        "message_type": "can",
+        "rate_limit_msg_per_sec": 10,
+        "payload": {
+          "type": "can",
+          "timestamp_ms": "number",
+          "can_id": "hex_string",
+          "dlc": "uint8",
+          "data": "hex_string"
+        },
+        "source_file": "web_server.c:2862-2869"
+      },
+      {
+        "path": "/ws/alerts",
+        "direction": "server->client",
+        "frequency_ms": "on_alert",
+        "message_type": "alert",
+        "rate_limit_msg_per_sec": 10,
+        "payload": {
+          "type": "alert",
+          "id": "string",
+          "timestamp_ms": "number",
+          "level": "enum(INFO|WARNING|ERROR|CRITICAL)",
+          "title": "string",
+          "message": "string"
+        },
+        "source_file": "web_server.c:2871-2878"
+      }
+    ],
+    "security": {
+      "max_payload_size_bytes": 32768,
+      "rate_limit_window_ms": 1000,
+      "max_messages_per_sec": 10
+    }
+  },
+  "source_files": {
+    "modbus": [
+      {
+        "file": "/main/uart_bms/uart_bms_protocol.h",
+        "lines": "1-147",
+        "content": "Register enumerations and metadata"
+      },
+      {
+        "file": "/main/uart_bms/uart_bms_protocol.c",
+        "lines": "1-577",
+        "content": "Register table implementation"
+      },
+      {
+        "file": "/main/uart_bms/uart_bms.h",
+        "lines": "24-80",
+        "content": "uart_bms_live_data_t structure"
+      }
+    ],
+    "can": [
+      {
+        "file": "/main/can_victron/can_victron.h",
+        "lines": "1-106",
+        "content": "CAN driver interface"
+      },
+      {
+        "file": "/main/can_victron/can_victron.c",
+        "lines": "1-100+",
+        "content": "TWAI driver implementation"
+      },
+      {
+        "file": "/main/can_publisher/conversion_table.c",
+        "lines": "50-1000+",
+        "content": "PGN definitions and encoders"
+      },
+      {
+        "file": "/main/can_publisher/can_publisher.h",
+        "lines": "1-130",
+        "content": "Publisher interface"
+      },
+      {
+        "file": "/main/include/can_config_defaults.h",
+        "lines": "1-75",
+        "content": "CAN configuration defaults"
+      }
+    ],
+    "web_api": [
+      {
+        "file": "/main/web_server/web_server.h",
+        "lines": "1-48",
+        "content": "API endpoints documentation"
+      },
+      {
+        "file": "/main/web_server/web_server.c",
+        "lines": "2609-2900+",
+        "content": "API and WebSocket handlers"
+      },
+      {
+        "file": "/main/web_server/web_server_alerts.h",
+        "lines": "1-78",
+        "content": "Alert API and WebSocket handlers"
+      },
+      {
+        "file": "/web/src/js/utils/fetchAPI.js",
+        "lines": "1-313",
+        "content": "JavaScript API client wrapper"
+      }
+    ]
+  },
+  "integration_examples": {
+    "modbus_read": {
+      "description": "Reading battery voltage from register 0x0024",
+      "steps": [
+        "Request address 0x0024, 2 words (FLOAT32)",
+        "Receive 4 bytes: [0xXX, 0xXX, 0xXX, 0xXX]",
+        "Convert to float using IEEE 754 (big-endian)",
+        "Result: pack voltage in volts"
+      ]
+    },
+    "can_send": {
+      "description": "Sending CVL/CCL/DCL frame to Cerbo GX",
+      "steps": [
+        "Prepare 6 bytes payload (CVL, CCL, DCL each 2 bytes)",
+        "Scale values (e.g., 48.5V -> raw value 485 with scale 0.1)",
+        "Send CAN frame ID 0x1851FEE5 with 8 bytes DLC",
+        "Repeat every 100ms"
+      ]
+    },
+    "websocket_telemetry": {
+      "description": "Receiving real-time BMS data via WebSocket",
+      "steps": [
+        "Connect to ws://<device>/ws/telemetry",
+        "Receive JSON message every 250ms",
+        "Parse JSON to get voltage, current, SOC, etc.",
+        "Update UI charts or dashboards"
+      ]
+    }
+  }
+}
