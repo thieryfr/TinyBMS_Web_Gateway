@@ -267,7 +267,7 @@ describe('API Utilities', () => {
       test('should return active alerts', async () => {
         const mockAlerts = {
           alerts: [
-            { alert_id: 1, type: 'TEMP_HIGH', severity: 2 }
+            { id: 1, type: 'TEMP_HIGH', severity: 2 }
           ]
         };
 
