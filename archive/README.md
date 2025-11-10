@@ -2,7 +2,9 @@
 
 Ce répertoire contient la documentation historique et obsolète du projet TinyBMS Gateway. Ces documents sont conservés à des fins de référence mais ne reflètent plus l'état actuel du projet.
 
-**⚠️ AVERTISSEMENT :** La documentation active et à jour se trouve dans `/docs/`. Consultez [/docs/INDEX.md](../docs/INDEX.md) pour la documentation actuelle.
+**⚠️ AVERTISSEMENT :** Depuis la réorganisation de 2025, la documentation détaillée active est regroupée dans ce dossier (`archive/docs/`). Le répertoire racine `docs/` ne conserve plus que les artefacts nécessaires aux scripts (mappings CAN, en-têtes partagés). Consultez [`archive/docs/INDEX.md`](docs/INDEX.md) pour la table des matières complète.
+
+> ℹ️ Les correspondances indiquées plus bas conservent les références d'origine vers `/docs/...` afin de tracer les anciens chemins. Ces documents se trouvent désormais sous `archive/docs/`.
 
 ---
 
@@ -190,5 +192,5 @@ Ces archives sont conservées pour :
 ---
 
 **Pour toute information actuelle, consultez :**
-- **[/docs/INDEX.md](../docs/INDEX.md)** - Index principal de la documentation
+- **[`archive/docs/INDEX.md`](docs/INDEX.md)** - Index principal de la documentation archivée
 - **[/README.md](../README.md)** - README principal du projet

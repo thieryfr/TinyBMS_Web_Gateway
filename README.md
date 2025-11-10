@@ -58,7 +58,7 @@ Le firmware est organisé en couches :
 - **Connectivité** : `web_server`, `mqtt_client`, `wifi` et `monitoring` exposent les données aux clients distants et au front-end web.
 - **Infrastructures** : `event_bus` assure la communication inter-tâches et `config_manager` applique les paramètres NVS/`menuconfig`.
 
-Une description détaillée (diagrammes de flux, responsabilités par tâche, contraintes de temps réel) est maintenue dans `docs/architecture.md` et doit être relue lors de toute évolution majeure.【F:docs/architecture.md†L1-L36】
+Une description détaillée (diagrammes de flux, responsabilités par tâche, contraintes de temps réel) est conservée dans l'archive `archive/docs/architecture/AUDIT_REPORT.md` et doit être relue lors de toute évolution majeure.
 
 ## PGN Victron & conversions TinyBMS
 Les conversions TinyBMS → Victron s'appuient sur le tableau `main/can_publisher/conversion_table.c` et les définitions de `docs/bridge_pgn_defs.h`. Chaque PGN encode des échelles spécifiques :
@@ -71,7 +71,7 @@ Les conversions TinyBMS → Victron s'appuient sur le tableau `main/can_publishe
 - **0x35F** : identification matérielle (ID modèle, firmware public/interne, capacité en service) directement lue dans les registres TinyBMS 0x01F4/0x01F5/0x01F6/0x0132.
 - **0x378/0x379** : compteurs d'énergie cumulée et capacité installée.
 
-Le détail des champs, sources TinyBMS et formules de conversion est consolidé dans `docs/pgn_conversions.md`, qui complète la feuille `docs/pgn_mapping.xlsx` pour les besoins d'intégration Victron.【F:docs/pgn_conversions.md†L1-L126】
+Le détail des champs, sources TinyBMS et formules de conversion est désormais archivé dans `archive/docs/protocols/DOCUMENTATION_COMMUNICATIONS.md`, en complément de la feuille source `docs/UART_CAN_mapping.xlsx` utilisée par les scripts d'audit.
 
 ## Configuration & compilation
 ### Prérequis
@@ -104,48 +104,34 @@ Le détail des champs, sources TinyBMS et formules de conversion est consolidé 
 Pour mettre à jour la partie web, modifier `web/` puis lancer `idf.py build` : les fichiers sont automatiquement intégrés à la partition SPIFFS.
 
 ## Tests & mise en production
-Les campagnes de tests (unitaires, intégration CAN, essais sur banc Victron) sont décrites dans `docs/operations.md`. On y retrouve :
+Les campagnes de tests (unitaires, intégration CAN, essais sur banc Victron) restent documentées dans `archive/docs/operations.md`. On y retrouve :
 
 - Les commandes `idf.py test`, `idf.py -T <target> flash monitor` et les scénarios de validation CAN/keepalive.
 - La procédure de pré-production (capture CAN, export PGN, seuils d'alarmes).
 - Les critères d'acceptation avant déploiement terrain.
 
-La mise en production standard suit la check-list `docs/operations.md#mise-en-production` avec vérification des versions `sdkconfig.defaults`, configuration Wi-Fi et sauvegarde des logs CAN.
+La mise en production standard suit la check-list `archive/docs/operations.md#mise-en-production` avec vérification des versions `sdkconfig.defaults`, configuration Wi-Fi et sauvegarde des logs CAN.
 
 ## Documentation
 
 La documentation a été réorganisée pour refléter l'architecture actuelle du projet :
 
-### 📚 Documentation Principale (`docs/`)
+### 📚 Fichiers requis (`docs/`)
 
-- **[INDEX.md](docs/INDEX.md)** : Point d'entrée principal avec navigation par catégories
-- **[QUICK_START.md](docs/QUICK_START.md)** : Guides rapides par rôle (Manager/Dev/Reviewer)
-- **[SUMMARY_FR.md](docs/SUMMARY_FR.md)** : Résumé exécutif en français
+Le répertoire `docs/` ne conserve plus que les artefacts nécessaires aux outils et à la compilation :
 
-### 🏗️ Architecture (`docs/architecture/`)
+- **[`TinyBMS_CAN_BMS_mapping.json`](docs/TinyBMS_CAN_BMS_mapping.json)** : matrice CAN ↔️ TinyBMS consommée par les scripts d'audit.
+- **[`UART_CAN_mapping.xlsx`](docs/UART_CAN_mapping.xlsx)** : source Excel utilisée par `tools/mapping_audit.py`.
+- **[`protocols/COMMUNICATION_REFERENCE.json`](docs/protocols/COMMUNICATION_REFERENCE.json)** : export JSON embarqué par l'interface web.
+- **[`shared_data.h`](docs/shared_data.h)** et **[`tiny_read_mapping.h`](docs/tiny_read_mapping.h)** : en-têtes partagés par le code `uart_bms`.
 
-- **[AUDIT_REPORT.md](docs/architecture/AUDIT_REPORT.md)** : Rapport d'audit sécurité/conformité
-- **[FILES_REFERENCE.md](docs/architecture/FILES_REFERENCE.md)** : Carte de navigation du code source
-- **[uart_can_analysis.md](docs/uart_can_analysis.md)** : Analyse complète des interactions UART/CAN
-
-### 🔌 Protocoles (`docs/protocols/`)
-
-- **[DOCUMENTATION_COMMUNICATIONS.md](docs/protocols/DOCUMENTATION_COMMUNICATIONS.md)** : Référence complète des protocoles (Modbus, CAN, REST API, WebSocket)
-- **[COMMUNICATION_REFERENCE.json](docs/protocols/COMMUNICATION_REFERENCE.json)** : Référence structurée JSON
-- **[tinybms_register_can_flow.md](docs/tinybms_register_can_flow.md)** : Flux de données UART → CAN
-- **[interaction_diagrams.md](docs/interaction_diagrams.md)** : Diagrammes de séquence détaillés
-
-### 📖 Guides (`docs/guides/`)
-
-- **[INTEGRATION_GUIDE.md](docs/guides/INTEGRATION_GUIDE.md)** : Procédures d'intégration
-- **[ota.md](docs/ota.md)** : Mise à jour firmware OTA
-- **[monitoring_diagnostics.md](docs/monitoring_diagnostics.md)** : Diagnostics et monitoring
+Toute la documentation narrative, les guides et les analyses précédemment présents dans `docs/` ont été déplacés dans `archive/docs/`. Le fichier [`archive/docs/INDEX.md`](archive/docs/INDEX.md) centralise la table des matières de ces contenus historiques.
 
 ### 📦 Archives (`archive/`)
 
-- **reference/** : Documents historiques (PHASEs, plans, analyses obsolètes)
-- **reports/** : Rapports d'audit français (référence historique)
-- **docs/** : 54 fichiers de documentation archivés
+- **docs/** : Documentation détaillée archivée (guides, analyses, rapports).
+- **reference/** : Documents historiques (PHASEs, plans, analyses obsolètes).
+- **reports/** : Rapports d'audit français (référence historique).
 
 ## Interface web
 Les assets statiques sont disponibles dans `web/`. Ils seront intégrés dans une partition SPIFFS et servis via le module `web_server`.
