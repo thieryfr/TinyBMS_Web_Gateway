@@ -132,6 +132,65 @@ TEST_CASE("config_manager_concurrent_setters", "[thread_safety][config_manager]"
 }
 
 /**
+ * Task: Concurrent config_manager snapshot reads
+ * Each task repeatedly retrieves the JSON snapshot to verify mutex protection
+ */
+static void config_manager_snapshot_reader_task(void *param)
+{
+    (void)param;
+    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    size_t length = 0;
+
+    for (int i = 0; i < TEST_ITERATIONS_PER_THREAD; i++) {
+        esp_err_t err = config_manager_get_config_json(buffer, sizeof(buffer), &length);
+        if (err != ESP_OK) {
+            s_test_failed = true;
+            break;
+        }
+
+        if (length > 0 && buffer[0] != '{') {
+            s_test_failed = true;
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    mark_task_completed();
+    vTaskDelete(NULL);
+}
+
+/**
+ * Test: config_manager snapshot reads are thread-safe under concurrent access
+ */
+TEST_CASE("config_manager_concurrent_config_reads", "[thread_safety][config_manager]")
+{
+    s_test_failed = false;
+    s_completed_tasks = 0;
+    s_completion_mutex = xSemaphoreCreateMutex();
+    TEST_ASSERT_NOT_NULL(s_completion_mutex);
+
+    for (uint32_t i = 0; i < TEST_THREAD_COUNT; i++) {
+        BaseType_t result = xTaskCreate(
+            config_manager_snapshot_reader_task,
+            "cfg_read",
+            4096,
+            NULL,
+            5,
+            NULL
+        );
+        TEST_ASSERT_EQUAL(pdPASS, result);
+    }
+
+    bool completed = wait_for_completion(TEST_THREAD_COUNT, TEST_TIMEOUT_MS);
+    TEST_ASSERT_TRUE_MESSAGE(completed, "Tasks did not complete within timeout");
+    TEST_ASSERT_FALSE_MESSAGE(s_test_failed, "At least one snapshot read failed or returned invalid data");
+
+    vSemaphoreDelete(s_completion_mutex);
+    s_completion_mutex = NULL;
+}
+
+/**
  * Task: Concurrent monitoring status reads
  * Each task repeatedly reads monitoring status to verify mutex protection
  */
