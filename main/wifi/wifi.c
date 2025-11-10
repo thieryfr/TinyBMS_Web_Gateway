@@ -14,6 +14,7 @@
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "lwip/ip4_addr.h"
@@ -79,6 +80,58 @@ static const config_manager_wifi_settings_t *wifi_get_settings(void)
 static event_bus_publish_fn_t s_event_publisher = NULL;
 
 #ifdef ESP_PLATFORM
+typedef struct {
+    app_event_id_t id;
+    const char *key;
+    const char *label;
+} wifi_event_descriptor_t;
+
+static const wifi_event_descriptor_t s_wifi_event_descriptors[] = {
+    {APP_EVENT_ID_WIFI_STA_START, "wifi_sta_start", "Station interface starting"},
+    {APP_EVENT_ID_WIFI_STA_CONNECTED, "wifi_sta_connected", "Station connected"},
+    {APP_EVENT_ID_WIFI_STA_DISCONNECTED, "wifi_sta_disconnected", "Station disconnected"},
+    {APP_EVENT_ID_WIFI_STA_GOT_IP, "wifi_sta_got_ip", "Station obtained IPv4"},
+    {APP_EVENT_ID_WIFI_STA_LOST_IP, "wifi_sta_lost_ip", "Station lost IPv4"},
+    {APP_EVENT_ID_WIFI_AP_STARTED, "wifi_ap_started", "Fallback AP started"},
+    {APP_EVENT_ID_WIFI_AP_STOPPED, "wifi_ap_stopped", "Fallback AP stopped"},
+    {APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED, "wifi_ap_client_connected", "AP client connected"},
+    {APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED, "wifi_ap_client_disconnected", "AP client disconnected"},
+};
+
+#define WIFI_EVENT_METADATA_SLOTS 16U
+
+static app_event_metadata_t s_wifi_event_metadata[WIFI_EVENT_METADATA_SLOTS];
+static size_t s_wifi_event_metadata_next = 0U;
+
+static const wifi_event_descriptor_t *wifi_find_descriptor(app_event_id_t id)
+{
+    for (size_t i = 0; i < sizeof(s_wifi_event_descriptors) / sizeof(s_wifi_event_descriptors[0]); ++i) {
+        if (s_wifi_event_descriptors[i].id == id) {
+            return &s_wifi_event_descriptors[i];
+        }
+    }
+    return NULL;
+}
+
+static app_event_metadata_t *wifi_prepare_metadata(app_event_id_t id)
+{
+    size_t slot = s_wifi_event_metadata_next++;
+    if (s_wifi_event_metadata_next >= WIFI_EVENT_METADATA_SLOTS) {
+        s_wifi_event_metadata_next = 0U;
+    }
+
+    app_event_metadata_t *metadata = &s_wifi_event_metadata[slot];
+    const wifi_event_descriptor_t *descriptor = wifi_find_descriptor(id);
+
+    metadata->event_id = id;
+    metadata->key = (descriptor != NULL && descriptor->key != NULL) ? descriptor->key : "wifi_event";
+    metadata->type = "wifi";
+    metadata->label = (descriptor != NULL && descriptor->label != NULL) ? descriptor->label : "Wi-Fi event";
+    metadata->timestamp_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
+
+    return metadata;
+}
+
 static esp_netif_t *s_sta_netif = NULL;
 static esp_netif_t *s_ap_netif = NULL;
 static bool s_wifi_initialised = false;
@@ -97,10 +150,16 @@ static void wifi_publish_event(app_event_id_t id)
         return;
     }
 
+#ifdef ESP_PLATFORM
+    app_event_metadata_t *metadata = wifi_prepare_metadata(id);
+#else
+    app_event_metadata_t *metadata = NULL;
+#endif
+
     event_bus_event_t event = {
         .id = id,
-        .payload = NULL,
-        .payload_size = 0,
+        .payload = metadata,
+        .payload_size = (metadata != NULL) ? sizeof(*metadata) : 0U,
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(25))) {

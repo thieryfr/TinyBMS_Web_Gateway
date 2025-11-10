@@ -122,39 +122,75 @@ export class SystemStatus {
    * @param {Object} event - Event data from WebSocket
    */
   handleEvent(event) {
-    if (!event || !event.event_id) {
+    if (!event) {
       return;
     }
 
-    const eventId = event.event_id;
+    const eventKey = typeof event.key === 'string' ? event.key : null;
+    const eventType = typeof event.type === 'string' ? event.type : null;
+    let eventId = null;
 
-    // WiFi Events
-    if (eventId === 0x1300) { // WIFI_STA_START
+    if (typeof event.event_id === 'number') {
+      eventId = event.event_id;
+    } else if (typeof event.event_id === 'string') {
+      const value = event.event_id.trim();
+      if (value.startsWith('0x')) {
+        eventId = Number.parseInt(value, 16);
+      } else {
+        const parsed = Number(value);
+        eventId = Number.isNaN(parsed) ? null : parsed;
+      }
+    }
+
+    if (eventKey || eventType === 'wifi' || eventType === 'storage') {
+      switch (eventKey) {
+        case 'wifi_sta_start':
+        case 'wifi_sta_connected':
+          this.setModuleStatus(MODULES.WIFI, LED_STATUS.CONNECTING);
+          return;
+        case 'wifi_sta_got_ip':
+          this.setModuleStatus(MODULES.WIFI, LED_STATUS.OK);
+          return;
+        case 'wifi_sta_disconnected':
+        case 'wifi_sta_lost_ip':
+        case 'wifi_ap_started':
+          this.setModuleStatus(MODULES.WIFI, LED_STATUS.WARNING);
+          return;
+        case 'wifi_ap_stopped':
+        case 'wifi_ap_client_connected':
+        case 'wifi_ap_client_disconnected':
+          this.setModuleStatus(MODULES.WIFI, LED_STATUS.CONNECTING);
+          return;
+        case 'storage_history_ready':
+          this.setModuleStatus(MODULES.STORAGE, LED_STATUS.OK);
+          return;
+        case 'storage_history_unavailable':
+          this.setModuleStatus(MODULES.STORAGE, LED_STATUS.ERROR);
+          return;
+        default:
+          break;
+      }
+    }
+
+    if (eventId === null) {
+      return;
+    }
+
+    if (eventId === 0x1300) {
       this.setModuleStatus(MODULES.WIFI, LED_STATUS.CONNECTING);
-    } else if (eventId === 0x1303) { // WIFI_STA_GOT_IP
+    } else if (eventId === 0x1303) {
       this.setModuleStatus(MODULES.WIFI, LED_STATUS.OK);
-    } else if (eventId === 0x1302 || eventId === 0x1304) { // DISCONNECTED or LOST_IP
+    } else if (eventId === 0x1302 || eventId === 0x1304) {
       this.setModuleStatus(MODULES.WIFI, LED_STATUS.WARNING);
-    } else if (eventId === 0x1310) { // WIFI_AP_STARTED (fallback AP mode)
+    } else if (eventId === 0x1310) {
       this.setModuleStatus(MODULES.WIFI, LED_STATUS.WARNING);
-    }
-
-    // Storage Events
-    else if (eventId === 0x1400) { // STORAGE_HISTORY_READY
+    } else if (eventId === 0x1400) {
       this.setModuleStatus(MODULES.STORAGE, LED_STATUS.OK);
-    } else if (eventId === 0x1401) { // STORAGE_HISTORY_UNAVAILABLE
+    } else if (eventId === 0x1401) {
       this.setModuleStatus(MODULES.STORAGE, LED_STATUS.ERROR);
-    }
-
-    // UART Events
-    else if (eventId === 0x1100 || eventId === 0x1101 || eventId === 0x1102) {
-      // BMS_LIVE_DATA or UART_FRAME_RAW/DECODED
+    } else if (eventId === 0x1100 || eventId === 0x1101 || eventId === 0x1102) {
       this.setModuleStatus(MODULES.UART, LED_STATUS.OK);
-    }
-
-    // CAN Events
-    else if (eventId === 0x1200 || eventId === 0x1201 || eventId === 0x1202) {
-      // CAN_FRAME_RAW/DECODED/READY
+    } else if (eventId === 0x1200 || eventId === 0x1201 || eventId === 0x1202) {
       this.setModuleStatus(MODULES.CAN, LED_STATUS.OK);
     }
   }

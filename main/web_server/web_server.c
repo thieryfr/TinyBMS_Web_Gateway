@@ -1897,12 +1897,67 @@ static void web_server_event_task(void *context)
             continue; // Timeout, vérifier le drapeau et réessayer
         }
 
-        if (event.payload == NULL || event.payload_size == 0) {
-            continue;
+        const char *payload = NULL;
+        size_t length = 0U;
+        char generated_payload[WEB_SERVER_EVENT_BUS_JSON_SIZE];
+
+        if (event.payload != NULL && event.payload_size == sizeof(app_event_metadata_t)) {
+            const app_event_metadata_t *metadata = (const app_event_metadata_t *)event.payload;
+            if (metadata->event_id == event.id) {
+                const char *key = (metadata->key != NULL) ? metadata->key : "";
+                const char *type = (metadata->type != NULL) ? metadata->type : "";
+                const char *label = (metadata->label != NULL) ? metadata->label : "";
+                unsigned long long timestamp = (unsigned long long)metadata->timestamp_ms;
+                int written = snprintf(generated_payload,
+                                       sizeof(generated_payload),
+                                       "{\"event_id\":%u,\"key\":\"%s\",\"type\":\"%s\",\"timestamp\":%llu",
+                                       (unsigned)metadata->event_id,
+                                       key,
+                                       type,
+                                       timestamp);
+                if (written > 0 && (size_t)written < sizeof(generated_payload)) {
+                    size_t used = (size_t)written;
+                    if (label[0] != '\0' && used < sizeof(generated_payload)) {
+                        int appended = snprintf(generated_payload + used,
+                                                sizeof(generated_payload) - used,
+                                                ",\"label\":\"%s\"",
+                                                label);
+                        if (appended > 0 && (size_t)appended < sizeof(generated_payload) - used) {
+                            used += (size_t)appended;
+                        }
+                    }
+                    if (used < sizeof(generated_payload)) {
+                        int closed = snprintf(generated_payload + used,
+                                              sizeof(generated_payload) - used,
+                                              "}");
+                        if (closed > 0 && (size_t)closed < sizeof(generated_payload) - used) {
+                            used += (size_t)closed;
+                            payload = generated_payload;
+                            length = used;
+                        }
+                    }
+                }
+            }
+        } else if (event.payload != NULL && event.payload_size > 0U) {
+            payload = (const char *)event.payload;
+            length = event.payload_size;
+            if (length > 0U && payload[length - 1U] == '\0') {
+                length -= 1U;
+            }
+        } else {
+            int written = snprintf(generated_payload,
+                                   sizeof(generated_payload),
+                                   "{\"event_id\":%u}",
+                                   (unsigned)event.id);
+            if (written > 0 && (size_t)written < sizeof(generated_payload)) {
+                payload = generated_payload;
+                length = (size_t)written;
+            }
         }
 
-        const char *payload = (const char *)event.payload;
-        size_t length = event.payload_size;
+        if (payload == NULL || length == 0U) {
+            continue;
+        }
 
         switch (event.id) {
         case APP_EVENT_ID_TELEMETRY_SAMPLE:
@@ -1912,6 +1967,19 @@ static void web_server_event_task(void *context)
         case APP_EVENT_ID_CONFIG_UPDATED:
         case APP_EVENT_ID_OTA_UPLOAD_READY:
         case APP_EVENT_ID_MONITORING_DIAGNOSTICS:
+            ws_client_list_broadcast(&s_event_clients, payload, length);
+            break;
+        case APP_EVENT_ID_WIFI_STA_START:
+        case APP_EVENT_ID_WIFI_STA_CONNECTED:
+        case APP_EVENT_ID_WIFI_STA_DISCONNECTED:
+        case APP_EVENT_ID_WIFI_STA_GOT_IP:
+        case APP_EVENT_ID_WIFI_STA_LOST_IP:
+        case APP_EVENT_ID_WIFI_AP_STARTED:
+        case APP_EVENT_ID_WIFI_AP_STOPPED:
+        case APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED:
+        case APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED:
+        case APP_EVENT_ID_STORAGE_HISTORY_READY:
+        case APP_EVENT_ID_STORAGE_HISTORY_UNAVAILABLE:
             ws_client_list_broadcast(&s_event_clients, payload, length);
             break;
         case APP_EVENT_ID_UART_FRAME_RAW:

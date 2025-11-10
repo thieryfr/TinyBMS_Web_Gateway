@@ -60,6 +60,22 @@ typedef enum {
     APP_EVENT_ID_ALERT_TRIGGERED = 0x1500,
 } app_event_id_t;
 
+/**
+ * @brief Lightweight metadata attached to control-plane events.
+ *
+ * When published as the payload of an ::event_bus_event_t, the web server can
+ * enrich WebSocket notifications with a semantic key, the originating module
+ * type and an emission timestamp. Pointers inside the structure reference
+ * static strings owned by the publisher.
+ */
+typedef struct {
+    app_event_id_t event_id;   /**< Identifier mirrored in the parent event. */
+    const char *key;           /**< Machine readable key (e.g. "wifi_sta_start"). */
+    const char *type;          /**< Module group (e.g. "wifi", "storage"). */
+    const char *label;         /**< Human friendly label. */
+    uint64_t timestamp_ms;     /**< Milliseconds since boot when emitted. */
+} app_event_metadata_t;
+
 #ifdef __cplusplus
 }
 #endif

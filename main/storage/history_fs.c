@@ -7,6 +7,9 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_littlefs.h"
+#ifdef ESP_PLATFORM
+#include "esp_timer.h"
+#endif
 
 #include "freertos/FreeRTOS.h"
 
@@ -19,16 +22,69 @@ static bool s_mounted = false;
 static bool s_mount_failed = false;
 static TaskHandle_t s_retry_task_handle = NULL;
 
+#ifdef ESP_PLATFORM
+typedef struct {
+    app_event_id_t id;
+    const char *key;
+    const char *label;
+} history_event_descriptor_t;
+
+static const history_event_descriptor_t s_history_event_descriptors[] = {
+    {APP_EVENT_ID_STORAGE_HISTORY_READY, "storage_history_ready", "History storage ready"},
+    {APP_EVENT_ID_STORAGE_HISTORY_UNAVAILABLE, "storage_history_unavailable", "History storage unavailable"},
+};
+
+#define HISTORY_EVENT_METADATA_SLOTS 8U
+
+static app_event_metadata_t s_history_event_metadata[HISTORY_EVENT_METADATA_SLOTS];
+static size_t s_history_event_metadata_next = 0U;
+
+static const history_event_descriptor_t *history_fs_find_descriptor(app_event_id_t id)
+{
+    for (size_t i = 0; i < sizeof(s_history_event_descriptors) / sizeof(s_history_event_descriptors[0]); ++i) {
+        if (s_history_event_descriptors[i].id == id) {
+            return &s_history_event_descriptors[i];
+        }
+    }
+    return NULL;
+}
+
+static app_event_metadata_t *history_fs_prepare_metadata(app_event_id_t id)
+{
+    size_t slot = s_history_event_metadata_next++;
+    if (s_history_event_metadata_next >= HISTORY_EVENT_METADATA_SLOTS) {
+        s_history_event_metadata_next = 0U;
+    }
+
+    app_event_metadata_t *metadata = &s_history_event_metadata[slot];
+    const history_event_descriptor_t *descriptor = history_fs_find_descriptor(id);
+
+    metadata->event_id = id;
+    metadata->key = (descriptor != NULL && descriptor->key != NULL) ? descriptor->key : "storage_event";
+    metadata->type = "storage";
+    metadata->label = (descriptor != NULL && descriptor->label != NULL) ? descriptor->label : "Storage event";
+    metadata->timestamp_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
+
+    return metadata;
+}
+#endif
+
 static void history_fs_publish_event(app_event_id_t id)
 {
     if (s_event_publisher == NULL) {
         return;
     }
 
+#ifdef ESP_PLATFORM
+    app_event_metadata_t *metadata = history_fs_prepare_metadata(id);
+#else
+    app_event_metadata_t *metadata = NULL;
+#endif
+
     event_bus_event_t event = {
         .id = id,
-        .payload = NULL,
-        .payload_size = 0,
+        .payload = metadata,
+        .payload_size = (metadata != NULL) ? sizeof(*metadata) : 0U,
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(25))) {
