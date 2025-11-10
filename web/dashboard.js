@@ -10,6 +10,7 @@ import { normalizeSample, parseHistoryResponse } from '/src/js/utils/history.js'
 import { ConfigRegistersManager } from '/src/components/configuration/config-registers.js';
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
+import { initCanTooltips } from '/src/js/utils/canTooltips.js';
 
 /**
  * Escape HTML to prevent XSS attacks
@@ -1573,6 +1574,9 @@ async function initialise() {
 
     state.systemStatus = new SystemStatus();
     state.systemStatus.init();
+
+    // Initialize CAN protocol tooltips
+    initCanTooltips();
 
     state.uartRealtime.timeline.raw = document.getElementById('uart-timeline-raw');
     state.uartRealtime.timeline.decoded = document.getElementById('uart-timeline-decoded');
