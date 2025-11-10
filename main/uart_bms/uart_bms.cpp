@@ -539,6 +539,108 @@ static void uart_bms_consume_bytes(const uint8_t *data, size_t length)
 #endif
 }
 
+/**
+ * @brief Send UART command with automatic retry for sleep mode wake-up
+ *
+ * Implements the sleep mode handling as specified in TinyBMS documentation:
+ * "If Tiny BMS device is in sleep mode, the first command must be send twice.
+ * After received the first command BMS wakes up from sleep mode, but the
+ * response to the command will be sent when it receives the command a second time."
+ *
+ * @param frame Command frame to send
+ * @param frame_length Length of the frame
+ * @param read_buffer Buffer to store received bytes
+ * @param read_buffer_size Size of read buffer
+ * @param timeout_ms Timeout for waiting response
+ * @param received_any_bytes Output: true if any bytes were received
+ * @return ESP_OK on success, ESP_ERR_TIMEOUT if no response after retry
+ */
+static esp_err_t uart_bms_send_with_wakeup(const uint8_t* frame,
+                                            size_t frame_length,
+                                            uint8_t* read_buffer,
+                                            size_t read_buffer_size,
+                                            uint32_t timeout_ms,
+                                            bool* received_any_bytes)
+{
+    if (frame == nullptr || read_buffer == nullptr || received_any_bytes == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *received_any_bytes = false;
+
+    // First send (may wake up BMS from sleep)
+    int written = uart_write_bytes(UART_BMS_UART_PORT,
+                                    reinterpret_cast<const char*>(frame),
+                                    frame_length);
+    if (written < 0 || static_cast<size_t>(written) != frame_length) {
+        ESP_LOGW(kTag, "Failed to send command (wrote %d of %zu bytes)", written, frame_length);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Try to receive response with timeout
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    bool got_response = false;
+
+    while (xTaskGetTickCount() < deadline) {
+        int bytes_read = uart_read_bytes(UART_BMS_UART_PORT,
+                                         read_buffer,
+                                         read_buffer_size,
+                                         pdMS_TO_TICKS(20));
+        if (bytes_read > 0) {
+            uart_bms_consume_bytes(read_buffer, static_cast<size_t>(bytes_read));
+            got_response = true;
+            *received_any_bytes = true;
+        } else if (bytes_read < 0) {
+            ESP_LOGW(kTag, "UART read error: %d", bytes_read);
+            break;
+        }
+    }
+
+    // If no response, BMS might have been asleep - retry
+    if (!got_response) {
+        ESP_LOGD(kTag, "No response on first attempt, retrying (BMS may have been in sleep mode)");
+
+        // Flush any pending data
+        uart_flush_input(UART_BMS_UART_PORT);
+
+        // Wait a bit for BMS to fully wake up
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // Second send (BMS should be awake now)
+        written = uart_write_bytes(UART_BMS_UART_PORT,
+                                   reinterpret_cast<const char*>(frame),
+                                   frame_length);
+        if (written < 0 || static_cast<size_t>(written) != frame_length) {
+            ESP_LOGW(kTag, "Failed to send command on retry");
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        // Wait for response again
+        deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+        while (xTaskGetTickCount() < deadline) {
+            int bytes_read = uart_read_bytes(UART_BMS_UART_PORT,
+                                             read_buffer,
+                                             read_buffer_size,
+                                             pdMS_TO_TICKS(20));
+            if (bytes_read > 0) {
+                uart_bms_consume_bytes(read_buffer, static_cast<size_t>(bytes_read));
+                got_response = true;
+                *received_any_bytes = true;
+            } else if (bytes_read < 0) {
+                ESP_LOGW(kTag, "UART read error on retry: %d", bytes_read);
+                break;
+            }
+        }
+    }
+
+    if (!got_response) {
+        ESP_LOGW(kTag, "No response after wake-up retry");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    return ESP_OK;
+}
+
 static void uart_poll_task(void *arg)
 {
     (void)arg;
@@ -566,28 +668,14 @@ static void uart_poll_task(void *arg)
             continue;
         }
 
-        int written = uart_write_bytes(UART_BMS_UART_PORT,
-                                       (const char *)s_poll_request,
-                                       s_poll_request_length);
-        if (written < 0 || (size_t)written != s_poll_request_length) {
-            ESP_LOGW(kTag, "Failed to send poll request (%d)", written);
-        }
-
-        TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(UART_BMS_RESPONSE_TIMEOUT_MS);
+        // Use wake-up aware send for sleep mode handling
         bool received_bytes = false;
-        while (xTaskGetTickCount() < deadline) {
-            int bytes_read = uart_read_bytes(UART_BMS_UART_PORT,
-                                             read_buffer,
-                                             sizeof(read_buffer),
-                                             pdMS_TO_TICKS(20));
-            if (bytes_read > 0) {
-                uart_bms_consume_bytes(read_buffer, (size_t)bytes_read);
-                received_bytes = true;
-            } else if (bytes_read < 0) {
-                ESP_LOGW(kTag, "UART read error: %d", bytes_read);
-                break;
-            }
-        }
+        esp_err_t send_err = uart_bms_send_with_wakeup(s_poll_request,
+                                                        s_poll_request_length,
+                                                        read_buffer,
+                                                        sizeof(read_buffer),
+                                                        UART_BMS_RESPONSE_TIMEOUT_MS,
+                                                        &received_bytes);
 
         if (!received_bytes) {
             ESP_LOGW(kTag, "TinyBMS poll timed out (no response)");
