@@ -31,6 +31,9 @@ Documents de référence historiques et plans de développement obsolètes.
 | **PLAN_IMPLEMENTATION_CORRECTIONS.md** | Plan d'implémentation des corrections | Implémenté et intégré |
 | **ANALYSIS_SUMMARY.txt** | Résumé d'analyse (format texte) | Remplacé par `/docs/SUMMARY_FR.md` |
 | **README_DOCUMENTATION.md** | Ancien guide de documentation | Remplacé par `/docs/INDEX.md` |
+| **UART_CORRECTIONS_IMPLEMENTATION.md** | Détails d'implémentation corrections UART | Corrections appliquées et intégrées |
+| **PR_SUMMARY.md** | Résumé de PR historique | Document historique |
+| **OPTIMIZATION_FONTS.md** | Optimisations polices (frontend) | Optimisations intégrées ou obsolètes |
 
 ---
 
@@ -125,11 +128,11 @@ Rapports d'audit et d'expertise en français - référence historique de conform
 
 | Métrique | Valeur |
 |----------|--------|
-| **Total fichiers archivés** | 63 fichiers |
+| **Total fichiers archivés** | 66 fichiers |
 | **Documents PHASE** | 4 fichiers (79 KB) |
 | **Rapports audit français** | 5 fichiers (133 KB) |
 | **Documentation technique** | 54 fichiers |
-| **Plans obsolètes** | 4 fichiers (51 KB) |
+| **Plans obsolètes** | 7 fichiers |
 
 ---
 
@@ -148,6 +151,8 @@ Si vous consultez ces archives, voici comment trouver l'information équivalente
 | `reference/module_*.md` | `/docs/architecture/FILES_REFERENCE.md` | Carte de navigation code |
 | `FIXES_PLAN.md` | `/docs/CORRECTIONS_APPLIED.md` | Corrections appliquées |
 | `README_DOCUMENTATION.md` | `/docs/INDEX.md` | Index structuré actuel |
+| `UART_CORRECTIONS_IMPLEMENTATION.md` | `/docs/CORRECTIONS_APPLIED.md` | Détails des corrections |
+| `OPTIMIZATION_FONTS.md` | `/web/` | Code source actuel |
 | Rapports français | `/docs/architecture/AUDIT_REPORT.md` | Audit consolidé actuel |
 
 ---
