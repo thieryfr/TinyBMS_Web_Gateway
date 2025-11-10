@@ -2,6 +2,7 @@
 let alertsWebSocket = null;
 let alertsReconnectTimeout = null;
 let alertsShouldReconnect = true;
+let currentAlertConfig = null;
 
 /**
  * Escape HTML to prevent XSS attacks
@@ -100,7 +101,9 @@ async function refreshActiveAlerts() {
       return;
     }
 
-    container.innerHTML = alerts.map(alert => `
+    container.innerHTML = alerts.map(alert => {
+      const alertId = Number(alert.id);
+      return `
       <div class="alert alert-${getSeverityClass(alert.severity)} alert-dismissible fade show mb-2" role="alert">
         <div class="d-flex">
           <div class="flex-grow-1">
@@ -111,8 +114,8 @@ async function refreshActiveAlerts() {
             </div>
           </div>
           <div class="ms-3">
-            ${alert.status === 0 ? `
-              <button type="button" class="btn btn-sm btn-primary" onclick="acknowledgeAlert(${alert.alert_id})">
+            ${alert.status === 0 && Number.isFinite(alertId) ? `
+              <button type="button" class="btn btn-sm btn-primary" onclick="acknowledgeAlert(${alertId})">
                 <i class="ti ti-check me-1"></i>
                 Acquitter
               </button>
@@ -120,7 +123,8 @@ async function refreshActiveAlerts() {
           </div>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch (error) {
     console.error('Failed to fetch active alerts:', error);
   }
@@ -190,7 +194,7 @@ async function updateAlertBadge() {
     const badge = document.getElementById('alert-count-badge');
     if (!badge) return;
 
-    const activeCount = stats.active_alert_count || 0;
+    const activeCount = stats.active_count ?? stats.active_alert_count ?? 0;
 
     if (activeCount > 0) {
       badge.textContent = activeCount;
@@ -205,8 +209,13 @@ async function updateAlertBadge() {
 
 // Acknowledge specific alert
 async function acknowledgeAlert(alertId) {
+  const numericId = Number(alertId);
+  if (!Number.isFinite(numericId)) {
+    console.warn('Invalid alert id for acknowledgement:', alertId);
+    return;
+  }
   try {
-    const response = await fetch(`/api/alerts/acknowledge/${alertId}`, {
+    const response = await fetch(`/api/alerts/acknowledge/${numericId}`, {
       method: 'POST'
     });
 
@@ -262,21 +271,25 @@ async function loadAlertConfig() {
   try {
     const response = await fetch('/api/alerts/config');
     const config = await response.json();
+    currentAlertConfig = config;
+
+    const temperature = config.temperature || {};
+    const cellVoltage = config.cell_voltage || {};
 
     document.getElementById('config-enabled').checked = config.enabled ?? true;
     document.getElementById('config-debounce').value = config.debounce_sec ?? 60;
 
-    document.getElementById('config-temp-high-enabled').checked = config.temp_high_enabled ?? false;
-    document.getElementById('config-temp-max').value = config.temperature_max_c ?? 45;
+    document.getElementById('config-temp-high-enabled').checked = temperature.high_enabled ?? false;
+    document.getElementById('config-temp-max').value = temperature.max_c ?? 45;
 
-    document.getElementById('config-temp-low-enabled').checked = config.temp_low_enabled ?? false;
-    document.getElementById('config-temp-min').value = config.temperature_min_c ?? 0;
+    document.getElementById('config-temp-low-enabled').checked = temperature.low_enabled ?? false;
+    document.getElementById('config-temp-min').value = temperature.min_c ?? 0;
 
-    document.getElementById('config-cell-volt-high-enabled').checked = config.cell_volt_high_enabled ?? false;
-    document.getElementById('config-cell-volt-max').value = config.cell_voltage_max_mv ?? 3650;
+    document.getElementById('config-cell-volt-high-enabled').checked = cellVoltage.high_enabled ?? false;
+    document.getElementById('config-cell-volt-max').value = cellVoltage.max_mv ?? 3650;
 
-    document.getElementById('config-cell-volt-low-enabled').checked = config.cell_volt_low_enabled ?? false;
-    document.getElementById('config-cell-volt-min').value = config.cell_voltage_min_mv ?? 2800;
+    document.getElementById('config-cell-volt-low-enabled').checked = cellVoltage.low_enabled ?? false;
+    document.getElementById('config-cell-volt-min').value = cellVoltage.min_mv ?? 2800;
 
     document.getElementById('config-monitor-events').checked = config.monitor_tinybms_events ?? true;
     document.getElementById('config-monitor-status').checked = config.monitor_status_changes ?? true;
@@ -289,24 +302,28 @@ async function loadAlertConfig() {
 async function saveAlertConfig(event) {
   event.preventDefault();
 
+  const baseConfig = currentAlertConfig ? JSON.parse(JSON.stringify(currentAlertConfig)) : {};
+
   const config = {
+    ...baseConfig,
     enabled: document.getElementById('config-enabled').checked,
-    debounce_sec: parseInt(document.getElementById('config-debounce').value) || 60,
-
-    temp_high_enabled: document.getElementById('config-temp-high-enabled').checked,
-    temperature_max_c: parseFloat(document.getElementById('config-temp-max').value) || 45,
-
-    temp_low_enabled: document.getElementById('config-temp-low-enabled').checked,
-    temperature_min_c: parseFloat(document.getElementById('config-temp-min').value) || 0,
-
-    cell_volt_high_enabled: document.getElementById('config-cell-volt-high-enabled').checked,
-    cell_voltage_max_mv: parseInt(document.getElementById('config-cell-volt-max').value) || 3650,
-
-    cell_volt_low_enabled: document.getElementById('config-cell-volt-low-enabled').checked,
-    cell_voltage_min_mv: parseInt(document.getElementById('config-cell-volt-min').value) || 2800,
-
+    debounce_sec: parseInt(document.getElementById('config-debounce').value, 10) || 60,
+    temperature: {
+      ...(baseConfig.temperature || {}),
+      high_enabled: document.getElementById('config-temp-high-enabled').checked,
+      max_c: parseFloat(document.getElementById('config-temp-max').value) || 45,
+      low_enabled: document.getElementById('config-temp-low-enabled').checked,
+      min_c: parseFloat(document.getElementById('config-temp-min').value) || 0,
+    },
+    cell_voltage: {
+      ...(baseConfig.cell_voltage || {}),
+      high_enabled: document.getElementById('config-cell-volt-high-enabled').checked,
+      max_mv: parseInt(document.getElementById('config-cell-volt-max').value, 10) || 3650,
+      low_enabled: document.getElementById('config-cell-volt-low-enabled').checked,
+      min_mv: parseInt(document.getElementById('config-cell-volt-min').value, 10) || 2800,
+    },
     monitor_tinybms_events: document.getElementById('config-monitor-events').checked,
-    monitor_status_changes: document.getElementById('config-monitor-status').checked
+    monitor_status_changes: document.getElementById('config-monitor-status').checked,
   };
 
   try {
@@ -320,6 +337,7 @@ async function saveAlertConfig(event) {
 
     if (response.ok) {
       alert('Configuration enregistrée avec succès');
+      currentAlertConfig = config;
     } else {
       alert('Erreur lors de l\'enregistrement de la configuration');
     }

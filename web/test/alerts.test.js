@@ -82,7 +82,7 @@ describe('Alerts Module', () => {
       const mockAlerts = {
         alerts: [
           {
-            alert_id: 1,
+            id: 1,
             type: 'TEMP_HIGH',
             severity: 2,
             message: 'Température > 45°C',
@@ -156,7 +156,7 @@ describe('Alerts Module', () => {
     test('should render alert with correct severity class', () => {
       const container = document.getElementById('active-alerts-container');
       const alert = {
-        alert_id: 1,
+        id: 1,
         type: 'TEMP_HIGH',
         severity: 3,
         message: 'Température critique',
@@ -232,7 +232,7 @@ describe('Alerts Module', () => {
     test('should handle WebSocket message with alert data', () => {
       const mockMessage = {
         type: 'alert',
-        alert_id: 1,
+        id: 1,
         severity: 2,
         message: 'Test alert'
       };
