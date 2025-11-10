@@ -436,6 +436,36 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
     }
 }
 
+static void web_server_broadcast_battery_snapshot(ws_client_t **list, const char *payload, size_t length)
+{
+    if (list == NULL || payload == NULL || length == 0) {
+        return;
+    }
+
+    size_t payload_length = length;
+    if (payload_length > 0U && payload[payload_length - 1U] == '\0') {
+        payload_length -= 1U;
+    }
+
+    if (payload_length == 0U) {
+        return;
+    }
+
+    if (payload_length >= MONITORING_SNAPSHOT_MAX_SIZE) {
+        ESP_LOGW(TAG, "Telemetry snapshot too large to wrap (%zu bytes)", payload_length);
+        return;
+    }
+
+    char wrapped[MONITORING_SNAPSHOT_MAX_SIZE + 32U];
+    int written = snprintf(wrapped, sizeof(wrapped), "{\"battery\":%.*s}", (int)payload_length, payload);
+    if (written <= 0 || (size_t)written >= sizeof(wrapped)) {
+        ESP_LOGW(TAG, "Failed to wrap telemetry snapshot for broadcast");
+        return;
+    }
+
+    ws_client_list_broadcast(list, wrapped, (size_t)written);
+}
+
 static esp_err_t web_server_mount_spiffs(void)
 {
     esp_vfs_spiffs_conf_t conf = {
@@ -861,18 +891,33 @@ static esp_err_t web_server_static_get_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_status_handler(httpd_req_t *req)
 {
-    char buffer[MONITORING_SNAPSHOT_MAX_SIZE];
+    char snapshot[MONITORING_SNAPSHOT_MAX_SIZE];
     size_t length = 0;
-    esp_err_t err = monitoring_get_status_json(buffer, sizeof(buffer), &length);
+    esp_err_t err = monitoring_get_status_json(snapshot, sizeof(snapshot), &length);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to build status JSON: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Status unavailable");
         return err;
     }
 
+    if (length >= sizeof(snapshot)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    snapshot[length] = '\0';
+
+    char response[MONITORING_SNAPSHOT_MAX_SIZE + 32U];
+    int written = snprintf(response, sizeof(response), "{\"battery\":%s}", snapshot);
+    if (written <= 0 || (size_t)written >= sizeof(response)) {
+        ESP_LOGE(TAG, "Failed to wrap status response");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Status unavailable");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, length);
+    return httpd_resp_send(req, response, written);
 }
 
 static esp_err_t web_server_api_config_get_handler(httpd_req_t *req)
@@ -1861,7 +1906,7 @@ static void web_server_event_task(void *context)
 
         switch (event.id) {
         case APP_EVENT_ID_TELEMETRY_SAMPLE:
-            ws_client_list_broadcast(&s_telemetry_clients, payload, length);
+            web_server_broadcast_battery_snapshot(&s_telemetry_clients, payload, length);
             break;
         case APP_EVENT_ID_UI_NOTIFICATION:
         case APP_EVENT_ID_CONFIG_UPDATED:

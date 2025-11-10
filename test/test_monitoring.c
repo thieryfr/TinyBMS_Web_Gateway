@@ -66,7 +66,13 @@ TEST_CASE("monitoring_snapshot_includes_cell_arrays", "[monitoring]")
 
     buffer[length] = '\0';
 
-    const char *voltage_section = strstr(buffer, "\"cell_voltages_mv\":[");
+    TEST_ASSERT_NOT_NULL(strstr(buffer, "\"pack_voltage_v\""));
+    TEST_ASSERT_NOT_NULL(strstr(buffer, "\"pack_current_a\""));
+    TEST_ASSERT_NOT_NULL(strstr(buffer, "\"power_w\""));
+    TEST_ASSERT_NOT_NULL(strstr(buffer, "\"energy_charged_wh\""));
+    TEST_ASSERT_NOT_NULL(strstr(buffer, "\"energy_discharged_wh\""));
+
+    const char *voltage_section = strstr(buffer, "\"cell_voltage_mv\":[");
     TEST_ASSERT_NOT_NULL(voltage_section);
     const char *balancing_section = strstr(buffer, "\"cell_balancing\":[");
     TEST_ASSERT_NOT_NULL(balancing_section);

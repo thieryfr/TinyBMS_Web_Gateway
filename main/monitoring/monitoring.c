@@ -1,6 +1,7 @@
 #include "monitoring.h"
 
 #include <inttypes.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include "freertos/portmacro.h"
 
 #include "app_events.h"
+#include "can_publisher/conversion_table.h"
 #include "uart_bms.h"
 #include "history_logger.h"
 
@@ -209,29 +211,99 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
     uart_bms_live_data_t empty = {0};
     const uart_bms_live_data_t *snapshot = data != NULL ? data : &empty;
 
+    double energy_charged_wh = 0.0;
+    double energy_discharged_wh = 0.0;
+    can_publisher_conversion_get_energy_state(&energy_charged_wh, &energy_discharged_wh);
+
+    if (!isfinite(energy_charged_wh) || energy_charged_wh < 0.0) {
+        energy_charged_wh = 0.0;
+    }
+    if (!isfinite(energy_discharged_wh) || energy_discharged_wh < 0.0) {
+        energy_discharged_wh = 0.0;
+    }
+
+    float pack_voltage_v = snapshot->pack_voltage_v;
+    if (!isfinite((double)pack_voltage_v)) {
+        pack_voltage_v = 0.0f;
+    }
+
+    float pack_current_a = snapshot->pack_current_a;
+    if (!isfinite((double)pack_current_a)) {
+        pack_current_a = 0.0f;
+    }
+
+    float power_w = pack_voltage_v * pack_current_a;
+    if (!isfinite((double)power_w)) {
+        power_w = 0.0f;
+    }
+
+    bool is_charging = (pack_current_a > 0.05f);
+
+    uint32_t energy_in_wh = (energy_charged_wh > 0.0) ? (uint32_t)(energy_charged_wh + 0.5) : 0U;
+    uint32_t energy_out_wh = (energy_discharged_wh > 0.0) ? (uint32_t)(energy_discharged_wh + 0.5) : 0U;
+
     size_t offset = 0;
     if (!monitoring_json_append(buffer,
                                 buffer_size,
                                 &offset,
-                                "{\"type\":\"battery\",\"timestamp\":%" PRIu64 ","
-                                "\"pack_voltage\":%.3f,\"pack_current\":%.3f,\"min_cell_mv\":%u,"
-                                "\"max_cell_mv\":%u,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
-                                "\"average_temperature\":%.2f,\"mos_temperature\":%.2f,"
-                                "\"balancing_bits\":%u,",
+                                "{\"type\":\"battery\",\"timestamp_ms\":%" PRIu64 ","
+                                "\"pack_voltage_v\":%.3f,\"pack_current_a\":%.3f,\"power_w\":%.3f,"
+                                "\"is_charging\":%s,\"state_of_charge_pct\":%.2f,\"state_of_health_pct\":%.2f,"
+                                "\"average_temperature_c\":%.2f,\"mos_temperature_c\":%.2f,\"auxiliary_temperature_c\":%.2f,"
+                                "\"pack_temperature_min_c\":%.2f,\"pack_temperature_max_c\":%.2f,"
+                                "\"min_cell_mv\":%u,\"max_cell_mv\":%u,\"balancing_bits\":%u,"
+                                "\"alarm_bits\":%u,\"warning_bits\":%u,"
+                                "\"uptime_seconds\":%" PRIu32 ",\"estimated_time_left_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ","
+                                "\"battery_capacity_ah\":%.2f,\"series_cell_count\":%u,"
+                                "\"overvoltage_cutoff_mv\":%u,\"undervoltage_cutoff_mv\":%u,"
+                                "\"discharge_overcurrent_limit_a\":%.3f,\"charge_overcurrent_limit_a\":%.3f,"
+                                "\"max_discharge_current_limit_a\":%.3f,\"max_charge_current_limit_a\":%.3f,"
+                                "\"peak_discharge_current_limit_a\":%.3f,\"overheat_cutoff_c\":%.2f,\"low_temp_charge_cutoff_c\":%.2f,"
+                                "\"hardware_version\":%u,\"hardware_changes_version\":%u,\"firmware_version\":%u,"
+                                "\"firmware_flags\":%u,\"internal_firmware_version\":%u,"
+                                "\"energy_charged_wh\":%u,\"energy_discharged_wh\":%u,",
                                 snapshot->timestamp_ms,
-                                snapshot->pack_voltage_v,
-                                snapshot->pack_current_a,
-                                (unsigned)snapshot->min_cell_mv,
-                                (unsigned)snapshot->max_cell_mv,
+                                pack_voltage_v,
+                                pack_current_a,
+                                power_w,
+                                is_charging ? "true" : "false",
                                 snapshot->state_of_charge_pct,
                                 snapshot->state_of_health_pct,
                                 snapshot->average_temperature_c,
                                 snapshot->mosfet_temperature_c,
-                                (unsigned)snapshot->balancing_bits)) {
+                                snapshot->auxiliary_temperature_c,
+                                snapshot->pack_temperature_min_c,
+                                snapshot->pack_temperature_max_c,
+                                (unsigned)snapshot->min_cell_mv,
+                                (unsigned)snapshot->max_cell_mv,
+                                (unsigned)snapshot->balancing_bits,
+                                (unsigned)snapshot->alarm_bits,
+                                (unsigned)snapshot->warning_bits,
+                                snapshot->uptime_seconds,
+                                snapshot->estimated_time_left_seconds,
+                                snapshot->cycle_count,
+                                snapshot->battery_capacity_ah,
+                                (unsigned)snapshot->series_cell_count,
+                                (unsigned)snapshot->overvoltage_cutoff_mv,
+                                (unsigned)snapshot->undervoltage_cutoff_mv,
+                                snapshot->discharge_overcurrent_limit_a,
+                                snapshot->charge_overcurrent_limit_a,
+                                snapshot->max_discharge_current_limit_a,
+                                snapshot->max_charge_current_limit_a,
+                                snapshot->peak_discharge_current_limit_a,
+                                snapshot->overheat_cutoff_c,
+                                snapshot->low_temp_charge_cutoff_c,
+                                (unsigned)snapshot->hardware_version,
+                                (unsigned)snapshot->hardware_changes_version,
+                                (unsigned)snapshot->firmware_version,
+                                (unsigned)snapshot->firmware_flags,
+                                (unsigned)snapshot->internal_firmware_version,
+                                (unsigned)energy_in_wh,
+                                (unsigned)energy_out_wh)) {
         return ESP_ERR_INVALID_SIZE;
     }
 
-    if (!monitoring_json_append(buffer, buffer_size, &offset, "\"cell_voltages_mv\":[")) {
+    if (!monitoring_json_append(buffer, buffer_size, &offset, "\"cell_voltage_mv\":[")) {
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -263,16 +335,7 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
         }
     }
 
-    if (!monitoring_json_append(buffer,
-                                buffer_size,
-                                &offset,
-                                "],\"alarm_bits\":%u,\"warning_bits\":%u,"
-                                "\"uptime_seconds\":%" PRIu32 ",\"estimated_time_left_seconds\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ",\"registers\":[",
-                                (unsigned)snapshot->alarm_bits,
-                                (unsigned)snapshot->warning_bits,
-                                snapshot->uptime_seconds,
-                                snapshot->estimated_time_left_seconds,
-                                snapshot->cycle_count)) {
+    if (!monitoring_json_append(buffer, buffer_size, &offset, "],\"registers\":[")) {
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -289,7 +352,10 @@ static esp_err_t monitoring_build_snapshot_json(const uart_bms_live_data_t *data
         }
     }
 
-    if (!monitoring_json_append(buffer, buffer_size, &offset, "],\"history_available\":%s}",
+    if (!monitoring_json_append(buffer,
+                                buffer_size,
+                                &offset,
+                                "],\"history_available\":%s}",
                                 monitoring_history_empty() ? "false" : "true")) {
         return ESP_ERR_INVALID_SIZE;
     }
