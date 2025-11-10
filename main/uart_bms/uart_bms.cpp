@@ -220,7 +220,9 @@ static void uart_bms_publish_frame_events(const uint8_t *frame,
     if (uart_bms_json_append(raw_json,
                              UART_BMS_FRAME_JSON_SIZE,
                              &raw_offset,
-                             "{\"type\":\"uart_raw\",\"timestamp\":%" PRIu64 ",\"length\":%zu,\"data\":\"",
+                             "{\"type\":\"uart_raw\",\"timestamp_ms\":%" PRIu64 ",\"timestamp\":%" PRIu64
+                             ",\"length\":%zu,\"data\":\"",
+                             decoded->timestamp_ms,
                              decoded->timestamp_ms,
                              length)) {
         for (size_t i = 0; i < length; ++i) {
@@ -255,10 +257,11 @@ static void uart_bms_publish_frame_events(const uint8_t *frame,
     if (!uart_bms_json_append(decoded_json,
                               UART_BMS_FRAME_JSON_SIZE,
                               &decoded_offset,
-                              "{\"type\":\"uart_decoded\",\"timestamp\":%" PRIu64 ",\"pack_voltage\":%.3f,"
-                              "\"pack_current\":%.3f,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
+                              "{\"type\":\"uart_decoded\",\"timestamp_ms\":%" PRIu64 ",\"timestamp\":%" PRIu64
+                              ",\"pack_voltage\":%.3f,\"pack_current\":%.3f,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
                               "\"average_temperature\":%.2f,\"mos_temperature\":%.2f,\"uptime_seconds\":%" PRIu32 ","
                               "\"cycle_count\":%" PRIu32 ",\"registers\":[",
+                              decoded->timestamp_ms,
                               decoded->timestamp_ms,
                               decoded->pack_voltage_v,
                               decoded->pack_current_a,

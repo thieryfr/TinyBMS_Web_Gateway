@@ -3,6 +3,8 @@
  * @brief Jest global setup for all tests
  */
 
+import { jest } from '@jest/globals';
+
 // Mock localStorage
 const localStorageMock = {
   getItem: jest.fn(),

@@ -63,12 +63,16 @@ TEST_CASE("end_to_end_uart_web_config_flow", "[integration]")
             const char *raw_payload = (const char *)event.payload;
             TEST_ASSERT_NOT_NULL(raw_payload);
             TEST_ASSERT_NOT_EQUAL(0, strstr(raw_payload, "\"type\":\"uart_raw\""));
+            TEST_ASSERT_NOT_EQUAL(0, strstr(raw_payload, "\"timestamp_ms\":"));
+            TEST_ASSERT_NOT_EQUAL(0, strstr(raw_payload, "\"timestamp\":"));
             got_raw = true;
             break;
         case APP_EVENT_ID_UART_FRAME_DECODED:
             TEST_ASSERT_NOT_NULL(event.payload);
             decoded_payload = (const char *)event.payload;
             TEST_ASSERT_NOT_NULL(decoded_payload);
+            TEST_ASSERT_NOT_EQUAL(0, strstr(decoded_payload, "\"timestamp_ms\":"));
+            TEST_ASSERT_NOT_EQUAL(0, strstr(decoded_payload, "\"timestamp\":"));
             got_decoded = true;
             break;
         case APP_EVENT_ID_BMS_LIVE_DATA:

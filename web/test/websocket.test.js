@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { resolveTimestampFields, resolveTimestamp, resolveTimestampMs } from '../src/js/utils/timestamps.js';
 
 describe('WebSocket Utilities', () => {
   describe('WebSocket Connection Manager', () => {
@@ -422,6 +423,45 @@ describe('WebSocket Utilities', () => {
       const after = monitor.lastPong;
 
       expect(after).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe('Timestamp resolution helpers', () => {
+    test('should prefer timestamp_ms when available', () => {
+      const payload = { timestamp_ms: 1725000, timestamp: 1600000 };
+      const result = resolveTimestampFields(payload);
+
+      expect(result.timestamp_ms).toBe(1725000);
+      expect(result.timestamp).toBe(1600000);
+      expect(resolveTimestampMs(payload)).toBe(1725000);
+      expect(resolveTimestamp(payload)).toBe(1600000);
+    });
+
+    test('should fallback to legacy timestamp when timestamp_ms missing', () => {
+      const payload = { timestamp: 987654321 };
+      const result = resolveTimestampFields(payload);
+
+      expect(result.timestamp_ms).toBe(987654321);
+      expect(result.timestamp).toBe(987654321);
+    });
+
+    test('should parse ISO timestamps when numeric fields absent', () => {
+      const iso = '2024-06-01T10:15:30.000Z';
+      const payload = { timestamp_iso: iso };
+      const result = resolveTimestampFields(payload);
+
+      const parsed = Date.parse(iso);
+      expect(result.timestamp_ms).toBe(parsed);
+      expect(result.timestamp).toBe(parsed);
+      expect(result.timestamp_iso).toBe(iso);
+    });
+
+    test('should honour fallback when no timestamp provided', () => {
+      const fallback = 123456789;
+      const result = resolveTimestampFields({}, fallback);
+
+      expect(result.timestamp_ms).toBe(fallback);
+      expect(result.timestamp).toBe(fallback);
     });
   });
 });
