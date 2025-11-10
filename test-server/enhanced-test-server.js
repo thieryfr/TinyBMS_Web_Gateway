@@ -605,7 +605,7 @@ setInterval(() => {
 
   broadcastToClients(wsTelemetry, {
     type: 'telemetry',
-    data: telemetryData,
+    battery: telemetryData,
     timestamp: Date.now()
   });
 
