@@ -259,6 +259,75 @@ Sauvegarde configuration.
 
 ---
 
+### Maintenance
+
+#### POST /api/ota
+
+Charge un nouveau firmware OTA via un formulaire multipart sécurisé.
+
+- **Headers :** `Content-Type: multipart/form-data; boundary=...`
+- **Form-data :**
+  - `firmware` (obligatoire) – Fichier binaire (`application/octet-stream`).
+- **Sécurité :** l'upload est sérialisé (un seul OTA en parallèle). Les flux sont écrits directement dans la partition OTA et un CRC32 est calculé.
+
+**Exemple curl :**
+```bash
+curl -X POST http://192.168.1.100/api/ota \
+     -H 'Content-Type: multipart/form-data' \
+     -F 'firmware=@build/tinybms_web_gateway.bin;type=application/octet-stream'
+```
+
+**Response 200:**
+```json
+{
+  "status": "ok",
+  "bytes": 524288,
+  "crc32": "A1B2C3D4",
+  "partition": "ota_0",
+  "version": "1.2.3",
+  "reboot_required": true
+}
+```
+
+**Codes retour :**
+
+- `400 Bad Request` – Champ manquant/nom incorrect, flux multipart invalide.
+- `413 Payload Too Large` – Corps supérieur aux limites autorisées.
+- `415 Unsupported Media Type` – Type de fichier différent de `application/octet-stream`.
+- `503 Service Unavailable` – Une session OTA est déjà en cours.
+
+#### POST /api/system/restart
+
+Demande un redémarrage contrôlé du TinyBMS ou du gateway.
+
+- **Body (`application/json`) :**
+  - `target` : `"bms"` (défaut) pour envoyer une commande UART TinyBMS, `"gateway"` pour forcer le redémarrage ESP32.
+  - `delay_ms` : délai avant redémarrage gateway (utilisé seulement pour `target="gateway"` ou lors d'un fallback), défaut `750` ms.
+
+**Exemple curl :**
+```bash
+curl -X POST http://192.168.1.100/api/system/restart \
+     -H 'Content-Type: application/json' \
+     -d '{"target":"bms"}'
+```
+
+**Response 200/202:**
+```json
+{
+  "status": "scheduled",
+  "bms_attempted": true,
+  "bms_status": "ok",
+  "gateway_restart": false,
+  "delay_ms": 0
+}
+```
+
+- Lorsque le fallback gateway est déclenché, le statut HTTP est `202 Accepted` et `gateway_restart` vaut `true`.
+- `400 Bad Request` – JSON invalide ou trop volumineux.
+- `500 Internal Server Error` – Impossible de planifier le redémarrage gateway.
+
+---
+
 ### MQTT
 
 #### GET /api/mqtt/config
