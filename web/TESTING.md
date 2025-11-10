@@ -164,6 +164,7 @@ web/
 │   ├── alerts.test.js        # Tests alerts
 │   ├── validation.test.js    # Tests validation/sécurité
 │   ├── api.test.js           # Tests API utilities
+│   ├── codeMetricsUtils.test.js # Tests de normalisation des métriques
 │   └── websocket.test.js     # Tests WebSocket
 │
 ├── jest.config.js
