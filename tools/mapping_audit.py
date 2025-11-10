@@ -1,7 +1,7 @@
 """Utilities to normalize and audit the TinyBMS UART↔CAN mapping files.
 
-This script extracts a unified tabular view from the Excel spreadsheet
-``docs/UART_CAN_mapping.xlsx`` and the JSON specification
+This script extracts a unified tabular view from the JSON mapping file
+``docs/UART_CAN_mapping.json`` and the JSON specification
 ``docs/TinyBMS_CAN_BMS_mapping.json``.  It also performs a few consistency
 checks to highlight potential issues before code reviews.
 
@@ -15,12 +15,10 @@ from __future__ import annotations
 import csv
 import json
 import re
-import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
-from zipfile import ZipFile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -29,120 +27,17 @@ ARCHIVE_DOCS_DIR = REPO_ROOT / "archive" / "docs"
 
 
 # ---------------------------------------------------------------------------
-# Excel parsing helpers
+# JSON loading helpers for UART-CAN mapping
 
 
-NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+def load_uart_can_mapping_json(path: Path) -> List[Dict[str, Optional[str]]]:
+    """Load the UART-CAN mapping from JSON file.
 
-
-def _read_xlsx_rows(path: Path) -> List[List[Optional[str]]]:
-    """Return the rows from the first worksheet of an XLSX file.
-
-    Only the minimal functionality that we need for this repository is
-    implemented so we do not depend on heavy third-party packages.
+    Returns a list of dictionaries with the same structure as the old
+    Excel-based loader for backward compatibility.
     """
-
-    with ZipFile(path) as zf:
-        shared_strings: List[str] = []
-        if "xl/sharedStrings.xml" in zf.namelist():
-            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
-            for si in root.findall("main:si", NS):
-                text = "".join(t.text or "" for t in si.findall(".//main:t", NS))
-                shared_strings.append(text)
-
-        sheet = ET.fromstring(zf.read("xl/worksheets/sheet1.xml"))
-        rows: List[List[Optional[str]]] = []
-
-        for row in sheet.findall(".//main:sheetData/main:row", NS):
-            values: Dict[int, Optional[str]] = {}
-            for cell in row.findall("main:c", NS):
-                coord = cell.attrib["r"]
-                col_label = "".join(ch for ch in coord if ch.isalpha())
-                col_index = 0
-                for ch in col_label:
-                    col_index = col_index * 26 + ord(ch) - ord("A") + 1
-
-                value: Optional[str] = None
-                if (v_elem := cell.find("main:v", NS)) is not None:
-                    raw_value = v_elem.text or ""
-                    if cell.attrib.get("t") == "s":
-                        value = shared_strings[int(raw_value)]
-                    else:
-                        # Numeric cells are left as strings – the downstream logic
-                        # converts them if necessary.
-                        value = raw_value
-                elif (inline := cell.find("main:is", NS)) is not None:
-                    value = "".join(t.text or "" for t in inline.findall(".//main:t", NS))
-
-                if value is not None:
-                    values[col_index] = value
-
-            if values:
-                max_col = max(values)
-                row_values = [values.get(i) for i in range(1, max_col + 1)]
-                rows.append(row_values)
-
-    return rows
-
-
-def _normalize_header(raw_header: Iterable[Optional[str]]) -> List[str]:
-    header: List[str] = []
-    for cell in raw_header:
-        key = (cell or "").strip()
-        key = key.replace(" ", "_")
-        header.append(key)
-    return header
-
-
-def load_uart_can_mapping(path: Path) -> List[Dict[str, Optional[str]]]:
-    rows = _read_xlsx_rows(path)
-    if not rows:
-        return []
-
-    header = _normalize_header(rows[0])
-    normalized: List[Dict[str, Optional[str]]] = []
-    carry_columns = {
-        "Victron_ID_0x3xx",
-        "Victron_Intervalle_typique",
-        "Victron_Description",
-    }
-    last_values: Dict[str, Optional[str]] = {}
-    for row in rows[1:]:
-        if all(cell in (None, "") for cell in row):
-            continue
-
-        record = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
-
-        mapping_type_value = record.get("Mapping_Type")
-        scale_to_can = record.get("Scale_Tiny_To_CAN")
-        if (
-            not record.get("Victron_ID_0x3xx")
-            and isinstance(mapping_type_value, str)
-            and mapping_type_value.startswith("0x")
-            and isinstance(scale_to_can, str)
-            and scale_to_can.lower().startswith("byte")
-        ):
-            record["Victron_ID_0x3xx"] = mapping_type_value
-            if record.get("Compute_Inputs"):
-                record["Victron_Description"] = record["Compute_Inputs"]
-            record["Victron_Champs_principaux_(Bytes,_Scale,_Unit,_Offset)"] = scale_to_can
-            if record.get("Formula"):
-                record["Victron_Intervalle_typique"] = record["Formula"]
-            record["Mapping_Type"] = None
-            record["Compute_Inputs"] = None
-            record["Scale_Tiny_To_CAN"] = None
-            record["Formula"] = None
-
-        for column in carry_columns:
-            value = record.get(column)
-            if value not in (None, ""):
-                last_values[column] = value
-            elif column in last_values:
-                record[column] = last_values[column]
-
-        normalized.append(record)
-
-    return normalized
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data.get("mappings", [])
 
 
 # ---------------------------------------------------------------------------
@@ -524,19 +419,19 @@ def write_report(
 
 
 def main() -> None:
-    excel_records = load_uart_can_mapping(DOCS_DIR / "UART_CAN_mapping.xlsx")
-    json_records = load_can_json(DOCS_DIR / "TinyBMS_CAN_BMS_mapping.json")
+    uart_can_records = load_uart_can_mapping_json(DOCS_DIR / "UART_CAN_mapping.json")
+    can_bms_records = load_can_json(DOCS_DIR / "TinyBMS_CAN_BMS_mapping.json")
 
-    excel_rows = normalize_excel(excel_records)
-    json_rows = normalize_json(json_records)
+    uart_can_rows = normalize_excel(uart_can_records)  # normalize_excel works with dict records
+    can_bms_rows = normalize_json(can_bms_records)
 
-    combined = excel_rows + json_rows
+    combined = uart_can_rows + can_bms_rows
 
     write_csv(combined, ARCHIVE_DOCS_DIR / "mapping_normalized.csv")
 
     duplicates = detect_duplicates(combined)
     missing_formulas = detect_missing_formulas(combined)
-    cross_findings = compare_sources(excel_rows, json_rows)
+    cross_findings = compare_sources(uart_can_rows, can_bms_rows)
 
     write_report(
         ARCHIVE_DOCS_DIR / "mapping_audit.md",

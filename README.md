@@ -71,7 +71,7 @@ Les conversions TinyBMS → Victron s'appuient sur le tableau `main/can_publishe
 - **0x35F** : identification matérielle (ID modèle, firmware public/interne, capacité en service) directement lue dans les registres TinyBMS 0x01F4/0x01F5/0x01F6/0x0132.
 - **0x378/0x379** : compteurs d'énergie cumulée et capacité installée.
 
-Le détail des champs, sources TinyBMS et formules de conversion est désormais archivé dans `archive/docs/protocols/DOCUMENTATION_COMMUNICATIONS.md`, en complément de la feuille source `docs/UART_CAN_mapping.xlsx` utilisée par les scripts d'audit.
+Le détail des champs, sources TinyBMS et formules de conversion est désormais archivé dans `archive/docs/protocols/DOCUMENTATION_COMMUNICATIONS.md`, en complément du fichier `docs/UART_CAN_mapping.json` utilisé par les scripts d'audit.
 
 ## Configuration & compilation
 ### Prérequis
@@ -121,9 +121,11 @@ La documentation a été réorganisée pour refléter l'architecture actuelle du
 Le répertoire `docs/` ne conserve plus que les artefacts nécessaires aux outils et à la compilation :
 
 - **[`TinyBMS_CAN_BMS_mapping.json`](docs/TinyBMS_CAN_BMS_mapping.json)** : matrice CAN ↔️ TinyBMS consommée par les scripts d'audit.
-- **[`UART_CAN_mapping.xlsx`](docs/UART_CAN_mapping.xlsx)** : source Excel utilisée par `tools/mapping_audit.py`.
+- **[`UART_CAN_mapping.json`](docs/UART_CAN_mapping.json)** : mapping UART ↔ CAN utilisé par `tools/mapping_audit.py`.
 - **[`protocols/COMMUNICATION_REFERENCE.json`](docs/protocols/COMMUNICATION_REFERENCE.json)** : export JSON embarqué par l'interface web.
 - **[`shared_data.h`](docs/shared_data.h)** et **[`tiny_read_mapping.h`](docs/tiny_read_mapping.h)** : en-têtes partagés par le code `uart_bms`.
+
+Le fichier Excel original (`UART_CAN_mapping.xlsx`) a été archivé dans `archive/docs/` comme référence historique.
 
 Toute la documentation narrative, les guides et les analyses précédemment présents dans `docs/` ont été déplacés dans `archive/docs/`. Le fichier [`archive/docs/INDEX.md`](archive/docs/INDEX.md) centralise la table des matières de ces contenus historiques.
 
