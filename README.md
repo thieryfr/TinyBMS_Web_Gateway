@@ -122,7 +122,7 @@ Le répertoire `docs/` ne conserve plus que les artefacts nécessaires aux outil
 
 - **[`TinyBMS_CAN_BMS_mapping.json`](docs/TinyBMS_CAN_BMS_mapping.json)** : matrice CAN ↔️ TinyBMS consommée par les scripts d'audit.
 - **[`UART_CAN_mapping.xlsx`](docs/UART_CAN_mapping.xlsx)** : source Excel utilisée par `tools/mapping_audit.py`.
-- **[`protocols/COMMUNICATION_REFERENCE.json`](docs/protocols/COMMUNICATION_REFERENCE.json)** : export JSON embarqué par l'interface web.
+- **[`COMMUNICATION_REFERENCE.json`](docs/COMMUNICATION_REFERENCE.json)** : export JSON embarqué par l'interface web.
 - **[`shared_data.h`](docs/shared_data.h)** et **[`tiny_read_mapping.h`](docs/tiny_read_mapping.h)** : en-têtes partagés par le code `uart_bms`.
 
 Toute la documentation narrative, les guides et les analyses précédemment présents dans `docs/` ont été déplacés dans `archive/docs/`. Le fichier [`archive/docs/INDEX.md`](archive/docs/INDEX.md) centralise la table des matières de ces contenus historiques.
