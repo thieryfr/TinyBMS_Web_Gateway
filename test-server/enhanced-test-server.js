@@ -41,7 +41,9 @@ const registersManager = new RegistersManager();
 const uartSimulator = new UartSimulator();
 const canSimulator = new CanSimulator();
 const eventSimulator = new EventSimulator();
-const alarmSimulator = new AlarmSimulator();
+const alarmSimulator = new AlarmSimulator(configManager);
+
+let lastTelemetrySnapshot = telemetrySimulator.getCurrentData();
 
 // Configuration des WebSocket servers
 const wsTelemetry = new WebSocketServer({ noServer: true });
@@ -599,13 +601,14 @@ function generateClientId() {
  */
 setInterval(() => {
   const telemetryData = telemetrySimulator.update();
-  
+  lastTelemetrySnapshot = telemetryData;
+
   broadcastToClients(wsTelemetry, {
     type: 'telemetry',
     data: telemetryData,
     timestamp: Date.now()
   });
-  
+
   // Vérifier les alarmes
   const alarms = alarmSimulator.checkAlarms(telemetryData);
   if (alarms.new.length > 0) {
@@ -621,9 +624,8 @@ setInterval(() => {
  * Ajout d'échantillon d'historique toutes les 60 secondes
  */
 setInterval(() => {
-  const telemetryData = telemetrySimulator.getCurrentData();
-  historyManager.addEntry(telemetryData);
-  
+  historyManager.addEntry(lastTelemetrySnapshot);
+
   console.log(`[History] Added sample #${historyManager.getEntryCount()}`);
 }, 60000);
 
@@ -631,8 +633,8 @@ setInterval(() => {
  * Diffusion des trames UART à 2Hz
  */
 setInterval(() => {
-  const frame = uartSimulator.generateFrame();
-  
+  const frame = uartSimulator.generateFrame(lastTelemetrySnapshot);
+
   broadcastToClients(wsUart, {
     type: 'uart_frame',
     data: frame,
@@ -644,8 +646,8 @@ setInterval(() => {
  * Diffusion des trames CAN à 10Hz
  */
 setInterval(() => {
-  const frame = canSimulator.generateFrame();
-  
+  const frame = canSimulator.generateFrame(lastTelemetrySnapshot);
+
   broadcastToClients(wsCan, {
     type: 'can_frame',
     data: frame,
@@ -658,8 +660,12 @@ setInterval(() => {
  */
 setInterval(() => {
   if (Math.random() < 0.1) { // 10% de chance par intervalle
-    const event = eventSimulator.generateRandomEvent();
-    
+    const event = eventSimulator.generateRandomEvent({
+      phase: lastTelemetrySnapshot.bms_status,
+      soc: lastTelemetrySnapshot.state_of_charge_pct,
+      pack_voltage_v: lastTelemetrySnapshot.pack_voltage_v,
+    });
+
     broadcastToClients(wsEvents, {
       type: 'system_event',
       data: event,
