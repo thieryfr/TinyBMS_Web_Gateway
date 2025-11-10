@@ -39,7 +39,7 @@
 
 #define CAN_VICTRON_METRIC_BUFFER_SIZE   256U
 #define CAN_VICTRON_OCCUPANCY_WINDOW_MS  60000U
-#define CAN_VICTRON_BITRATE_BPS          250000U
+#define CAN_VICTRON_BITRATE_BPS          500000U
 
 // CAN configuration defaults are now centralized in can_config_defaults.h
 
@@ -362,7 +362,7 @@ static void can_victron_publish_demo_frames(void)
 {
     static const uint8_t k_demo_status[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
     uint64_t timestamp = can_victron_timestamp_ms();
-    (void)can_victron_emit_events(0x18FF50E5,
+    (void)can_victron_emit_events(0x351U,
                                   k_demo_status,
                                   sizeof(k_demo_status),
                                   sizeof(k_demo_status),
@@ -371,7 +371,7 @@ static void can_victron_publish_demo_frames(void)
                                   timestamp);
 
     static const uint8_t k_demo_alarm[] = {0x01, 0x02, 0x00, 0x00};
-    (void)can_victron_emit_events(0x18FF01E5,
+    (void)can_victron_emit_events(0x35AU,
                                   k_demo_alarm,
                                   sizeof(k_demo_alarm),
                                   sizeof(k_demo_alarm),
@@ -449,7 +449,7 @@ static esp_err_t can_victron_start_driver(void)
     g_config.tx_queue_len = CAN_VICTRON_TWAI_TX_QUEUE_LEN;
     g_config.rx_queue_len = CAN_VICTRON_TWAI_RX_QUEUE_LEN;
 
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     // Accepter toutes les trames pour éviter de filtrer les messages Victron
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -817,6 +817,14 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
                                     size_t length,
                                     const char *description)
 {
+    if (can_id > 0x7FFU) {
+        ESP_LOGE(TAG,
+                 "Unsupported CAN identifier 0x%08" PRIX32
+                 " (standard identifiers only)",
+                 can_id);
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (length > 8U) {
         length = 8U;
     }
@@ -841,10 +849,6 @@ esp_err_t can_victron_publish_frame(uint32_t can_id,
 
     if (data_length > 0U) {
         memcpy(message.data, data, data_length);
-    }
-
-    if (can_id > 0x7FFU) {
-        message.flags |= TWAI_MSG_FLAG_EXTD;
     }
 
     SemaphoreHandle_t mutex = s_twai_mutex;

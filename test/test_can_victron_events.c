@@ -46,7 +46,7 @@ TEST_CASE("can_victron_publish_frame exposes timestamp fields", "[can][victron]"
     can_victron_set_event_publisher(capture_event);
 
     const uint8_t data[3] = {0x11, 0x22, 0x33};
-    TEST_ASSERT_EQUAL(ESP_OK, can_victron_publish_frame(0x18FF50E5, data, sizeof(data), "unit test frame"));
+    TEST_ASSERT_EQUAL(ESP_OK, can_victron_publish_frame(0x351U, data, sizeof(data), "unit test frame"));
 
     TEST_ASSERT_TRUE(s_event_count >= 2U);
 
