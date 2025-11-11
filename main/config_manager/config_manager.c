@@ -897,8 +897,10 @@ static void config_manager_load_mqtt_settings_from_nvs(void)
 #endif
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
-static char s_config_json[CONFIG_MANAGER_MAX_CONFIG_SIZE] = {0};
-static size_t s_config_length = 0;
+static char s_config_json_full[CONFIG_MANAGER_MAX_CONFIG_SIZE] = {0};
+static size_t s_config_length_full = 0;
+static char s_config_json_public[CONFIG_MANAGER_MAX_CONFIG_SIZE] = {0};
+static size_t s_config_length_public = 0;
 static uint16_t s_register_raw_values[s_register_count];
 static bool s_registers_initialised = false;
 static char s_register_events[CONFIG_MANAGER_REGISTER_EVENT_BUFFERS][CONFIG_MANAGER_MAX_UPDATE_PAYLOAD];
@@ -1133,14 +1135,14 @@ static esp_err_t config_manager_save_config_file(void)
         return ESP_FAIL;
     }
 
-    size_t written = fwrite(s_config_json, 1, s_config_length, file);
+    size_t written = fwrite(s_config_json_full, 1, s_config_length_full, file);
     int flush_result = fflush(file);
     int close_result = fclose(file);
-    if (written != s_config_length || flush_result != 0 || close_result != 0) {
+    if (written != s_config_length_full || flush_result != 0 || close_result != 0) {
         ESP_LOGW(TAG,
                  "Failed to write configuration file (written=%zu expected=%zu errno=%d)",
                  written,
-                 s_config_length,
+                 s_config_length_full,
                  errno);
         return ESP_FAIL;
     }
@@ -1344,16 +1346,24 @@ static bool config_manager_load_register_raw(uint16_t address, uint16_t *out_val
 }
 #endif
 
+static const char *config_manager_select_secret_value(const char *value, bool include_secrets)
+{
+    if (value == NULL) {
+        return "";
+    }
+    return include_secrets ? value : config_manager_mask_secret(value);
+}
+
 static void config_manager_publish_config_snapshot(void)
 {
-    if (s_event_publisher == NULL || s_config_length == 0) {
+    if (s_event_publisher == NULL || s_config_length_public == 0) {
         return;
     }
 
     event_bus_event_t event = {
         .id = APP_EVENT_ID_CONFIG_UPDATED,
-        .payload = s_config_json,
-        .payload_size = s_config_length + 1,
+        .payload = s_config_json_public,
+        .payload_size = s_config_length_public + 1,
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(50))) {
@@ -1399,9 +1409,18 @@ static void config_manager_publish_register_change(const config_manager_register
     }
 }
 
-static esp_err_t config_manager_build_config_snapshot_locked(void)
+static esp_err_t config_manager_render_config_snapshot_locked(bool include_secrets,
+                                                             char *buffer,
+                                                             size_t buffer_size,
+                                                             size_t *out_length)
 {
-    config_manager_ensure_topics_loaded();
+    if (out_length != NULL) {
+        *out_length = 0;
+    }
+
+    if (buffer == NULL || buffer_size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     char scheme[16];
     char host[MQTT_CLIENT_MAX_URI_LENGTH];
@@ -1478,7 +1497,9 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
         goto cleanup;
     }
     if (cJSON_AddStringToObject(wifi_sta, "ssid", s_wifi_settings.sta.ssid) == NULL ||
-        cJSON_AddStringToObject(wifi_sta, "password", config_manager_mask_secret(s_wifi_settings.sta.password)) == NULL ||
+        cJSON_AddStringToObject(wifi_sta,
+                                 "password",
+                                 config_manager_select_secret_value(s_wifi_settings.sta.password, include_secrets)) == NULL ||
         cJSON_AddStringToObject(wifi_sta, "hostname", s_wifi_settings.sta.hostname) == NULL ||
         cJSON_AddNumberToObject(wifi_sta, "max_retry", (double)s_wifi_settings.sta.max_retry) == NULL) {
         cJSON_Delete(wifi_sta);
@@ -1495,7 +1516,9 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
         goto cleanup;
     }
     if (cJSON_AddStringToObject(wifi_ap, "ssid", s_wifi_settings.ap.ssid) == NULL ||
-        cJSON_AddStringToObject(wifi_ap, "password", config_manager_mask_secret(s_wifi_settings.ap.password)) == NULL ||
+        cJSON_AddStringToObject(wifi_ap,
+                                 "password",
+                                 config_manager_select_secret_value(s_wifi_settings.ap.password, include_secrets)) == NULL ||
         cJSON_AddNumberToObject(wifi_ap, "channel", (double)s_wifi_settings.ap.channel) == NULL ||
         cJSON_AddNumberToObject(wifi_ap, "max_clients", (double)s_wifi_settings.ap.max_clients) == NULL) {
         cJSON_Delete(wifi_ap);
@@ -1586,7 +1609,9 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
         cJSON_AddStringToObject(mqtt, "host", host) == NULL ||
         cJSON_AddNumberToObject(mqtt, "port", (double)port) == NULL ||
         cJSON_AddStringToObject(mqtt, "username", s_mqtt_config.username) == NULL ||
-        cJSON_AddStringToObject(mqtt, "password", config_manager_mask_secret(s_mqtt_config.password)) == NULL ||
+        cJSON_AddStringToObject(mqtt,
+                                 "password",
+                                 config_manager_select_secret_value(s_mqtt_config.password, include_secrets)) == NULL ||
         cJSON_AddStringToObject(mqtt, "client_cert_path", s_mqtt_config.client_cert_path) == NULL ||
         cJSON_AddStringToObject(mqtt, "ca_cert_path", s_mqtt_config.ca_cert_path) == NULL ||
         cJSON_AddBoolToObject(mqtt, "verify_hostname", s_mqtt_config.verify_hostname) == NULL ||
@@ -1618,30 +1643,57 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
     cJSON_AddItemToObject(mqtt, "topics", topics);
     cJSON_AddItemToObject(root, "mqtt", mqtt);
 
-    s_config_json[0] = '\0';
-    if (!cJSON_PrintPreallocated(root, s_config_json, sizeof(s_config_json), false)) {
+    buffer[0] = '\0';
+    if (!cJSON_PrintPreallocated(root, buffer, buffer_size, false)) {
         char *json = cJSON_PrintUnformatted(root);
         if (json == NULL) {
             result = ESP_ERR_NO_MEM;
             goto cleanup;
         }
         size_t length = strlen(json);
-        if (length >= sizeof(s_config_json)) {
+        if (length >= buffer_size) {
             cJSON_free(json);
             result = ESP_ERR_INVALID_SIZE;
             goto cleanup;
         }
-        memcpy(s_config_json, json, length + 1U);
-        s_config_length = length;
+        memcpy(buffer, json, length + 1U);
+        if (out_length != NULL) {
+            *out_length = length;
+        }
         cJSON_free(json);
     } else {
-        s_config_length = strlen(s_config_json);
+        if (out_length != NULL) {
+            *out_length = strlen(buffer);
+        }
     }
 
 cleanup:
     cJSON_Delete(root);
 #undef CHECK_JSON
     return result;
+}
+
+static esp_err_t config_manager_build_config_snapshot_locked(void)
+{
+    config_manager_ensure_topics_loaded();
+
+    esp_err_t err = config_manager_render_config_snapshot_locked(true,
+                                                                 s_config_json_full,
+                                                                 sizeof(s_config_json_full),
+                                                                 &s_config_length_full);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = config_manager_render_config_snapshot_locked(false,
+                                                       s_config_json_public,
+                                                       sizeof(s_config_json_public),
+                                                       &s_config_length_public);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return ESP_OK;
 }
 
 static esp_err_t config_manager_build_config_snapshot(void)
@@ -2101,7 +2153,7 @@ static void config_manager_ensure_initialised(void)
         config_manager_load_persistent_settings();
     }
 
-    if (s_config_length == 0) {
+    if (s_config_length_public == 0) {
         if (config_manager_build_config_snapshot() != ESP_OK) {
             ESP_LOGW(TAG, "Failed to build default configuration snapshot");
         }
@@ -2310,7 +2362,10 @@ esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *top
     return snapshot_err;
 }
 
-esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length)
+esp_err_t config_manager_get_config_json(char *buffer,
+                                         size_t buffer_size,
+                                         size_t *out_length,
+                                         config_manager_snapshot_flags_t flags)
 {
     if (buffer == NULL || buffer_size == 0) {
         return ESP_ERR_INVALID_ARG;
@@ -2323,13 +2378,16 @@ esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_
         return lock_err;
     }
 
-    if (s_config_length + 1 > buffer_size) {
+    bool include_secrets = ((flags & CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS) != 0);
+    const char *source = include_secrets ? s_config_json_full : s_config_json_public;
+    size_t length = include_secrets ? s_config_length_full : s_config_length_public;
+
+    if (length + 1 > buffer_size) {
         config_manager_unlock();
         return ESP_ERR_INVALID_SIZE;
     }
 
-    size_t length = s_config_length;
-    memcpy(buffer, s_config_json, length + 1);
+    memcpy(buffer, source, length + 1);
     if (out_length != NULL) {
         *out_length = length;
     }
@@ -2697,7 +2755,8 @@ void config_manager_deinit(void)
 
     // Reset state
     s_event_publisher = NULL;
-    s_config_length = 0;
+    s_config_length_full = 0;
+    s_config_length_public = 0;
     s_registers_initialised = false;
     s_settings_loaded = false;
     s_nvs_initialised = false;
@@ -2705,7 +2764,8 @@ void config_manager_deinit(void)
     s_config_file_loaded = false;
     s_next_register_event = 0;
     s_uart_poll_interval_ms = UART_BMS_DEFAULT_POLL_INTERVAL_MS;
-    memset(s_config_json, 0, sizeof(s_config_json));
+    memset(s_config_json_full, 0, sizeof(s_config_json_full));
+    memset(s_config_json_public, 0, sizeof(s_config_json_public));
     memset(s_register_raw_values, 0, sizeof(s_register_raw_values));
     memset(s_register_events, 0, sizeof(s_register_events));
     memset(&s_mqtt_config, 0, sizeof(s_mqtt_config));

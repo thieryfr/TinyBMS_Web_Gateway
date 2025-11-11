@@ -142,7 +142,10 @@ static void config_manager_snapshot_reader_task(void *param)
     size_t length = 0;
 
     for (int i = 0; i < TEST_ITERATIONS_PER_THREAD; i++) {
-        esp_err_t err = config_manager_get_config_json(buffer, sizeof(buffer), &length);
+        esp_err_t err = config_manager_get_config_json(buffer,
+                                                      sizeof(buffer),
+                                                      &length,
+                                                      CONFIG_MANAGER_SNAPSHOT_PUBLIC);
         if (err != ESP_OK) {
             s_test_failed = true;
             break;
