@@ -105,6 +105,8 @@ TEST_CASE("uart_bms_process_frame publishes event and notifies listeners", "[uar
     TEST_ASSERT_EQUAL_UINT16(3200, s_listener_data.cell_voltage_mv[0]);
     TEST_ASSERT_EQUAL_UINT8(1, s_listener_data.cell_balancing[0]);
 
+    event_bus_release(&event);
+
     uart_bms_unregister_listener(test_listener, NULL);
     event_bus_unsubscribe(subscriber);
     event_bus_deinit();

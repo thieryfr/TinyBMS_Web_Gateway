@@ -248,6 +248,7 @@ static void status_led_event_task(void *ctx)
             continue;
         }
         status_led_handle_event(&event);
+        event_bus_release(&event);
     }
 
     ESP_LOGI(TAG, "Event task exiting");

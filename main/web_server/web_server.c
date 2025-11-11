@@ -801,11 +801,13 @@ static void web_server_event_task(void *context)
         }
 
         if (payload == NULL || length == 0U) {
+            event_bus_release(&event);
             continue;
         }
 
         // Delegate to WebSocket module for broadcasting
         web_server_websocket_broadcast_event(event.id, payload, length);
+        event_bus_release(&event);
     }
 
     ESP_LOGI(TAG, "Event task shutting down cleanly");

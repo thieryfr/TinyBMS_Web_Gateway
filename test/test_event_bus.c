@@ -34,6 +34,7 @@ TEST_CASE("subscribe publish receive", "[event_bus]")
     TEST_ASSERT_EQUAL(event.id, received.id);
     TEST_ASSERT_EQUAL(event.payload_size, received.payload_size);
     TEST_ASSERT_EQUAL_PTR(event.payload, received.payload);
+    event_bus_release(&received);
 
     event_bus_unsubscribe(subscriber);
     event_bus_deinit();
@@ -95,6 +96,7 @@ TEST_CASE("queue full causes publish failure", "[event_bus]")
     event_bus_event_t received = {0};
     TEST_ASSERT_TRUE(event_bus_receive(subscriber, &received, pdMS_TO_TICKS(10)));
     TEST_ASSERT_EQUAL(event.id, received.id);
+    event_bus_release(&received);
 
     event_bus_unsubscribe(subscriber);
     event_bus_deinit();
