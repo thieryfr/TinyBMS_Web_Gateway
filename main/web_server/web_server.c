@@ -72,6 +72,7 @@
 #define WEB_SERVER_EVENT_BUS_JSON_SIZE    1536
 #define WEB_SERVER_TASKS_JSON_SIZE        8192
 #define WEB_SERVER_MODULES_JSON_SIZE      2048
+#define WEB_SERVER_JSON_CHUNK_SIZE        1024
 
 // WebSocket rate limiting and security
 #define WEB_SERVER_WS_MAX_PAYLOAD_SIZE    (32 * 1024)  // 32KB max payload
@@ -224,7 +225,21 @@ static esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size
     web_server_set_security_headers(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, length);
+
+    size_t offset = 0U;
+    while (offset < length) {
+        size_t remaining = length - offset;
+        size_t chunk = (remaining > WEB_SERVER_JSON_CHUNK_SIZE) ? WEB_SERVER_JSON_CHUNK_SIZE : remaining;
+
+        esp_err_t err = httpd_resp_send_chunk(req, buffer + offset, chunk);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        offset += chunk;
+    }
+
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 static void web_server_set_http_status_code(httpd_req_t *req, int status_code)
@@ -663,16 +678,24 @@ static esp_err_t web_server_api_metrics_runtime_handler(httpd_req_t *req)
         return err;
     }
 
-    char buffer[WEB_SERVER_RUNTIME_JSON_SIZE];
+    char *buffer = malloc(WEB_SERVER_RUNTIME_JSON_SIZE);
+    if (buffer == NULL) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "Memory allocation failure");
+        return ESP_ERR_NO_MEM;
+    }
+
     size_t length = 0;
-    err = system_metrics_runtime_to_json(&runtime, buffer, sizeof(buffer), &length);
+    err = system_metrics_runtime_to_json(&runtime, buffer, WEB_SERVER_RUNTIME_JSON_SIZE, &length);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to serialize runtime metrics: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Runtime metrics serialization error");
+        free(buffer);
         return err;
     }
 
-    return web_server_send_json(req, buffer, length);
+    esp_err_t send_err = web_server_send_json(req, buffer, length);
+    free(buffer);
+    return send_err;
 }
 
 static esp_err_t web_server_api_event_bus_metrics_handler(httpd_req_t *req)
@@ -685,16 +708,24 @@ static esp_err_t web_server_api_event_bus_metrics_handler(httpd_req_t *req)
         return err;
     }
 
-    char buffer[WEB_SERVER_EVENT_BUS_JSON_SIZE];
+    char *buffer = malloc(WEB_SERVER_EVENT_BUS_JSON_SIZE);
+    if (buffer == NULL) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "Memory allocation failure");
+        return ESP_ERR_NO_MEM;
+    }
+
     size_t length = 0;
-    err = system_metrics_event_bus_to_json(&metrics, buffer, sizeof(buffer), &length);
+    err = system_metrics_event_bus_to_json(&metrics, buffer, WEB_SERVER_EVENT_BUS_JSON_SIZE, &length);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to serialize event bus metrics: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Event bus metrics serialization error");
+        free(buffer);
         return err;
     }
 
-    return web_server_send_json(req, buffer, length);
+    esp_err_t send_err = web_server_send_json(req, buffer, length);
+    free(buffer);
+    return send_err;
 }
 
 static esp_err_t web_server_api_system_tasks_handler(httpd_req_t *req)
@@ -707,16 +738,24 @@ static esp_err_t web_server_api_system_tasks_handler(httpd_req_t *req)
         return err;
     }
 
-    char buffer[WEB_SERVER_TASKS_JSON_SIZE];
+    char *buffer = malloc(WEB_SERVER_TASKS_JSON_SIZE);
+    if (buffer == NULL) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "Memory allocation failure");
+        return ESP_ERR_NO_MEM;
+    }
+
     size_t length = 0;
-    err = system_metrics_tasks_to_json(&tasks, buffer, sizeof(buffer), &length);
+    err = system_metrics_tasks_to_json(&tasks, buffer, WEB_SERVER_TASKS_JSON_SIZE, &length);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to serialize task metrics: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task metrics serialization error");
+        free(buffer);
         return err;
     }
 
-    return web_server_send_json(req, buffer, length);
+    esp_err_t send_err = web_server_send_json(req, buffer, length);
+    free(buffer);
+    return send_err;
 }
 
 static esp_err_t web_server_api_system_modules_handler(httpd_req_t *req)
@@ -737,16 +776,24 @@ static esp_err_t web_server_api_system_modules_handler(httpd_req_t *req)
         return err;
     }
 
-    char buffer[WEB_SERVER_MODULES_JSON_SIZE];
+    char *buffer = malloc(WEB_SERVER_MODULES_JSON_SIZE);
+    if (buffer == NULL) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "Memory allocation failure");
+        return ESP_ERR_NO_MEM;
+    }
+
     size_t length = 0;
-    err = system_metrics_modules_to_json(&modules, buffer, sizeof(buffer), &length);
+    err = system_metrics_modules_to_json(&modules, buffer, WEB_SERVER_MODULES_JSON_SIZE, &length);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to serialize module metrics: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Module metrics serialization error");
+        free(buffer);
         return err;
     }
 
-    return web_server_send_json(req, buffer, length);
+    esp_err_t send_err = web_server_send_json(req, buffer, length);
+    free(buffer);
+    return send_err;
 }
 
 static void ws_client_list_add(ws_client_t **list, int fd)

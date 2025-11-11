@@ -21,6 +21,8 @@ typedef struct {
 #define TINY_MQTT_MAX_PAYLOAD_SIZE      1024U
 
 typedef struct {
+    const char *topic;
+    size_t topic_length;
     const char *payload;
     size_t payload_length;
     int qos;
@@ -32,6 +34,9 @@ void tiny_mqtt_publisher_init(const tiny_mqtt_publisher_config_t *config);
 void tiny_mqtt_publisher_deinit(void);
 void tiny_mqtt_publisher_apply_config(const tiny_mqtt_publisher_config_t *config);
 void tiny_mqtt_publisher_reset(void);
+void tiny_mqtt_publisher_set_metrics_topic(const char *topic);
+bool tiny_mqtt_publisher_build_metrics_message(const uart_bms_live_data_t *data,
+                                               tiny_mqtt_publisher_message_t *message);
 void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context);
 
 #ifdef __cplusplus
