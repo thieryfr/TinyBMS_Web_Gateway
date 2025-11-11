@@ -1,9 +1,8 @@
 Agis comme un expert en revue de code et ingénieur logiciel senior. 
 
-Analyse en mode verbose.
+Analyse exhaustive de code sur github: https://github.com/thieryfr/TinyBMS-GW
 
-Analyse exhaustive de code sur github:
-https://github.com/thieryfr/TinyBMS-GW/blob/main/
+Analyse en mode verbose selon le plan ci-dessous.
 
 **TÂCHES D'ANALYSE :**
 
