@@ -12,10 +12,9 @@ Cela représentait une charge importante pour l'ESP32 qui a des ressources de st
 
 ## Solution implémentée
 
-Utilisation du **CDN jsDelivr** pour charger les icônes Tabler :
-```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
-```
+Utilisation du **CDN jsDelivr** pour charger les icônes Tabler.  Les liens CDN sont
+centralisés dans les fichiers du dossier `web/` (par exemple `web/index.html`) afin de
+garder toutes les dépendances distantes confinées à la partie front-end du projet.
 
 ## Avantages
 
