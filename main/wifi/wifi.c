@@ -173,9 +173,24 @@ static void wifi_schedule_sta_retry(uint32_t delay_ms)
         delay_ticks = 1;
     }
 
-    if (xTimerChangePeriod(s_sta_retry_timer, delay_ticks, 0) != pdPASS) {
-        ESP_LOGW(TAG, "Failed to schedule STA retry timer");
+    if (xTimerIsTimerActive(s_sta_retry_timer) == pdTRUE) {
+        if (xTimerStop(s_sta_retry_timer, 0) != pdPASS) {
+            ESP_LOGW(TAG, "Failed to stop STA retry timer before reschedule");
+            return;
+        }
     }
+
+    if (xTimerChangePeriod(s_sta_retry_timer, delay_ticks, 0) != pdPASS) {
+        ESP_LOGW(TAG, "Failed to update STA retry timer period");
+        return;
+    }
+
+    if (xTimerStart(s_sta_retry_timer, 0) != pdPASS) {
+        ESP_LOGW(TAG, "Failed to start STA retry timer");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Scheduled STA retry in %u ms (one-shot)", delay_ms);
 }
 
 static void wifi_sta_retry_timer_callback(TimerHandle_t timer);
@@ -400,6 +415,7 @@ static void wifi_sta_retry_timer_callback(TimerHandle_t timer)
         return;
     }
 
+    ESP_LOGI(TAG, "STA retry timer fired while fallback AP active");
     ESP_LOGI(TAG, "Retrying STA connection while fallback AP is active");
     wifi_start_sta_mode();
 
@@ -599,6 +615,9 @@ void wifi_init(void)
                                          pdFALSE,
                                          NULL,
                                          wifi_sta_retry_timer_callback);
+        // Timer configured as one-shot (auto-reload disabled). Each retry must
+        // explicitly reschedule the timer to ensure deterministic behaviour
+        // when switching between STA/AP modes.
         if (s_sta_retry_timer == NULL) {
             ESP_LOGW(TAG, "Failed to allocate STA retry timer");
         }
