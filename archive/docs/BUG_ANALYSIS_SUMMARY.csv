@@ -1,0 +1,14 @@
+ID,Catégorie,Criticité,Fichier,Ligne,Description,Impact,Type_Bug
+1,Synchronisation,CRITIQUE,uart_bms/uart_bms.cpp,1081-1119,"Race condition: Accès non synchronisé à s_shared_listeners","Segmentation fault, corruption mémoire",Race_Condition
+2,Synchronisation,CRITIQUE,can_victron/can_victron.c,985-1009,"Race condition: Accès non protégé à s_driver_started en deinit","Fuite TWAI, crash driver",Race_Condition
+3,Synchronisation,CRITIQUE,web_server/web_server.c,"456, 506, 569, 601, 3396","Deadlock potentiel: portMAX_DELAY en contexte critique","Deadlock shutdown, système non-responsif",Deadlock
+4,Synchronisation,ÉLEVÉE,can_publisher/can_publisher.c,372-448,"Race condition: Accès non synchronisé à s_channel_deadlines","Calcul deadline incohérent, perte messages CAN",Race_Condition
+5,Synchronisation,ÉLEVÉE,event_bus/event_bus.c,158-190,"TOCTOU: event_bus_unsubscribe","Double-free, corruption heap",TOCTOU
+6,Pointeurs,ÉLEVÉE,can_publisher/can_publisher.c,238-285,"NULL pointer dereference: can_publisher_on_bms_update","Crash lors update BMS pendant shutdown",Null_Pointer
+7,Ressources,ÉLEVÉE,can_victron/can_victron.c,1012-1028,"Fuite mémoire: Mutexes non vérifiés avant suppression","Fuite ressources FreeRTOS",Memory_Leak
+8,Synchronisation,MOYENNE,monitoring/monitoring.c,35-46,"Race condition: Accès non synchronisé à s_latest_bms","Données corrompues, affichage incohérent",Race_Condition
+9,Logique,MOYENNE,monitoring/monitoring.c,379-383,"Division par zéro potentielle","Exception FPU, crash système","Division_Zero"
+10,Mémoire,MOYENNE,event_bus/event_bus.c,269-298,"Buffer overflow potentiel: strncpy sans null-term check","Stack overflow, corruption mémoire",Buffer_Overflow
+11,Code,FAIBLE,uart_bms/uart_bms.cpp,1058-1069,"Code mort: readback_raw parameter inutilisé","Code désordonné, pas de confirmation",Dead_Code
+12,Logique,MOYENNE,can_victron/can_victron.c,989-1010,"État inconsistent: Vérification s_driver_started sans mutex","Erreurs sporadiques lors shutdown",Logic_Error
+13,Initialisation,MOYENNE,web_server/web_server.c,473-490,"Initialisation incomplète: s_auth_mutex NULL handling","Condition race si création échoue",Init_Error
