@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -35,6 +36,7 @@
 #include "system_metrics.h"
 #include "ota_update.h"
 #include "system_control.h"
+#include "web_server_ota_errors.h"
 
 #include "cJSON.h"
 
@@ -222,6 +224,82 @@ static esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, buffer, length);
+}
+
+static void web_server_set_http_status_code(httpd_req_t *req, int status_code)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    const char *status = "200 OK";
+    switch (status_code) {
+    case 200:
+        status = "200 OK";
+        break;
+    case 400:
+        status = "400 Bad Request";
+        break;
+    case 413:
+        status = "413 Payload Too Large";
+        break;
+    case 415:
+        status = "415 Unsupported Media Type";
+        break;
+    case 503:
+        status = "503 Service Unavailable";
+        break;
+    default:
+        status = "500 Internal Server Error";
+        break;
+    }
+
+    httpd_resp_set_status(req, status);
+}
+
+static esp_err_t web_server_send_ota_response(httpd_req_t *req,
+                                              web_server_ota_error_code_t code,
+                                              const char *message_override,
+                                              cJSON *data)
+{
+    if (req == NULL) {
+        if (data != NULL) {
+            cJSON_Delete(data);
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        if (data != NULL) {
+            cJSON_Delete(data);
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (!web_server_ota_set_response_fields(root, code, message_override)) {
+        cJSON_Delete(root);
+        if (data != NULL) {
+            cJSON_Delete(data);
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (data != NULL) {
+        cJSON_AddItemToObject(root, "data", data);
+    }
+
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t length = strlen(json);
+    web_server_set_http_status_code(req, web_server_ota_http_status(code));
+    esp_err_t err = web_server_send_json(req, json, length);
+    cJSON_free(json);
+    return err;
 }
 
 static const uint8_t *web_server_memmem(const uint8_t *haystack,
@@ -1017,117 +1095,6 @@ static esp_err_t web_server_send_file(httpd_req_t *req, const char *path)
     return ESP_OK;
 }
 
-static bool web_server_extract_json_string(const char *json, const char *field, char *out, size_t out_size)
-{
-    if (json == NULL || field == NULL || out == NULL || out_size == 0) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (*cursor != '"') {
-        return false;
-    }
-    ++cursor;
-
-    size_t len = 0;
-    while (cursor[len] != '\0' && cursor[len] != '"') {
-        if (len + 1 >= out_size) {
-            return false;
-        }
-        out[len] = cursor[len];
-        ++len;
-    }
-
-    if (cursor[len] != '"') {
-        return false;
-    }
-
-    out[len] = '\0';
-    return true;
-}
-
-static bool web_server_extract_json_uint(const char *json, const char *field, uint32_t *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (*cursor == '\0') {
-        return false;
-    }
-
-    char *endptr = NULL;
-    unsigned long parsed = strtoul(cursor, &endptr, 10);
-    if (endptr == cursor) {
-        return false;
-    }
-
-    *out_value = (uint32_t)parsed;
-    return true;
-}
-
-static bool web_server_extract_json_bool(const char *json, const char *field, bool *out_value)
-{
-    if (json == NULL || field == NULL || out_value == NULL) {
-        return false;
-    }
-
-    const char *cursor = strstr(json, field);
-    if (cursor == NULL) {
-        return false;
-    }
-
-    cursor = strchr(cursor, ':');
-    if (cursor == NULL) {
-        return false;
-    }
-
-    ++cursor;
-    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-
-    if (strncmp(cursor, "true", 4) == 0) {
-        *out_value = true;
-        return true;
-    }
-    if (strncmp(cursor, "false", 5) == 0) {
-        *out_value = false;
-        return true;
-    }
-
-    return false;
-}
-
 static void web_server_parse_mqtt_uri(const char *uri,
                                       char *scheme,
                                       size_t scheme_size,
@@ -1369,7 +1336,7 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
     web_server_parse_mqtt_uri(config->broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
 
     // Mask password for security - never send actual password in GET response
-    const char *masked_password = (config->password && config->password[0] != '\0') ? "********" : "";
+    const char *masked_password = config_manager_mask_secret(config->password);
 
     char buffer[WEB_SERVER_MQTT_JSON_SIZE];
     int written = snprintf(buffer,
@@ -1454,62 +1421,252 @@ static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
                               sizeof(default_host),
                               &default_port);
 
-    char scheme[16];
-    (void)snprintf(scheme, sizeof(scheme), "%s", default_scheme);
-    if (web_server_extract_json_string(payload, "\"scheme\"", scheme, sizeof(scheme))) {
+    char scheme[sizeof(default_scheme)];
+    snprintf(scheme, sizeof(scheme), "%s", default_scheme);
+    char host[sizeof(default_host)];
+    snprintf(host, sizeof(host), "%s", default_host);
+    uint16_t port = default_port;
+
+    esp_err_t status = ESP_OK;
+    bool send_error = false;
+    int error_status = HTTPD_400_BAD_REQUEST;
+    const char *error_message = "Invalid MQTT configuration";
+
+    cJSON *root = cJSON_ParseWithLength(payload, received);
+    if (root == NULL || !cJSON_IsObject(root)) {
+        status = ESP_ERR_INVALID_ARG;
+        send_error = true;
+        error_message = "Invalid JSON payload";
+        goto cleanup;
+    }
+
+    const cJSON *item = NULL;
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "scheme");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "scheme must be a string";
+            goto cleanup;
+        }
+        snprintf(scheme, sizeof(scheme), "%s", item->valuestring);
         for (size_t i = 0; scheme[i] != '\0'; ++i) {
             scheme[i] = (char)tolower((unsigned char)scheme[i]);
         }
     }
 
-    char host[MQTT_CLIENT_MAX_URI_LENGTH];
-    (void)snprintf(host, sizeof(host), "%s", default_host);
-    web_server_extract_json_string(payload, "\"host\"", host, sizeof(host));
+    item = cJSON_GetObjectItemCaseSensitive(root, "host");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "host must be a string";
+            goto cleanup;
+        }
+        snprintf(host, sizeof(host), "%s", item->valuestring);
+    }
 
-    uint32_t port = default_port;
-    web_server_extract_json_uint(payload, "\"port\"", &port);
-    if (port == 0U || port > UINT16_MAX) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid port");
-        return ESP_ERR_INVALID_ARG;
+    item = cJSON_GetObjectItemCaseSensitive(root, "port");
+    if (item != NULL) {
+        if (!cJSON_IsNumber(item)) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "port must be a number";
+            goto cleanup;
+        }
+        double value = item->valuedouble;
+        if ((double)item->valueint != value || value < 1.0 || value > UINT16_MAX) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "Invalid port";
+            goto cleanup;
+        }
+        port = (uint16_t)item->valueint;
     }
 
     if (host[0] == '\0') {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Host is required");
-        return ESP_ERR_INVALID_ARG;
+        status = ESP_ERR_INVALID_ARG;
+        send_error = true;
+        error_message = "Host is required";
+        goto cleanup;
     }
 
-    web_server_extract_json_string(payload, "\"username\"", updated.username, sizeof(updated.username));
-    web_server_extract_json_string(payload, "\"password\"", updated.password, sizeof(updated.password));
-    web_server_extract_json_string(payload,
-                                   "\"client_cert_path\"",
-                                   updated.client_cert_path,
-                                   sizeof(updated.client_cert_path));
-    web_server_extract_json_string(payload,
-                                   "\"ca_cert_path\"",
-                                   updated.ca_cert_path,
-                                   sizeof(updated.ca_cert_path));
-
-    bool verify_hostname = updated.verify_hostname;
-    if (web_server_extract_json_bool(payload, "\"verify_hostname\"", &verify_hostname)) {
-        updated.verify_hostname = verify_hostname;
-    }
-
-    uint32_t keepalive = 0U;
-    if (web_server_extract_json_uint(payload, "\"keepalive\"", &keepalive)) {
-        updated.keepalive_seconds = (uint16_t)keepalive;
-    }
-
-    uint32_t qos = 0U;
-    if (web_server_extract_json_uint(payload, "\"default_qos\"", &qos)) {
-        if (qos > 2U) {
-            qos = 2U;
+    item = cJSON_GetObjectItemCaseSensitive(root, "username");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "username must be a string";
+            goto cleanup;
         }
-        updated.default_qos = (uint8_t)qos;
+        snprintf(updated.username, sizeof(updated.username), "%s", item->valuestring);
     }
 
-    bool retain_flag = false;
-    if (web_server_extract_json_bool(payload, "\"retain\"", &retain_flag)) {
-        updated.retain_enabled = retain_flag;
+    item = cJSON_GetObjectItemCaseSensitive(root, "password");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "password must be a string";
+            goto cleanup;
+        }
+        snprintf(updated.password, sizeof(updated.password), "%s", item->valuestring);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "client_cert_path");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "client_cert_path must be a string";
+            goto cleanup;
+        }
+        snprintf(updated.client_cert_path, sizeof(updated.client_cert_path), "%s", item->valuestring);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "ca_cert_path");
+    if (item != NULL) {
+        if (!cJSON_IsString(item) || item->valuestring == NULL) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "ca_cert_path must be a string";
+            goto cleanup;
+        }
+        snprintf(updated.ca_cert_path, sizeof(updated.ca_cert_path), "%s", item->valuestring);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "verify_hostname");
+    if (item != NULL) {
+        if (!cJSON_IsBool(item)) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "verify_hostname must be a boolean";
+            goto cleanup;
+        }
+        updated.verify_hostname = cJSON_IsTrue(item);
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "keepalive");
+    if (item != NULL) {
+        if (!cJSON_IsNumber(item) || item->valuedouble < 0.0) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "keepalive must be a non-negative number";
+            goto cleanup;
+        }
+        if ((double)item->valueint != item->valuedouble || item->valueint < 0 || item->valueint > UINT16_MAX) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "Invalid keepalive";
+            goto cleanup;
+        }
+        updated.keepalive_seconds = (uint16_t)item->valueint;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "default_qos");
+    if (item != NULL) {
+        if (!cJSON_IsNumber(item)) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "default_qos must be a number";
+            goto cleanup;
+        }
+        if ((double)item->valueint != item->valuedouble || item->valueint < 0 || item->valueint > 2) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "default_qos must be between 0 and 2";
+            goto cleanup;
+        }
+        updated.default_qos = (uint8_t)item->valueint;
+    }
+
+    item = cJSON_GetObjectItemCaseSensitive(root, "retain");
+    if (item != NULL) {
+        if (!cJSON_IsBool(item)) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "retain must be a boolean";
+            goto cleanup;
+        }
+        updated.retain_enabled = cJSON_IsTrue(item);
+    }
+
+    const cJSON *topics_obj = cJSON_GetObjectItemCaseSensitive(root, "topics");
+    if (topics_obj != NULL) {
+        if (!cJSON_IsObject(topics_obj)) {
+            status = ESP_ERR_INVALID_ARG;
+            send_error = true;
+            error_message = "topics must be an object";
+            goto cleanup;
+        }
+
+        const cJSON *topic_item = NULL;
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "status");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.status must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.status, sizeof(topics.status), "%s", topic_item->valuestring);
+        }
+
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "metrics");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.metrics must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.metrics, sizeof(topics.metrics), "%s", topic_item->valuestring);
+        }
+
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "config");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.config must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.config, sizeof(topics.config), "%s", topic_item->valuestring);
+        }
+
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "can_raw");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.can_raw must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.can_raw, sizeof(topics.can_raw), "%s", topic_item->valuestring);
+        }
+
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "can_decoded");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.can_decoded must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.can_decoded, sizeof(topics.can_decoded), "%s", topic_item->valuestring);
+        }
+
+        topic_item = cJSON_GetObjectItemCaseSensitive(topics_obj, "can_ready");
+        if (topic_item != NULL) {
+            if (!cJSON_IsString(topic_item) || topic_item->valuestring == NULL) {
+                status = ESP_ERR_INVALID_ARG;
+                send_error = true;
+                error_message = "topics.can_ready must be a string";
+                goto cleanup;
+            }
+            snprintf(topics.can_ready, sizeof(topics.can_ready), "%s", topic_item->valuestring);
+        }
     }
 
     int uri_len = snprintf(updated.broker_uri,
@@ -1519,555 +1676,60 @@ static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
                            host,
                            (unsigned)port);
     if (uri_len < 0 || uri_len >= (int)sizeof(updated.broker_uri)) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Broker URI too long");
-        return ESP_ERR_INVALID_ARG;
+        status = ESP_ERR_INVALID_ARG;
+        send_error = true;
+        error_message = "Broker URI too long";
+        goto cleanup;
     }
 
-    web_server_extract_json_string(payload, "\"status_topic\"", topics.status, sizeof(topics.status));
-    web_server_extract_json_string(payload, "\"metrics_topic\"", topics.metrics, sizeof(topics.metrics));
-    web_server_extract_json_string(payload, "\"config_topic\"", topics.config, sizeof(topics.config));
-    web_server_extract_json_string(payload, "\"can_raw_topic\"", topics.can_raw, sizeof(topics.can_raw));
-    web_server_extract_json_string(payload, "\"can_decoded_topic\"", topics.can_decoded, sizeof(topics.can_decoded));
-    web_server_extract_json_string(payload, "\"can_ready_topic\"", topics.can_ready, sizeof(topics.can_ready));
-
-    esp_err_t err = config_manager_set_mqtt_client_config(&updated);
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to update MQTT client");
-        return err;
+    status = config_manager_set_mqtt_client_config(&updated);
+    if (status != ESP_OK) {
+        send_error = true;
+        error_message = "Failed to update MQTT client";
+        goto cleanup;
     }
 
-    err = config_manager_set_mqtt_topics(&topics);
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to update MQTT topics");
-        return err;
+    status = config_manager_set_mqtt_topics(&topics);
+    if (status != ESP_OK) {
+        send_error = true;
+        error_message = "Failed to update MQTT topics";
+        goto cleanup;
     }
 
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
-}
+    status = httpd_resp_sendstr(req, "{\\"status\\":\\"updated\\"}");
+    goto cleanup;
 
-static esp_err_t web_server_api_mqtt_status_handler(httpd_req_t *req)
-{
-    mqtt_gateway_status_t status = {0};
-    mqtt_gateway_get_status(&status);
-
-    char buffer[WEB_SERVER_MQTT_JSON_SIZE];
-    int written = snprintf(buffer,
-                           sizeof(buffer),
-                           "{\"client_started\":%s,\"connected\":%s,\"wifi_connected\":%s,\"reconnects\":%u,\"disconnects\":%u,"
-                           "\"errors\":%u,\"last_event_id\":%u,\"last_event\":\"%s\",\"last_event_timestamp_ms\":%llu,"
-                           "\"broker_uri\":\"%s\",\"status_topic\":\"%s\",\"metrics_topic\":\"%s\",\"config_topic\":\"%s\","
-                           "\"can_raw_topic\":\"%s\",\"can_decoded_topic\":\"%s\",\"can_ready_topic\":\"%s\",\"last_error\":\"%s\"}",
-                           status.client_started ? "true" : "false",
-                           status.connected ? "true" : "false",
-                           status.wifi_connected ? "true" : "false",
-                           (unsigned)status.reconnect_count,
-                           (unsigned)status.disconnect_count,
-                           (unsigned)status.error_count,
-                           (unsigned)status.last_event,
-                           web_server_mqtt_event_to_string(status.last_event),
-                           (unsigned long long)status.last_event_timestamp_ms,
-                           status.broker_uri,
-                           status.status_topic,
-                           status.metrics_topic,
-                           status.config_topic,
-                           status.can_raw_topic,
-                           status.can_decoded_topic,
-                           status.can_ready_topic,
-                           status.last_error);
-    if (written < 0 || written >= (int)sizeof(buffer)) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT status too large");
-        return ESP_ERR_INVALID_SIZE;
+cleanup:
+    if (root != NULL) {
+        cJSON_Delete(root);
     }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, written);
-}
-
-static esp_err_t web_server_api_mqtt_test_handler(httpd_req_t *req)
-{
-    const mqtt_client_config_t *config = config_manager_get_mqtt_client_config();
-    if (config == NULL) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "MQTT config unavailable");
-        return ESP_FAIL;
+    if (send_error) {
+        httpd_resp_send_err(req, error_status, error_message);
     }
-
-    bool connected = false;
-    char message[128];
-    message[0] = '\0';
-
-    esp_err_t err = mqtt_client_test_connection(config, pdMS_TO_TICKS(5000), &connected, message, sizeof(message));
-    bool supported = (err != ESP_ERR_NOT_SUPPORTED);
-    bool ok = (err == ESP_OK && connected);
-
-    if (message[0] == '\0') {
-        if (!supported) {
-            (void)snprintf(message, sizeof(message), "Fonction non disponible.");
-        } else if (ok) {
-            (void)snprintf(message, sizeof(message), "Connexion réussie.");
-        } else if (err == ESP_ERR_TIMEOUT) {
-            (void)snprintf(message, sizeof(message), "Délai dépassé.");
-        } else {
-            (void)snprintf(message, sizeof(message), "Échec du test de connexion.");
-        }
-    }
-
-    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGW(TAG,
-                 "MQTT test connection failed: %s (connected=%d, message='%s')",
-                 esp_err_to_name(err),
-                 connected ? 1 : 0,
-                 message);
-    }
-
-    char buffer[192];
-    int written = snprintf(buffer,
-                           sizeof(buffer),
-                           "{\"supported\":%s,\"ok\":%s,\"connected\":%s,\"message\":\"%s\"}",
-                           supported ? "true" : "false",
-                           ok ? "true" : "false",
-                           connected ? "true" : "false",
-                           message);
-    if (written < 0 || written >= (int)sizeof(buffer)) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Response too large");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    if (!supported) {
-        httpd_resp_set_status(req, "501 Not Implemented");
-    }
-    return httpd_resp_send(req, buffer, written);
-}
-
-static esp_err_t web_server_api_can_status_handler(httpd_req_t *req)
-{
-    can_victron_status_t status = {0};
-    esp_err_t err = can_victron_get_status(&status);
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CAN status unavailable");
-        return err;
-    }
-
-    float occupancy = status.bus_occupancy_pct;
-    if (occupancy < 0.0f) {
-        occupancy = 0.0f;
-    }
-    if (occupancy > 100.0f) {
-        occupancy = 100.0f;
-    }
-
-    const char *state_label = web_server_twai_state_to_string(status.bus_state);
-
-    char buffer[WEB_SERVER_CAN_JSON_SIZE];
-    int written = snprintf(buffer,
-                           sizeof(buffer),
-                           "{\"timestamp_ms\":%llu,\"driver_started\":%s,"
-                           "\"frames\":{\"tx_count\":%llu,\"rx_count\":%llu,\"tx_bytes\":%llu,\"rx_bytes\":%llu},"
-                           "\"keepalive\":{\"ok\":%s,\"last_tx_ms\":%llu,\"last_rx_ms\":%llu,\"interval_ms\":%u,\"timeout_ms\":%u,\"retry_ms\":%u},"
-                           "\"bus\":{\"state\":%d,\"state_label\":\"%s\",\"occupancy_pct\":%.2f,\"window_ms\":%u},"
-                           "\"errors\":{\"tx_error_counter\":%u,\"rx_error_counter\":%u,\"tx_failed_count\":%u,\"rx_missed_count\":%u,\"arbitration_lost_count\":%u,\"bus_error_count\":%u,\"bus_off_count\":%u}}",
-                           (unsigned long long)status.timestamp_ms,
-                           status.driver_started ? "true" : "false",
-                           (unsigned long long)status.tx_frame_count,
-                           (unsigned long long)status.rx_frame_count,
-                           (unsigned long long)status.tx_byte_count,
-                           (unsigned long long)status.rx_byte_count,
-                           status.keepalive_ok ? "true" : "false",
-                           (unsigned long long)status.last_keepalive_tx_ms,
-                           (unsigned long long)status.last_keepalive_rx_ms,
-                           (unsigned)status.keepalive_interval_ms,
-                           (unsigned)status.keepalive_timeout_ms,
-                           (unsigned)status.keepalive_retry_ms,
-                           (int)status.bus_state,
-                           state_label,
-                           (double)occupancy,
-                           (unsigned)status.occupancy_window_ms,
-                           (unsigned)status.tx_error_counter,
-                           (unsigned)status.rx_error_counter,
-                           (unsigned)status.tx_failed_count,
-                           (unsigned)status.rx_missed_count,
-                           (unsigned)status.arbitration_lost_count,
-                           (unsigned)status.bus_error_count,
-                           (unsigned)status.bus_off_count);
-
-    if (written < 0 || written >= (int)sizeof(buffer)) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CAN status too large");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, written);
-}
-
-static esp_err_t web_server_api_history_handler(httpd_req_t *req)
-{
-    size_t limit = 0;
-    int query_len = httpd_req_get_url_query_len(req);
-    if (query_len > 0) {
-        char query[64];
-        if (query_len + 1 > (int)sizeof(query)) {
-            query_len = sizeof(query) - 1;
-        }
-        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-            char value[16];
-            if (httpd_query_key_value(query, "limit", value, sizeof(value)) == ESP_OK) {
-                char *endptr = NULL;
-                unsigned long parsed = strtoul(value, &endptr, 10);
-                if (endptr != value) {
-                    limit = (size_t)parsed;
-                }
-            }
-        }
-    }
-
-    char buffer[WEB_SERVER_HISTORY_JSON_SIZE];
-    size_t length = 0;
-    esp_err_t err = monitoring_get_history_json(limit, buffer, sizeof(buffer), &length);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to build history JSON: %s", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History unavailable");
-        return err;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, length);
-}
-
-static esp_err_t web_server_api_history_files_handler(httpd_req_t *req)
-{
-    history_logger_file_info_t *files = NULL;
-    size_t count = 0;
-    bool mounted = false;
-    esp_err_t err = history_logger_list_files(&files, &count, &mounted);
-    if (err == ESP_ERR_NOT_SUPPORTED) {
-        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
-        return err;
-    }
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History index unavailable");
-        return err;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-
-    char header[256];
-    const char *directory = history_logger_directory();
-    int written = snprintf(header,
-                           sizeof(header),
-                           "{\"flash_ready\":%s,\"directory\":\"%s\",\"count\":%u,\"files\":[",
-                           mounted ? "true" : "false",
-                           directory,
-                           (unsigned)count);
-    if (written < 0 || written >= (int)sizeof(header)) {
-        history_logger_free_file_list(files);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History response too large");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    esp_err_t send_err = httpd_resp_sendstr_chunk(req, header);
-    if (send_err != ESP_OK) {
-        history_logger_free_file_list(files);
-        return send_err;
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        const history_logger_file_info_t *info = &files[i];
-        char iso[32];
-        bool has_iso = web_server_format_iso8601(info->modified_time, iso, sizeof(iso));
-        char entry[256];
-        if (has_iso) {
-            written = snprintf(entry,
-                               sizeof(entry),
-                               "%s{\"name\":\"%s\",\"size\":%u,\"modified\":\"%s\"}",
-                               (i == 0) ? "" : ",",
-                               info->name,
-                               (unsigned)info->size_bytes,
-                               iso);
-        } else {
-            written = snprintf(entry,
-                               sizeof(entry),
-                               "%s{\"name\":\"%s\",\"size\":%u,\"modified\":null}",
-                               (i == 0) ? "" : ",",
-                               info->name,
-                               (unsigned)info->size_bytes);
-        }
-
-        if (written < 0 || written >= (int)sizeof(entry)) {
-            history_logger_free_file_list(files);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "History entry too large");
-            return ESP_ERR_INVALID_SIZE;
-        }
-
-        send_err = httpd_resp_sendstr_chunk(req, entry);
-        if (send_err != ESP_OK) {
-            history_logger_free_file_list(files);
-            return send_err;
-        }
-    }
-
-    history_logger_free_file_list(files);
-    send_err = httpd_resp_sendstr_chunk(req, "]}");
-    if (send_err != ESP_OK) {
-        return send_err;
-    }
-
-    return httpd_resp_sendstr_chunk(req, NULL);
-}
-
-static esp_err_t web_server_api_history_archive_handler(httpd_req_t *req)
-{
-    char filename[64] = {0};
-    size_t limit = 0;
-    int query_len = httpd_req_get_url_query_len(req);
-    if (query_len > 0) {
-        char query[128];
-        if (query_len + 1 > (int)sizeof(query)) {
-            query_len = sizeof(query) - 1;
-        }
-        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-            (void)httpd_query_key_value(query, "file", filename, sizeof(filename));
-            char limit_str[16];
-            if (httpd_query_key_value(query, "limit", limit_str, sizeof(limit_str)) == ESP_OK) {
-                char *endptr = NULL;
-                unsigned long parsed = strtoul(limit_str, &endptr, 10);
-                if (endptr != limit_str) {
-                    limit = (size_t)parsed;
-                }
-            }
-        }
-    }
-
-    if (filename[0] == '\0') {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file parameter");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    history_logger_archive_t archive;
-    esp_err_t err = history_logger_load_archive(filename, limit, &archive);
-    if (err == ESP_ERR_INVALID_STATE) {
-        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History storage unavailable");
-        return err;
-    }
-    if (err == ESP_ERR_NOT_SUPPORTED) {
-        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
-        return err;
-    }
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Archive not found");
-        return err;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-
-    char header[256];
-    int written = snprintf(header,
-                           sizeof(header),
-                           "{\"file\":\"%s\",\"total\":%u,\"returned\":%u,\"samples\":[",
-                           filename,
-                           (unsigned)archive.total_samples,
-                           (unsigned)archive.returned_samples);
-    if (written < 0 || written >= (int)sizeof(header)) {
-        history_logger_free_archive(&archive);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Archive response too large");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    esp_err_t send_err = httpd_resp_sendstr_chunk(req, header);
-    if (send_err != ESP_OK) {
-        history_logger_free_archive(&archive);
-        return send_err;
-    }
-
-    for (size_t i = 0; i < archive.returned_samples; ++i) {
-        size_t index = (archive.start_index + i) % archive.buffer_capacity;
-        const history_logger_archive_sample_t *sample = &archive.samples[index];
-        char entry[256];
-        written = snprintf(entry,
-                           sizeof(entry),
-                           "%s{\"timestamp\":%" PRIu64 ",\"timestamp_iso\":\"%s\",\"pack_voltage\":%.3f,"
-                           "\"pack_current\":%.3f,\"state_of_charge\":%.2f,\"state_of_health\":%.2f,"
-                           "\"average_temperature\":%.2f}",
-                           (i == 0) ? "" : ",",
-                           sample->timestamp_ms,
-                           sample->timestamp_iso,
-                           sample->pack_voltage_v,
-                           sample->pack_current_a,
-                           sample->state_of_charge_pct,
-                           sample->state_of_health_pct,
-                           sample->average_temperature_c);
-        if (written < 0 || written >= (int)sizeof(entry)) {
-            history_logger_free_archive(&archive);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Archive sample too large");
-            return ESP_ERR_INVALID_SIZE;
-        }
-
-        send_err = httpd_resp_sendstr_chunk(req, entry);
-        if (send_err != ESP_OK) {
-            history_logger_free_archive(&archive);
-            return send_err;
-        }
-    }
-
-    history_logger_free_archive(&archive);
-    send_err = httpd_resp_sendstr_chunk(req, "]}");
-    if (send_err != ESP_OK) {
-        return send_err;
-    }
-
-    return httpd_resp_sendstr_chunk(req, NULL);
-}
-
-static esp_err_t web_server_api_history_download_handler(httpd_req_t *req)
-{
-    char filename[64] = {0};
-    int query_len = httpd_req_get_url_query_len(req);
-    if (query_len > 0) {
-        char query[128];
-        if (query_len + 1 > (int)sizeof(query)) {
-            query_len = sizeof(query) - 1;
-        }
-        if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-            (void)httpd_query_key_value(query, "file", filename, sizeof(filename));
-        }
-    }
-
-    if (filename[0] == '\0') {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file parameter");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char path[256];
-    esp_err_t resolve_err = history_logger_resolve_path(filename, path, sizeof(path));
-    if (resolve_err == ESP_ERR_NOT_SUPPORTED) {
-        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "History archiving disabled");
-        return resolve_err;
-    }
-    if (resolve_err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid file name");
-        return resolve_err;
-    }
-
-    FILE *file = fopen(path, "r");
-    if (file == NULL) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Archive not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "text/csv");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-
-    char disposition[128];
-    int written = snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", filename);
-    if (written > 0 && written < (int)sizeof(disposition)) {
-        httpd_resp_set_hdr(req, "Content-Disposition", disposition);
-    }
-
-    char buffer[WEB_SERVER_FILE_BUFSZ];
-    esp_err_t send_err = ESP_OK;
-    size_t read_bytes = 0;
-    while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        send_err = httpd_resp_send_chunk(req, buffer, read_bytes);
-        if (send_err != ESP_OK) {
-            break;
-        }
-    }
-
-    fclose(file);
-
-    if (send_err == ESP_OK) {
-        send_err = httpd_resp_send_chunk(req, NULL, 0);
-    }
-
-    return send_err;
-}
-
-static esp_err_t web_server_api_registers_get_handler(httpd_req_t *req)
-{
-    char buffer[CONFIG_MANAGER_MAX_REGISTERS_JSON];
-    size_t length = 0;
-    esp_err_t err = config_manager_get_registers_json(buffer, sizeof(buffer), &length);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to build register catalog: %s", esp_err_to_name(err));
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Registers unavailable");
-        return err;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, buffer, length);
-}
-
-static esp_err_t web_server_api_registers_post_handler(httpd_req_t *req)
-{
-    if (req->content_len == 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (req->content_len + 1 > CONFIG_MANAGER_MAX_CONFIG_SIZE) {
-        httpd_resp_send_err(req, HTTPD_413_PAYLOAD_TOO_LARGE, "Register payload too large");
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
-    size_t received = 0;
-    while (received < req->content_len) {
-        int ret = httpd_req_recv(req, buffer + received, req->content_len - received);
-        if (ret <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            ESP_LOGE(TAG, "Error receiving register payload: %d", ret);
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive error");
-            return ESP_FAIL;
-        }
-        received += ret;
-    }
-
-    buffer[received] = '\0';
-
-    esp_err_t err = config_manager_apply_register_update_json(buffer, received);
-    if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid register update");
-        return err;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, "{\"status\":\"updated\"}");
-}
+    return status;
 
 static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
 {
     if (req->content_len == 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty OTA payload");
-        return ESP_ERR_INVALID_SIZE;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_EMPTY_PAYLOAD, NULL, NULL);
     }
 
     char content_type[WEB_SERVER_MULTIPART_HEADER_MAX];
     if (httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type)) != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing Content-Type header");
-        return ESP_ERR_INVALID_ARG;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_MISSING_CONTENT_TYPE, NULL, NULL);
     }
 
     char boundary_line[WEB_SERVER_MULTIPART_BOUNDARY_MAX];
     esp_err_t err = web_server_extract_boundary(content_type, boundary_line, sizeof(boundary_line));
     if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid multipart boundary");
-        return err;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_INVALID_BOUNDARY, NULL, NULL);
     }
 
     ota_update_session_t *session = NULL;
     err = ota_update_begin(&session, req->content_len);
     if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "OTA subsystem busy");
-        return err;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_SUBSYSTEM_BUSY, NULL, NULL);
     }
 
     web_server_multipart_headers_t headers;
@@ -2075,40 +1737,37 @@ static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
     err = web_server_stream_firmware_upload(req, session, boundary_line, &headers, &bytes_written);
     if (err != ESP_OK) {
         ota_update_abort(session);
-        if (err == ESP_ERR_INVALID_RESPONSE) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Malformed multipart payload");
-        } else {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to stream OTA payload");
-        }
-        return err;
+        web_server_ota_error_code_t code = (err == ESP_ERR_INVALID_RESPONSE)
+            ? WEB_SERVER_OTA_ERROR_MALFORMED_MULTIPART
+            : WEB_SERVER_OTA_ERROR_STREAM_FAILURE;
+        return web_server_send_ota_response(req, code, NULL, NULL);
     }
+
+    (void)bytes_written;
 
     if (headers.field_name[0] == '\0' || strcmp(headers.field_name, "firmware") != 0) {
         ota_update_abort(session);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Multipart field must be named 'firmware'");
-        return ESP_ERR_INVALID_RESPONSE;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_MISSING_FIRMWARE_FIELD, NULL, NULL);
     }
 
     if (headers.content_type[0] != '\0' &&
         strncasecmp(headers.content_type, "application/octet-stream", sizeof(headers.content_type)) != 0 &&
         strncasecmp(headers.content_type, "application/x-binary", sizeof(headers.content_type)) != 0) {
         ota_update_abort(session);
-        httpd_resp_send_err(req, HTTPD_415_UNSUPPORTED_MEDIA_TYPE, "Unsupported firmware content type");
-        return ESP_ERR_INVALID_RESPONSE;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_UNSUPPORTED_CONTENT_TYPE, NULL, NULL);
     }
 
     ota_update_result_t result = {0};
     err = ota_update_finalize(session, &result);
     if (err != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA validation failed");
-        return err;
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_VALIDATION_FAILED, NULL, NULL);
     }
 
     if (s_event_publisher != NULL) {
         const char *filename = (headers.filename[0] != '\0') ? headers.filename : "firmware.bin";
         int label_written = snprintf(s_ota_event_label,
                                      sizeof(s_ota_event_label),
-                                     "%s (%zu bytes, crc32=%08" PRIX32 ")",
+                                     "%s (%zu bytes, crc32=%08" PRIX32 " )",
                                      filename,
                                      result.bytes_written,
                                      result.crc32);
@@ -2127,21 +1786,52 @@ static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
         }
     }
 
-    char response[256];
-    int written = snprintf(response,
-                           sizeof(response),
-                           "{\"status\":\"ok\",\"bytes\":%zu,\"crc32\":\"%08" PRIX32 "\",\"partition\":\"%s\",\"version\":\"%s\",\"reboot_required\":%s}",
-                           result.bytes_written,
-                           result.crc32,
-                           result.partition_label,
-                           result.new_version[0] != '\0' ? result.new_version : "unknown",
-                           result.reboot_required ? "true" : "false");
-    if (written < 0 || (size_t)written >= sizeof(response)) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA response too large");
-        return ESP_ERR_INVALID_SIZE;
+    cJSON *data = cJSON_CreateObject();
+    if (data == NULL) {
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
     }
 
-    return web_server_send_json(req, response, (size_t)written);
+    if (cJSON_AddNumberToObject(data, "bytes", (double)result.bytes_written) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    char crc_buffer[9];
+    snprintf(crc_buffer, sizeof(crc_buffer), "%08" PRIX32, result.crc32);
+    if (cJSON_AddStringToObject(data, "crc32", crc_buffer) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    const char *partition = (result.partition_label[0] != '\0') ? result.partition_label : "unknown";
+    if (cJSON_AddStringToObject(data, "partition", partition) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    const char *version = (result.new_version[0] != '\0') ? result.new_version : "unknown";
+    if (cJSON_AddStringToObject(data, "version", version) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    if (cJSON_AddBoolToObject(data, "reboot_required", result.reboot_required) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    if (cJSON_AddBoolToObject(data, "version_changed", result.version_changed) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    const char *filename = (headers.filename[0] != '\0') ? headers.filename : "firmware.bin";
+    if (cJSON_AddStringToObject(data, "filename", filename) == NULL) {
+        cJSON_Delete(data);
+        return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_ENCODING_FAILED, NULL, NULL);
+    }
+
+    return web_server_send_ota_response(req, WEB_SERVER_OTA_OK, NULL, data);
 }
 
 static esp_err_t web_server_api_restart_post_handler(httpd_req_t *req)

@@ -201,6 +201,14 @@ static mqtt_client_config_t s_mqtt_config = {
 static config_manager_mqtt_topics_t s_mqtt_topics = {0};
 static bool s_mqtt_topics_loaded = false;
 
+static mqtt_client_config_t s_mqtt_config_snapshot = {0};
+static config_manager_mqtt_topics_t s_mqtt_topics_snapshot = {0};
+static config_manager_device_settings_t s_device_settings_snapshot = {0};
+static config_manager_uart_pins_t s_uart_pins_snapshot = {0};
+static config_manager_wifi_settings_t s_wifi_settings_snapshot = {0};
+static config_manager_can_settings_t s_can_settings_snapshot = {0};
+static char s_device_name_snapshot[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH] = {0};
+
 static config_manager_device_settings_t s_device_settings = {
     .name = APP_DEVICE_NAME,
 };
@@ -1235,7 +1243,6 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
     uint16_t port = 0U;
     config_manager_parse_mqtt_uri(s_mqtt_config.broker_uri, scheme, sizeof(scheme), host, sizeof(host), &port);
 
-    size_t offset = 0;
     const char *device_name = config_manager_effective_device_name();
     char version[16];
     (void)snprintf(version,
@@ -1245,117 +1252,231 @@ static esp_err_t config_manager_build_config_snapshot_locked(void)
                    APP_VERSION_MINOR,
                    APP_VERSION_PATCH);
 
-    const config_manager_uart_pins_t *uart = &s_uart_pins;
-    const config_manager_wifi_settings_t *wifi = &s_wifi_settings;
-    const config_manager_can_settings_t *can = &s_can_settings;
+    esp_err_t result = ESP_OK;
 
-    if (!config_manager_json_append(s_config_json, sizeof(s_config_json), &offset, "{")) {
-        return ESP_ERR_INVALID_SIZE;
+#define CHECK_JSON(expr)               \
+    do {                               \
+        if ((expr) == NULL) {          \
+            result = ESP_ERR_NO_MEM;   \
+            goto cleanup;              \
+        }                              \
+    } while (0)
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        return ESP_ERR_NO_MEM;
     }
 
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    "\"register_count\":%zu,\"uart_poll_interval_ms\":%u,"
-                                    "\"uart_poll_interval_min_ms\":%u,\"uart_poll_interval_max_ms\":%u",
-                                    s_register_count,
-                                    (unsigned)s_uart_poll_interval_ms,
-                                    (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
-                                    (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS)) {
-        return ESP_ERR_INVALID_SIZE;
+    CHECK_JSON(cJSON_AddNumberToObject(root, "register_count", (double)s_register_count));
+    CHECK_JSON(cJSON_AddNumberToObject(root, "uart_poll_interval_ms", (double)s_uart_poll_interval_ms));
+    CHECK_JSON(cJSON_AddNumberToObject(root, "uart_poll_interval_min_ms", (double)UART_BMS_MIN_POLL_INTERVAL_MS));
+    CHECK_JSON(cJSON_AddNumberToObject(root, "uart_poll_interval_max_ms", (double)UART_BMS_MAX_POLL_INTERVAL_MS));
+
+    cJSON *device = cJSON_CreateObject();
+    if (device == NULL) {
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(device, "name", device_name) == NULL ||
+        cJSON_AddStringToObject(device, "version", version) == NULL) {
+        cJSON_Delete(device);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(root, "device", device);
+
+    cJSON *uart = cJSON_CreateObject();
+    if (uart == NULL) {
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddNumberToObject(uart, "tx_gpio", s_uart_pins.tx_gpio) == NULL ||
+        cJSON_AddNumberToObject(uart, "rx_gpio", s_uart_pins.rx_gpio) == NULL ||
+        cJSON_AddNumberToObject(uart, "poll_interval_ms", (double)s_uart_poll_interval_ms) == NULL ||
+        cJSON_AddNumberToObject(uart, "poll_interval_min_ms", (double)UART_BMS_MIN_POLL_INTERVAL_MS) == NULL ||
+        cJSON_AddNumberToObject(uart, "poll_interval_max_ms", (double)UART_BMS_MAX_POLL_INTERVAL_MS) == NULL) {
+        cJSON_Delete(uart);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(root, "uart", uart);
+
+    cJSON *wifi = cJSON_CreateObject();
+    if (wifi == NULL) {
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON *wifi_sta = cJSON_CreateObject();
+    if (wifi_sta == NULL) {
+        cJSON_Delete(wifi);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(wifi_sta, "ssid", s_wifi_settings.sta.ssid) == NULL ||
+        cJSON_AddStringToObject(wifi_sta, "password", config_manager_mask_secret(s_wifi_settings.sta.password)) == NULL ||
+        cJSON_AddStringToObject(wifi_sta, "hostname", s_wifi_settings.sta.hostname) == NULL ||
+        cJSON_AddNumberToObject(wifi_sta, "max_retry", (double)s_wifi_settings.sta.max_retry) == NULL) {
+        cJSON_Delete(wifi_sta);
+        cJSON_Delete(wifi);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(wifi, "sta", wifi_sta);
+
+    cJSON *wifi_ap = cJSON_CreateObject();
+    if (wifi_ap == NULL) {
+        cJSON_Delete(wifi);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(wifi_ap, "ssid", s_wifi_settings.ap.ssid) == NULL ||
+        cJSON_AddStringToObject(wifi_ap, "password", config_manager_mask_secret(s_wifi_settings.ap.password)) == NULL ||
+        cJSON_AddNumberToObject(wifi_ap, "channel", (double)s_wifi_settings.ap.channel) == NULL ||
+        cJSON_AddNumberToObject(wifi_ap, "max_clients", (double)s_wifi_settings.ap.max_clients) == NULL) {
+        cJSON_Delete(wifi_ap);
+        cJSON_Delete(wifi);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(wifi, "ap", wifi_ap);
+    cJSON_AddItemToObject(root, "wifi", wifi);
+
+    cJSON *can = cJSON_CreateObject();
+    if (can == NULL) {
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
     }
 
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    ",\"device\":{\"name\":\"%s\",\"version\":\"%s\"}",
-                                    device_name,
-                                    version)) {
-        return ESP_ERR_INVALID_SIZE;
+    cJSON *twai = cJSON_CreateObject();
+    if (twai == NULL) {
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddNumberToObject(twai, "tx_gpio", s_can_settings.twai.tx_gpio) == NULL ||
+        cJSON_AddNumberToObject(twai, "rx_gpio", s_can_settings.twai.rx_gpio) == NULL) {
+        cJSON_Delete(twai);
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(can, "twai", twai);
+
+    cJSON *keepalive = cJSON_CreateObject();
+    if (keepalive == NULL) {
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddNumberToObject(keepalive, "interval_ms", (double)s_can_settings.keepalive.interval_ms) == NULL ||
+        cJSON_AddNumberToObject(keepalive, "timeout_ms", (double)s_can_settings.keepalive.timeout_ms) == NULL ||
+        cJSON_AddNumberToObject(keepalive, "retry_ms", (double)s_can_settings.keepalive.retry_ms) == NULL) {
+        cJSON_Delete(keepalive);
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(can, "keepalive", keepalive);
+
+    cJSON *publisher = cJSON_CreateObject();
+    if (publisher == NULL) {
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddNumberToObject(publisher, "period_ms", (double)s_can_settings.publisher.period_ms) == NULL) {
+        cJSON_Delete(publisher);
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(can, "publisher", publisher);
+
+    cJSON *identity = cJSON_CreateObject();
+    if (identity == NULL) {
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(identity, "handshake_ascii", s_can_settings.identity.handshake_ascii) == NULL ||
+        cJSON_AddStringToObject(identity, "manufacturer", s_can_settings.identity.manufacturer) == NULL ||
+        cJSON_AddStringToObject(identity, "battery_name", s_can_settings.identity.battery_name) == NULL ||
+        cJSON_AddStringToObject(identity, "battery_family", s_can_settings.identity.battery_family) == NULL ||
+        cJSON_AddStringToObject(identity, "serial_number", s_can_settings.identity.serial_number) == NULL) {
+        cJSON_Delete(identity);
+        cJSON_Delete(can);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(can, "identity", identity);
+    cJSON_AddItemToObject(root, "can", can);
+
+    cJSON *mqtt = cJSON_CreateObject();
+    if (mqtt == NULL) {
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(mqtt, "scheme", scheme) == NULL ||
+        cJSON_AddStringToObject(mqtt, "broker_uri", s_mqtt_config.broker_uri) == NULL ||
+        cJSON_AddStringToObject(mqtt, "host", host) == NULL ||
+        cJSON_AddNumberToObject(mqtt, "port", (double)port) == NULL ||
+        cJSON_AddStringToObject(mqtt, "username", s_mqtt_config.username) == NULL ||
+        cJSON_AddStringToObject(mqtt, "password", config_manager_mask_secret(s_mqtt_config.password)) == NULL ||
+        cJSON_AddStringToObject(mqtt, "client_cert_path", s_mqtt_config.client_cert_path) == NULL ||
+        cJSON_AddStringToObject(mqtt, "ca_cert_path", s_mqtt_config.ca_cert_path) == NULL ||
+        cJSON_AddBoolToObject(mqtt, "verify_hostname", s_mqtt_config.verify_hostname) == NULL ||
+        cJSON_AddNumberToObject(mqtt, "keepalive", (double)s_mqtt_config.keepalive_seconds) == NULL ||
+        cJSON_AddNumberToObject(mqtt, "default_qos", (double)s_mqtt_config.default_qos) == NULL ||
+        cJSON_AddBoolToObject(mqtt, "retain", s_mqtt_config.retain_enabled) == NULL) {
+        cJSON_Delete(mqtt);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
     }
 
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    ",\"uart\":{\"tx_gpio\":%d,\"rx_gpio\":%d,\"poll_interval_ms\":%u,"
-                                    "\"poll_interval_min_ms\":%u,\"poll_interval_max_ms\":%u}",
-                                    uart->tx_gpio,
-                                    uart->rx_gpio,
-                                    (unsigned)s_uart_poll_interval_ms,
-                                    (unsigned)UART_BMS_MIN_POLL_INTERVAL_MS,
-                                    (unsigned)UART_BMS_MAX_POLL_INTERVAL_MS)) {
-        return ESP_ERR_INVALID_SIZE;
+    cJSON *topics = cJSON_CreateObject();
+    if (topics == NULL) {
+        cJSON_Delete(mqtt);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    if (cJSON_AddStringToObject(topics, "status", s_mqtt_topics.status) == NULL ||
+        cJSON_AddStringToObject(topics, "metrics", s_mqtt_topics.metrics) == NULL ||
+        cJSON_AddStringToObject(topics, "config", s_mqtt_topics.config) == NULL ||
+        cJSON_AddStringToObject(topics, "can_raw", s_mqtt_topics.can_raw) == NULL ||
+        cJSON_AddStringToObject(topics, "can_decoded", s_mqtt_topics.can_decoded) == NULL ||
+        cJSON_AddStringToObject(topics, "can_ready", s_mqtt_topics.can_ready) == NULL) {
+        cJSON_Delete(topics);
+        cJSON_Delete(mqtt);
+        result = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+    cJSON_AddItemToObject(mqtt, "topics", topics);
+    cJSON_AddItemToObject(root, "mqtt", mqtt);
+
+    s_config_json[0] = '\0';
+    if (!cJSON_PrintPreallocated(root, s_config_json, sizeof(s_config_json), false)) {
+        char *json = cJSON_PrintUnformatted(root);
+        if (json == NULL) {
+            result = ESP_ERR_NO_MEM;
+            goto cleanup;
+        }
+        size_t length = strlen(json);
+        if (length >= sizeof(s_config_json)) {
+            cJSON_free(json);
+            result = ESP_ERR_INVALID_SIZE;
+            goto cleanup;
+        }
+        memcpy(s_config_json, json, length + 1U);
+        s_config_length = length;
+        cJSON_free(json);
+    } else {
+        s_config_length = strlen(s_config_json);
     }
 
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    ",\"wifi\":{\"sta\":{\"ssid\":\"%s\",\"password\":\"%s\",\"hostname\":\"%s\",\"max_retry\":%u},"
-                                    "\"ap\":{\"ssid\":\"%s\",\"password\":\"%s\",\"channel\":%u,\"max_clients\":%u}}",
-                                    wifi->sta.ssid,
-                                    wifi->sta.password,
-                                    wifi->sta.hostname,
-                                    (unsigned)wifi->sta.max_retry,
-                                    wifi->ap.ssid,
-                                    wifi->ap.password,
-                                    (unsigned)wifi->ap.channel,
-                                    (unsigned)wifi->ap.max_clients)) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    ",\"can\":{\"twai\":{\"tx_gpio\":%d,\"rx_gpio\":%d},"
-                                    "\"keepalive\":{\"interval_ms\":%u,\"timeout_ms\":%u,\"retry_ms\":%u},"
-                                    "\"publisher\":{\"period_ms\":%u},"
-                                    "\"identity\":{\"handshake_ascii\":\"%s\",\"manufacturer\":\"%s\",\"battery_name\":\"%s\","
-                                    "\"battery_family\":\"%s\",\"serial_number\":\"%s\"}}",
-                                    can->twai.tx_gpio,
-                                    can->twai.rx_gpio,
-                                    (unsigned)can->keepalive.interval_ms,
-                                    (unsigned)can->keepalive.timeout_ms,
-                                    (unsigned)can->keepalive.retry_ms,
-                                    (unsigned)can->publisher.period_ms,
-                                    can->identity.handshake_ascii,
-                                    can->identity.manufacturer,
-                                    can->identity.battery_name,
-                                    can->identity.battery_family,
-                                    can->identity.serial_number)) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (!config_manager_json_append(s_config_json,
-                                    sizeof(s_config_json),
-                                    &offset,
-                                    ",\"mqtt\":{\"scheme\":\"%s\",\"broker_uri\":\"%s\",\"host\":\"%s\",\"port\":%u,"
-                                    "\"username\":\"%s\",\"password\":\"%s\",\"keepalive\":%u,\"default_qos\":%u,\"
-                                    "\"retain\":%s,\"topics\":{\"status\":\"%s\",\"metrics\":\"%s\",\"config\":\"%s\","
-                                    "\"can_raw\":\"%s\",\"can_decoded\":\"%s\",\"can_ready\":\"%s\"}}",
-                                    scheme,
-                                    s_mqtt_config.broker_uri,
-                                    host,
-                                    (unsigned)port,
-                                    s_mqtt_config.username,
-                                    s_mqtt_config.password,
-                                    (unsigned)s_mqtt_config.keepalive_seconds,
-                                    (unsigned)s_mqtt_config.default_qos,
-                                    s_mqtt_config.retain_enabled ? "true" : "false",
-                                    s_mqtt_topics.status,
-                                    s_mqtt_topics.metrics,
-                                    s_mqtt_topics.config,
-                                    s_mqtt_topics.can_raw,
-                                    s_mqtt_topics.can_decoded,
-                                    s_mqtt_topics.can_ready)) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (!config_manager_json_append(s_config_json, sizeof(s_config_json), &offset, "}")) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    s_config_length = offset;
-    return ESP_OK;
+cleanup:
+    cJSON_Delete(root);
+#undef CHECK_JSON
+    return result;
 }
 
 static esp_err_t config_manager_build_config_snapshot(void)
@@ -1876,7 +1997,15 @@ esp_err_t config_manager_set_uart_poll_interval_ms(uint32_t interval_ms)
 const config_manager_uart_pins_t *config_manager_get_uart_pins(void)
 {
     config_manager_ensure_initialised();
-    return &s_uart_pins;
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning UART pins without lock");
+        return &s_uart_pins;
+    }
+
+    s_uart_pins_snapshot = s_uart_pins;
+    config_manager_unlock();
+    return &s_uart_pins_snapshot;
 }
 
 const mqtt_client_config_t *config_manager_get_mqtt_client_config(void)
@@ -1889,7 +2018,8 @@ const mqtt_client_config_t *config_manager_get_mqtt_client_config(void)
         return &s_mqtt_config;
     }
 
-    const mqtt_client_config_t *config = &s_mqtt_config;
+    s_mqtt_config_snapshot = s_mqtt_config;
+    const mqtt_client_config_t *config = &s_mqtt_config_snapshot;
     config_manager_unlock();
     return config;
 }
@@ -1955,7 +2085,8 @@ const config_manager_mqtt_topics_t *config_manager_get_mqtt_topics(void)
         return &s_mqtt_topics;
     }
 
-    const config_manager_mqtt_topics_t *topics = &s_mqtt_topics;
+    s_mqtt_topics_snapshot = s_mqtt_topics;
+    const config_manager_mqtt_topics_t *topics = &s_mqtt_topics_snapshot;
     config_manager_unlock();
     return topics;
 }
@@ -2038,25 +2169,68 @@ esp_err_t config_manager_set_config_json(const char *json, size_t length)
 const config_manager_device_settings_t *config_manager_get_device_settings(void)
 {
     config_manager_ensure_initialised();
-    return &s_device_settings;
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning device settings without lock");
+        return &s_device_settings;
+    }
+
+    s_device_settings_snapshot = s_device_settings;
+    config_manager_unlock();
+    return &s_device_settings_snapshot;
 }
 
 const char *config_manager_get_device_name(void)
 {
     config_manager_ensure_initialised();
-    return config_manager_effective_device_name();
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning device name without lock");
+        return config_manager_effective_device_name();
+    }
+
+    const char *effective = config_manager_effective_device_name();
+    config_manager_copy_string(s_device_name_snapshot,
+                               sizeof(s_device_name_snapshot),
+                               effective);
+    config_manager_unlock();
+    return s_device_name_snapshot;
 }
 
 const config_manager_wifi_settings_t *config_manager_get_wifi_settings(void)
 {
     config_manager_ensure_initialised();
-    return &s_wifi_settings;
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning WiFi settings without lock");
+        return &s_wifi_settings;
+    }
+
+    s_wifi_settings_snapshot = s_wifi_settings;
+    config_manager_unlock();
+    return &s_wifi_settings_snapshot;
 }
 
 const config_manager_can_settings_t *config_manager_get_can_settings(void)
 {
     config_manager_ensure_initialised();
-    return &s_can_settings;
+    esp_err_t lock_err = config_manager_lock(portMAX_DELAY);
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Returning CAN settings without lock");
+        return &s_can_settings;
+    }
+
+    s_can_settings_snapshot = s_can_settings;
+    config_manager_unlock();
+    return &s_can_settings_snapshot;
+}
+
+const char *config_manager_mask_secret(const char *value)
+{
+    if (value == NULL || value[0] == '\0') {
+        return "";
+    }
+    return CONFIG_MANAGER_SECRET_MASK;
 }
 
 esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, size_t *out_length)
