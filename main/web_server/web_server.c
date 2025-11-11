@@ -135,6 +135,7 @@ static ws_client_t *s_alert_clients = NULL;
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
 static volatile bool s_event_task_should_stop = false;
+static web_server_secret_authorizer_fn_t s_config_secret_authorizer = NULL;
 static char s_ota_event_label[128];
 static app_event_metadata_t s_ota_event_metadata = {
     .event_id = APP_EVENT_ID_OTA_UPLOAD_READY,
@@ -1107,6 +1108,69 @@ static void web_server_parse_mqtt_uri(const char *uri,
     }
 
 }
+
+static bool web_server_query_value_truthy(const char *value, size_t length)
+{
+    if (value == NULL || length == 0U) {
+        return true;
+    }
+
+    if (length == 1U) {
+        char c = (char)tolower((unsigned char)value[0]);
+        return (c == '1') || (c == 'y') || (c == 't');
+    }
+
+    if (length == 2U && strncasecmp(value, "on", 2) == 0) {
+        return true;
+    }
+    if (length == 3U && strncasecmp(value, "yes", 3) == 0) {
+        return true;
+    }
+    if (length == 4U && strncasecmp(value, "true", 4) == 0) {
+        return true;
+    }
+
+    return false;
+}
+
+bool web_server_uri_requests_full_snapshot(const char *uri)
+{
+    if (uri == NULL) {
+        return false;
+    }
+
+    const char *query = strchr(uri, '?');
+    if (query == NULL || *(++query) == '\0') {
+        return false;
+    }
+
+    while (*query != '\0') {
+        const char *next = strpbrk(query, "&;");
+        size_t length = (next != NULL) ? (size_t)(next - query) : strlen(query);
+        if (length > 0U) {
+            const char *eq = memchr(query, '=', length);
+            size_t key_len = (eq != NULL) ? (size_t)(eq - query) : length;
+            if (key_len == sizeof("include_secrets") - 1U &&
+                strncmp(query, "include_secrets", key_len) == 0) {
+                if (eq == NULL) {
+                    return true;
+                }
+
+                size_t value_len = length - key_len - 1U;
+                const char *value = eq + 1;
+                return web_server_query_value_truthy(value, value_len);
+            }
+        }
+
+        if (next == NULL) {
+            break;
+        }
+        query = next + 1;
+    }
+
+    return false;
+}
+
 static const char *web_server_mqtt_event_to_string(mqtt_client_event_id_t id)
 {
     switch (id) {
@@ -1266,11 +1330,57 @@ static esp_err_t web_server_api_status_handler(httpd_req_t *req)
     return httpd_resp_send(req, response, written);
 }
 
+static bool web_server_request_authorized_for_secrets(httpd_req_t *req)
+{
+    if (s_config_secret_authorizer == NULL) {
+        return false;
+    }
+    return s_config_secret_authorizer(req);
+}
+
+esp_err_t web_server_prepare_config_snapshot(const char *uri,
+                                             bool authorized_for_secrets,
+                                             char *buffer,
+                                             size_t buffer_size,
+                                             size_t *out_length,
+                                             const char **visibility_out)
+{
+    if (visibility_out != NULL) {
+        *visibility_out = NULL;
+    }
+
+    bool wants_secrets = web_server_uri_requests_full_snapshot(uri);
+    config_manager_snapshot_flags_t flags = CONFIG_MANAGER_SNAPSHOT_PUBLIC;
+    const char *visibility = "public";
+
+    if (wants_secrets) {
+        if (authorized_for_secrets) {
+            flags = CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS;
+            visibility = "full";
+        } else {
+            ESP_LOGW(TAG, "Client requested config secrets without authorization");
+        }
+    }
+
+    esp_err_t err = config_manager_get_config_json(buffer, buffer_size, out_length, flags);
+    if (err == ESP_OK && visibility_out != NULL) {
+        *visibility_out = visibility;
+    }
+    return err;
+}
+
 static esp_err_t web_server_api_config_get_handler(httpd_req_t *req)
 {
     char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
     size_t length = 0;
-    esp_err_t err = config_manager_get_config_json(buffer, sizeof(buffer), &length);
+    const char *visibility = NULL;
+    bool authorized = web_server_request_authorized_for_secrets(req);
+    esp_err_t err = web_server_prepare_config_snapshot(req->uri,
+                                                       authorized,
+                                                       buffer,
+                                                       sizeof(buffer),
+                                                       &length,
+                                                       &visibility);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to load configuration JSON: %s", esp_err_to_name(err));
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Config unavailable");
@@ -1279,6 +1389,9 @@ static esp_err_t web_server_api_config_get_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (visibility != NULL) {
+        httpd_resp_set_hdr(req, "X-Config-Snapshot", visibility);
+    }
     return httpd_resp_send(req, buffer, length);
 }
 
@@ -2268,6 +2381,11 @@ static void web_server_event_task(void *context)
 void web_server_set_event_publisher(event_bus_publish_fn_t publisher)
 {
     s_event_publisher = publisher;
+}
+
+void web_server_set_config_secret_authorizer(web_server_secret_authorizer_fn_t authorizer)
+{
+    s_config_secret_authorizer = authorizer;
 }
 
 void web_server_init(void)

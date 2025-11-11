@@ -1,5 +1,10 @@
 #pragma once
 
+#include <stdbool.h>
+
+#include "esp_err.h"
+#include "esp_http_server.h"
+
 #include "event_bus.h"
 
 // WebSocket rate limiting and security constants
@@ -17,7 +22,7 @@
  *   - GET  /api/system/modules
  *   - POST /api/system/restart
  *   - GET  /api/status
- *   - GET  /api/config
+ *   - GET  /api/config (snapshot public; ajouter `?include_secrets=1` pour le snapshot complet si autorisé)
  *   - POST /api/config
  *   - POST /api/ota
  *   - GET  /api/can/status
@@ -45,3 +50,16 @@ void web_server_deinit(void);
  * @brief Provide the event bus publisher so the server can emit notifications.
  */
 void web_server_set_event_publisher(event_bus_publish_fn_t publisher);
+
+typedef bool (*web_server_secret_authorizer_fn_t)(httpd_req_t *req);
+
+void web_server_set_config_secret_authorizer(web_server_secret_authorizer_fn_t authorizer);
+
+bool web_server_uri_requests_full_snapshot(const char *uri);
+
+esp_err_t web_server_prepare_config_snapshot(const char *uri,
+                                             bool authorized_for_secrets,
+                                             char *buffer,
+                                             size_t buffer_size,
+                                             size_t *out_length,
+                                             const char **visibility_out);

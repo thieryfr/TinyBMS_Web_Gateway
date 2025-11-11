@@ -135,3 +135,5 @@ Toute la documentation narrative, les guides et les analyses précédemment pré
 
 ## Interface web
 Les assets statiques sont disponibles dans `web/`. Ils seront intégrés dans une partition SPIFFS et servis via le module `web_server`.
+
+L'endpoint `GET /api/config` renvoie par défaut un **snapshot public** où tous les champs sensibles (mots de passe Wi-Fi, secrets MQTT, etc.) sont masqués par la valeur `"********"`. Le client peut demander le snapshot complet via le paramètre de requête `include_secrets=1`, mais seuls les requérants explicitement autorisés récupèrent les valeurs en clair. La réponse HTTP comporte l'en-tête `X-Config-Snapshot` indiquant `public` ou `full` selon le niveau de visibilité obtenu.

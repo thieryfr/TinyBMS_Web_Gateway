@@ -34,7 +34,11 @@ TEST_CASE("config_manager_snapshot_masks_secrets_and_escapes", "[config_manager]
 
     char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
     size_t length = 0;
-    TEST_ASSERT_EQUAL(ESP_OK, config_manager_get_config_json(buffer, sizeof(buffer), &length));
+    TEST_ASSERT_EQUAL(ESP_OK,
+                      config_manager_get_config_json(buffer,
+                                                      sizeof(buffer),
+                                                      &length,
+                                                      CONFIG_MANAGER_SNAPSHOT_PUBLIC));
 
     cJSON *root = cJSON_ParseWithLength(buffer, length);
     TEST_ASSERT_NOT_NULL(root);
@@ -60,6 +64,33 @@ TEST_CASE("config_manager_snapshot_masks_secrets_and_escapes", "[config_manager]
     TEST_ASSERT_EQUAL_STRING(config_manager_mask_secret("password"), password->valuestring);
 
     cJSON_Delete(root);
+
+    char full_buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
+    size_t full_length = 0;
+    TEST_ASSERT_EQUAL(ESP_OK,
+                      config_manager_get_config_json(full_buffer,
+                                                      sizeof(full_buffer),
+                                                      &full_length,
+                                                      CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS));
+
+    cJSON *full_root = cJSON_ParseWithLength(full_buffer, full_length);
+    TEST_ASSERT_NOT_NULL(full_root);
+
+    const cJSON *full_wifi = cJSON_GetObjectItemCaseSensitive(full_root, "wifi");
+    TEST_ASSERT_NOT_NULL(full_wifi);
+    const cJSON *full_sta = cJSON_GetObjectItemCaseSensitive(full_wifi, "sta");
+    TEST_ASSERT_NOT_NULL(full_sta);
+    const cJSON *full_sta_password = cJSON_GetObjectItemCaseSensitive(full_sta, "password");
+    TEST_ASSERT_TRUE(cJSON_IsString(full_sta_password));
+    TEST_ASSERT_EQUAL_STRING("supersecret", full_sta_password->valuestring);
+
+    const cJSON *full_mqtt = cJSON_GetObjectItemCaseSensitive(full_root, "mqtt");
+    TEST_ASSERT_NOT_NULL(full_mqtt);
+    const cJSON *full_mqtt_password = cJSON_GetObjectItemCaseSensitive(full_mqtt, "password");
+    TEST_ASSERT_TRUE(cJSON_IsString(full_mqtt_password));
+    TEST_ASSERT_EQUAL_STRING("p@ss\"word", full_mqtt_password->valuestring);
+
+    cJSON_Delete(full_root);
 }
 
 TEST_CASE("config_manager_generates_secure_ap_secret_on_boot", "[config_manager][wifi]")

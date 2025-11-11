@@ -56,6 +56,11 @@
 
 #define CONFIG_MANAGER_SECRET_MASK "********"
 
+typedef enum {
+    CONFIG_MANAGER_SNAPSHOT_PUBLIC = 0,
+    CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS = (1 << 0),
+} config_manager_snapshot_flags_t;
+
 typedef struct {
     char name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
 } config_manager_device_settings_t;
@@ -106,7 +111,10 @@ void config_manager_init(void);
 void config_manager_deinit(void);
 void config_manager_set_event_publisher(event_bus_publish_fn_t publisher);
 
-esp_err_t config_manager_get_config_json(char *buffer, size_t buffer_size, size_t *out_length);
+esp_err_t config_manager_get_config_json(char *buffer,
+                                         size_t buffer_size,
+                                         size_t *out_length,
+                                         config_manager_snapshot_flags_t flags);
 esp_err_t config_manager_set_config_json(const char *json, size_t length);
 esp_err_t config_manager_get_registers_json(char *buffer, size_t buffer_size, size_t *out_length);
 esp_err_t config_manager_apply_register_update_json(const char *json, size_t length);
