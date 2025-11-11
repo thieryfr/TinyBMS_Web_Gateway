@@ -49,10 +49,7 @@ void pgn_mapper_deinit(void)
     ESP_LOGI(TAG, "Deinitializing PGN mapper...");
 
     // Unregister BMS listener
-    esp_err_t err = uart_bms_unregister_listener(pgn_mapper_on_bms_update);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to unregister BMS listener: %s", esp_err_to_name(err));
-    }
+    uart_bms_unregister_listener(pgn_mapper_on_bms_update, NULL);
 
     // Reset state
     s_has_bms = false;

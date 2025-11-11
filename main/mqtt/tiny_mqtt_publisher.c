@@ -299,10 +299,7 @@ void tiny_mqtt_publisher_deinit(void)
 #if CONFIG_TINYBMS_MQTT_ENABLE
     // Unregister BMS listener if registered
     if (s_listener_registered) {
-        esp_err_t err = uart_bms_unregister_listener(tiny_mqtt_publisher_on_bms_update);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to unregister BMS listener: %s", esp_err_to_name(err));
-        }
+        uart_bms_unregister_listener(tiny_mqtt_publisher_on_bms_update, NULL);
         s_listener_registered = false;
     }
 #endif
