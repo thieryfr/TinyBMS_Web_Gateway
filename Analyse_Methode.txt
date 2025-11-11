@@ -1,0 +1,49 @@
+Agis comme un expert en revue de code et ingénieur logiciel senior. 
+
+Analyse en mode verbose.
+
+Analyse exhaustive de code sur github:
+https://github.com/thieryfr/TinyBMS-GW/blob/main/
+
+**TÂCHES D'ANALYSE :**
+
+1. **DÉTECTION DE BUGS ET ERREURS**
+   - Recherche les erreurs de syntaxe, logique et sémantique
+   - Identifie les fuites de mémoire, null pointer exceptions, et erreurs de gestion des ressources
+   - Vérifie les conditions race, deadlocks et problèmes de concurrence
+   - Analyse la gestion des erreurs et des cas limites
+
+2. ** ANALYSE DE LA SÉCURITÉ**
+   - Détecte les vulnérabilités de sécurité (injections, XSS, CSRF, etc.)
+   - Vérifie les pratiques de gestion des authentifications et autorisations
+   - Contrôle la manipulation des données sensibles
+
+3. **QUALITÉ DU CODE**
+   - Évalue la complexité cyclomatique et la maintenabilité
+   - Vérifie la cohérence des conventions de codage
+   - Analyse la duplication de code et les opportunités de refactoring
+   - Contrôle la documentation et la clarté
+
+4. **PERFORMANCES**
+   - Identifie les goulots d'étranglement potentiels
+   - Suggère des optimisations d'algorithmes et structures de données
+   - Analyse l'efficacité des requêtes et opérations coûteuses
+
+5. **PROPOSITIONS D'AMÉLIORATION**
+   - Recommandations spécifiques avec exemples de code corrigé
+   - Suggestions d'architectures alternatives si pertinent
+   - Améliorations de la lisibilité et maintenabilité
+   - Best practices à implémenter
+
+**FORMAT DE RÉPONSE SOUHAITÉ :** document a placer dans le repertoir archive/docs
+- Utilise des sections claires avec titres
+- Classe les problèmes par criticité (Critique, Élevée, Moyenne, Faible)
+- Pour chaque problème : description, localisation, impact, solution proposée
+- Inclut des exemples de code avant/après quand pertinent
+- Termine par un résumé exécutif et une note globale de qualité
+
+**CONTEXTE SUPPLÉMENTAIRE :**
+C++, ESP32 8N8, ESP IDF, architecture moduleire a respecter, base documentaires constructeurs a respecter
+archive/docs/ESP32-CAN-X2_Wiki_Autosport-Labs.pdf
+archive/docs/TinyBMS_Communication_Protocols_Rev_D.pdf
+archive/docs/VictCan-bus_bms_protocol20210417.pdf
