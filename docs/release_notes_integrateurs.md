@@ -26,6 +26,3 @@
 ### Compatibilité
 - Compatible avec les cartes TinyBMS-GW révision B et ultérieure.
 - Non rétrocompatible avec les déploiements utilisant TLS 1.0/1.1.
-
-### Support
-Pour toute question, contacter support@tinybms.example ou consulter la base de connaissances interne.
