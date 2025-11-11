@@ -36,6 +36,7 @@
 #include "history_fs.h"
 #include "alert_manager.h"
 #include "web_server_alerts.h"
+#include "auth_rate_limit.h"
 #include "can_victron.h"
 #include "system_metrics.h"
 #include "ota_update.h"
@@ -495,6 +496,15 @@ static void web_server_auth_init(void)
 
     memset(s_csrf_tokens, 0, sizeof(s_csrf_tokens));
     s_basic_auth_enabled = true;
+
+    // Initialize rate limiting for brute-force protection
+    esp_err_t rate_limit_err = auth_rate_limit_init();
+    if (rate_limit_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to initialize auth rate limiting: %s", esp_err_to_name(rate_limit_err));
+    } else {
+        ESP_LOGI(TAG, "✓ Auth rate limiting enabled (brute-force protection)");
+    }
+
     ESP_LOGI(TAG, "HTTP Basic authentication enabled");
 }
 
@@ -652,14 +662,53 @@ static bool web_server_validate_csrf_header(httpd_req_t *req, const char *userna
 
 static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, size_t out_size)
 {
+    // Extract client IP address for rate limiting
+    int sockfd = httpd_req_to_sockfd(req);
+    struct sockaddr_in6 addr;
+    socklen_t addr_size = sizeof(addr);
+    uint32_t client_ip = 0;
+
+    if (getpeername(sockfd, (struct sockaddr *)&addr, &addr_size) == 0) {
+        if (addr.sin6_family == AF_INET) {
+            // IPv4
+            struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+            client_ip = s->sin_addr.s_addr;
+        } else if (addr.sin6_family == AF_INET6) {
+            // IPv6 - use hash of address as pseudo-IPv4 for rate limiting
+            struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+            for (int i = 0; i < 16; i += 4) {
+                client_ip ^= *((uint32_t *)&s->sin6_addr.s6_addr[i]);
+            }
+        }
+    }
+
+    // Check rate limiting BEFORE processing credentials
+    uint32_t lockout_remaining_ms = 0;
+    if (!auth_rate_limit_check(client_ip, &lockout_remaining_ms)) {
+        // IP is locked out - reject immediately
+        char retry_after[32];
+        snprintf(retry_after, sizeof(retry_after), "%u", (lockout_remaining_ms + 999) / 1000);
+        httpd_resp_set_hdr(req, "Retry-After", retry_after);
+        httpd_resp_set_status(req, "429 Too Many Requests");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, "{\"error\":\"too_many_attempts\",\"retry_after_seconds\":" , HTTPD_RESP_USE_STRLEN);
+        char lockout_json[64];
+        snprintf(lockout_json, sizeof(lockout_json), "%u}", (lockout_remaining_ms + 999) / 1000);
+        httpd_resp_sendstr_chunk(req, lockout_json);
+        httpd_resp_sendstr_chunk(req, NULL);
+        return false;
+    }
+
     size_t header_len = httpd_req_get_hdr_value_len(req, "Authorization");
     if (header_len == 0 || header_len >= WEB_SERVER_AUTH_HEADER_MAX) {
+        auth_rate_limit_failure(client_ip);  // Missing header = failed attempt
         web_server_send_unauthorized(req);
         return false;
     }
 
     char header[WEB_SERVER_AUTH_HEADER_MAX];
     if (httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) != ESP_OK) {
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -670,6 +719,7 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
     }
 
     if (strncasecmp(value, "Basic ", 6) != 0) {
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -682,11 +732,13 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
     size_t decoded_len = 0;
     int ret = mbedtls_base64_decode(NULL, 0, &decoded_len, (const unsigned char *)value, strlen(value));
     if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL && ret != 0) {
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
 
     if (decoded_len == 0 || decoded_len >= WEB_SERVER_AUTH_DECODED_MAX) {
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -698,6 +750,7 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
                                 (const unsigned char *)value,
                                 strlen(value));
     if (ret != 0) {
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -706,6 +759,7 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
     char *separator = strchr(decoded, ':');
     if (separator == NULL) {
         memset(decoded, 0, sizeof(decoded));
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -716,6 +770,7 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
 
     if (username[0] == '\0' || password[0] == '\0') {
         memset(decoded, 0, sizeof(decoded));
+        auth_rate_limit_failure(client_ip);
         web_server_send_unauthorized(req);
         return false;
     }
@@ -728,9 +783,13 @@ static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, 
     memset(decoded, 0, sizeof(decoded));
 
     if (!authorized) {
+        auth_rate_limit_failure(client_ip);  // Record failed authentication
         web_server_send_unauthorized(req);
         return false;
     }
+
+    // Authentication successful - clear rate limit
+    auth_rate_limit_success(client_ip);
 
     if (out_username != NULL && out_size > 0U) {
         snprintf(out_username, out_size, "%s", username);
