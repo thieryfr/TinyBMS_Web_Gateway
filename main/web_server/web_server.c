@@ -12,17 +12,21 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "esp_err.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "esp_timer.h"
+#include "esp_system.h"
+#include "nvs.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
+#include "sdkconfig.h"
 #include "app_events.h"
 #include "config_manager.h"
 #include "monitoring.h"
@@ -39,6 +43,9 @@
 #include "web_server_ota_errors.h"
 
 #include "cJSON.h"
+#include "mbedtls/base64.h"
+#include "mbedtls/sha256.h"
+#include "mbedtls/platform_util.h"
 
 #ifndef HTTPD_413_PAYLOAD_TOO_LARGE
 #define HTTPD_413_PAYLOAD_TOO_LARGE 413
@@ -54,6 +61,14 @@
 
 #ifndef HTTPD_415_UNSUPPORTED_MEDIA_TYPE
 #define HTTPD_415_UNSUPPORTED_MEDIA_TYPE 415
+#endif
+
+#ifndef HTTPD_401_UNAUTHORIZED
+#define HTTPD_401_UNAUTHORIZED 401
+#endif
+
+#ifndef HTTPD_403_FORBIDDEN
+#define HTTPD_403_FORBIDDEN 403
 #endif
 
 #define WEB_SERVER_FS_BASE_PATH "/spiffs"
@@ -74,6 +89,21 @@
 #define WEB_SERVER_MODULES_JSON_SIZE      2048
 #define WEB_SERVER_JSON_CHUNK_SIZE        1024
 
+#define WEB_SERVER_AUTH_NAMESPACE              "web_auth"
+#define WEB_SERVER_AUTH_USERNAME_KEY           "username"
+#define WEB_SERVER_AUTH_SALT_KEY               "salt"
+#define WEB_SERVER_AUTH_HASH_KEY               "password_hash"
+#define WEB_SERVER_AUTH_MAX_USERNAME_LENGTH    32
+#define WEB_SERVER_AUTH_MAX_PASSWORD_LENGTH    64
+#define WEB_SERVER_AUTH_SALT_SIZE              16
+#define WEB_SERVER_AUTH_HASH_SIZE              32
+#define WEB_SERVER_AUTH_HEADER_MAX             192
+#define WEB_SERVER_AUTH_DECODED_MAX            96
+#define WEB_SERVER_CSRF_TOKEN_SIZE             32
+#define WEB_SERVER_CSRF_TOKEN_STRING_LENGTH    (WEB_SERVER_CSRF_TOKEN_SIZE * 2)
+#define WEB_SERVER_CSRF_TOKEN_TTL_US           (15ULL * 60ULL * 1000000ULL)
+#define WEB_SERVER_MAX_CSRF_TOKENS             8
+
 // WebSocket rate limiting and security
 #define WEB_SERVER_WS_MAX_PAYLOAD_SIZE    (32 * 1024)  // 32KB max payload
 #define WEB_SERVER_WS_MAX_MSGS_PER_SEC    10           // Max 10 messages/sec per client
@@ -87,6 +117,13 @@ typedef struct ws_client {
     uint32_t message_count;        // Messages sent in current window
     uint32_t total_violations;     // Total rate limit violations
 } ws_client_t;
+
+typedef struct {
+    bool in_use;
+    char username[WEB_SERVER_AUTH_MAX_USERNAME_LENGTH + 1];
+    char token[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH + 1];
+    int64_t expires_at_us;
+} web_server_csrf_token_t;
 
 /**
  * Free all clients in a WebSocket client list
@@ -153,6 +190,12 @@ static app_event_metadata_t s_restart_event_metadata = {
     .label = s_restart_event_label,
     .timestamp_ms = 0U,
 };
+static bool s_basic_auth_enabled = false;
+static char s_basic_auth_username[WEB_SERVER_AUTH_MAX_USERNAME_LENGTH + 1];
+static uint8_t s_basic_auth_salt[WEB_SERVER_AUTH_SALT_SIZE];
+static uint8_t s_basic_auth_hash[WEB_SERVER_AUTH_HASH_SIZE];
+static SemaphoreHandle_t s_auth_mutex = NULL;
+static web_server_csrf_token_t s_csrf_tokens[WEB_SERVER_MAX_CSRF_TOKENS];
 
 /**
  * Set security headers on HTTP response to prevent common web vulnerabilities
@@ -241,6 +284,530 @@ static esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size
 
     return httpd_resp_send_chunk(req, NULL, 0);
 }
+
+#if CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE
+static void web_server_send_unauthorized(httpd_req_t *req)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    web_server_set_security_headers(req);
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"TinyBMS-GW\", charset=\"UTF-8\"");
+    httpd_resp_send(req, "{\"error\":\"authentication_required\"}", HTTPD_RESP_USE_STRLEN);
+}
+
+static void web_server_send_forbidden(httpd_req_t *req, const char *message)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    web_server_set_security_headers(req);
+    httpd_resp_set_status(req, "403 Forbidden");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    const char *error = (message != NULL) ? message : "forbidden";
+    char buffer[96];
+    int written = snprintf(buffer, sizeof(buffer), "{\"error\":\"%s\"}", error);
+    if (written < 0 || written >= (int)sizeof(buffer)) {
+        httpd_resp_send(req, "{\"error\":\"forbidden\"}", HTTPD_RESP_USE_STRLEN);
+        return;
+    }
+    httpd_resp_send(req, buffer, written);
+}
+
+static void web_server_auth_compute_hash(const uint8_t *salt, const char *password, uint8_t *out_hash)
+{
+    if (salt == NULL || password == NULL || out_hash == NULL) {
+        return;
+    }
+
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    if (mbedtls_sha256_starts_ret(&ctx, 0) != 0) {
+        mbedtls_sha256_free(&ctx);
+        return;
+    }
+
+    (void)mbedtls_sha256_update_ret(&ctx, salt, WEB_SERVER_AUTH_SALT_SIZE);
+    (void)mbedtls_sha256_update_ret(&ctx, (const unsigned char *)password, strlen(password));
+    (void)mbedtls_sha256_finish_ret(&ctx, out_hash);
+    mbedtls_sha256_free(&ctx);
+}
+
+static void web_server_generate_random_bytes(uint8_t *buffer, size_t size)
+{
+    if (buffer == NULL) {
+        return;
+    }
+
+    for (size_t offset = 0; offset < size;) {
+        uint32_t value = esp_random();
+        size_t chunk = sizeof(value);
+        if (chunk > (size - offset)) {
+            chunk = size - offset;
+        }
+        memcpy(buffer + offset, &value, chunk);
+        offset += chunk;
+    }
+}
+
+static esp_err_t web_server_auth_store_default_locked(nvs_handle_t handle)
+{
+    const char *default_username = CONFIG_TINYBMS_WEB_AUTH_USERNAME;
+    const char *default_password = CONFIG_TINYBMS_WEB_AUTH_PASSWORD;
+
+    size_t username_len = strnlen(default_username, sizeof(s_basic_auth_username));
+    size_t password_len = strnlen(default_password, WEB_SERVER_AUTH_MAX_PASSWORD_LENGTH + 1U);
+
+    if (username_len == 0 || username_len >= sizeof(s_basic_auth_username) ||
+        password_len == 0 || password_len > WEB_SERVER_AUTH_MAX_PASSWORD_LENGTH) {
+        ESP_LOGE(TAG, "Invalid default HTTP credentials length");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(s_basic_auth_username, 0, sizeof(s_basic_auth_username));
+    memcpy(s_basic_auth_username, default_username, username_len);
+
+    web_server_generate_random_bytes(s_basic_auth_salt, sizeof(s_basic_auth_salt));
+    web_server_auth_compute_hash(s_basic_auth_salt, default_password, s_basic_auth_hash);
+
+    esp_err_t err = nvs_set_str(handle, WEB_SERVER_AUTH_USERNAME_KEY, s_basic_auth_username);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store default username: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(handle, WEB_SERVER_AUTH_SALT_KEY, s_basic_auth_salt, sizeof(s_basic_auth_salt));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store auth salt: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(handle, WEB_SERVER_AUTH_HASH_KEY, s_basic_auth_hash, sizeof(s_basic_auth_hash));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to store auth hash: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit auth credentials: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Provisioned default HTTP credentials for user '%s'", s_basic_auth_username);
+    return ESP_OK;
+}
+
+static esp_err_t web_server_auth_load_credentials(void)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(WEB_SERVER_AUTH_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s", WEB_SERVER_AUTH_NAMESPACE, esp_err_to_name(err));
+        return err;
+    }
+
+    bool provision_defaults = false;
+
+    size_t username_len = sizeof(s_basic_auth_username);
+    err = nvs_get_str(handle, WEB_SERVER_AUTH_USERNAME_KEY, s_basic_auth_username, &username_len);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        provision_defaults = true;
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load auth username: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    size_t salt_len = sizeof(s_basic_auth_salt);
+    err = nvs_get_blob(handle, WEB_SERVER_AUTH_SALT_KEY, s_basic_auth_salt, &salt_len);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        provision_defaults = true;
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load auth salt: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    } else if (salt_len != sizeof(s_basic_auth_salt)) {
+        ESP_LOGW(TAG, "Invalid auth salt length (%u)", (unsigned)salt_len);
+        provision_defaults = true;
+    }
+
+    size_t hash_len = sizeof(s_basic_auth_hash);
+    err = nvs_get_blob(handle, WEB_SERVER_AUTH_HASH_KEY, s_basic_auth_hash, &hash_len);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        provision_defaults = true;
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load auth hash: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    } else if (hash_len != sizeof(s_basic_auth_hash)) {
+        ESP_LOGW(TAG, "Invalid auth hash length (%u)", (unsigned)hash_len);
+        provision_defaults = true;
+    }
+
+    if (provision_defaults) {
+        if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+            nvs_close(handle);
+            return ESP_ERR_INVALID_STATE;
+        }
+        err = web_server_auth_store_default_locked(handle);
+        xSemaphoreGive(s_auth_mutex);
+        if (err != ESP_OK) {
+            nvs_close(handle);
+            return err;
+        }
+    }
+
+    s_basic_auth_username[sizeof(s_basic_auth_username) - 1U] = '\0';
+    nvs_close(handle);
+    return ESP_OK;
+}
+
+static void web_server_auth_init(void)
+{
+    if (!CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE) {
+        return;
+    }
+
+    if (s_auth_mutex == NULL) {
+        s_auth_mutex = xSemaphoreCreateMutex();
+        if (s_auth_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create auth mutex");
+            return;
+        }
+    }
+
+    esp_err_t err = web_server_auth_load_credentials();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP authentication disabled due to credential load error");
+        s_basic_auth_enabled = false;
+        return;
+    }
+
+    memset(s_csrf_tokens, 0, sizeof(s_csrf_tokens));
+    s_basic_auth_enabled = true;
+    ESP_LOGI(TAG, "HTTP Basic authentication enabled");
+}
+
+static bool web_server_basic_authenticate(const char *username, const char *password)
+{
+    if (!s_basic_auth_enabled || username == NULL || password == NULL) {
+        return false;
+    }
+
+    bool authorized = false;
+    if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    if (strncmp(username, s_basic_auth_username, sizeof(s_basic_auth_username)) == 0) {
+        uint8_t computed[WEB_SERVER_AUTH_HASH_SIZE];
+        web_server_auth_compute_hash(s_basic_auth_salt, password, computed);
+        authorized = (memcmp(computed, s_basic_auth_hash, sizeof(computed)) == 0);
+        memset(computed, 0, sizeof(computed));
+    }
+
+    xSemaphoreGive(s_auth_mutex);
+    return authorized;
+}
+
+static web_server_csrf_token_t *web_server_find_or_allocate_csrf_entry(const char *username, int64_t now_us)
+{
+    size_t candidate = WEB_SERVER_MAX_CSRF_TOKENS;
+    int64_t oldest = INT64_MAX;
+
+    for (size_t i = 0; i < WEB_SERVER_MAX_CSRF_TOKENS; ++i) {
+        web_server_csrf_token_t *entry = &s_csrf_tokens[i];
+        if (!entry->in_use || entry->expires_at_us <= now_us) {
+            candidate = i;
+            break;
+        }
+        if (strncmp(entry->username, username, sizeof(entry->username)) == 0) {
+            candidate = i;
+            break;
+        }
+        if (entry->expires_at_us < oldest) {
+            oldest = entry->expires_at_us;
+            candidate = i;
+        }
+    }
+
+    if (candidate >= WEB_SERVER_MAX_CSRF_TOKENS) {
+        candidate = 0;
+    }
+
+    return &s_csrf_tokens[candidate];
+}
+
+static bool web_server_issue_csrf_token(const char *username, char *out_token, size_t out_size, uint32_t *out_ttl_ms)
+{
+    if (username == NULL || s_auth_mutex == NULL) {
+        return false;
+    }
+
+    uint8_t random_bytes[WEB_SERVER_CSRF_TOKEN_SIZE];
+    web_server_generate_random_bytes(random_bytes, sizeof(random_bytes));
+
+    char token[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH + 1];
+    for (size_t i = 0; i < WEB_SERVER_CSRF_TOKEN_SIZE; ++i) {
+        static const char hex[] = "0123456789abcdef";
+        token[(size_t)2U * i] = hex[random_bytes[i] >> 4];
+        token[(size_t)2U * i + 1U] = hex[random_bytes[i] & 0x0F];
+    }
+    token[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH] = '\0';
+
+    int64_t now_us = esp_timer_get_time();
+    int64_t expires_at = now_us + WEB_SERVER_CSRF_TOKEN_TTL_US;
+
+    if (xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    web_server_csrf_token_t *entry = web_server_find_or_allocate_csrf_entry(username, now_us);
+    entry->in_use = true;
+    snprintf(entry->username, sizeof(entry->username), "%s", username);
+    snprintf(entry->token, sizeof(entry->token), "%s", token);
+    entry->expires_at_us = expires_at;
+
+    xSemaphoreGive(s_auth_mutex);
+
+    if (out_token != NULL && out_size > 0U) {
+        snprintf(out_token, out_size, "%s", token);
+    }
+    if (out_ttl_ms != NULL) {
+        *out_ttl_ms = (uint32_t)(WEB_SERVER_CSRF_TOKEN_TTL_US / 1000ULL);
+    }
+
+    memset(random_bytes, 0, sizeof(random_bytes));
+    return true;
+}
+
+static bool web_server_validate_csrf_token(const char *username, const char *token)
+{
+    if (username == NULL || token == NULL || s_auth_mutex == NULL) {
+        return false;
+    }
+
+    bool valid = false;
+    int64_t now_us = esp_timer_get_time();
+
+    if (xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    for (size_t i = 0; i < WEB_SERVER_MAX_CSRF_TOKENS; ++i) {
+        web_server_csrf_token_t *entry = &s_csrf_tokens[i];
+        if (!entry->in_use) {
+            continue;
+        }
+        if (entry->expires_at_us <= now_us) {
+            entry->in_use = false;
+            continue;
+        }
+        if (strncmp(entry->username, username, sizeof(entry->username)) == 0 &&
+            strncmp(entry->token, token, sizeof(entry->token)) == 0) {
+            entry->expires_at_us = now_us + WEB_SERVER_CSRF_TOKEN_TTL_US;
+            valid = true;
+            break;
+        }
+    }
+
+    xSemaphoreGive(s_auth_mutex);
+    return valid;
+}
+
+static bool web_server_validate_csrf_header(httpd_req_t *req, const char *username)
+{
+    size_t token_len = httpd_req_get_hdr_value_len(req, "X-CSRF-Token");
+    if (token_len == 0 || token_len > WEB_SERVER_CSRF_TOKEN_STRING_LENGTH) {
+        web_server_send_forbidden(req, "csrf_token_required");
+        return false;
+    }
+
+    char token[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH + 1];
+    if (httpd_req_get_hdr_value_str(req, "X-CSRF-Token", token, sizeof(token)) != ESP_OK) {
+        web_server_send_forbidden(req, "csrf_token_missing");
+        return false;
+    }
+
+    if (!web_server_validate_csrf_token(username, token)) {
+        web_server_send_forbidden(req, "csrf_token_invalid");
+        return false;
+    }
+
+    return true;
+}
+
+static bool web_server_require_basic_auth(httpd_req_t *req, char *out_username, size_t out_size)
+{
+    size_t header_len = httpd_req_get_hdr_value_len(req, "Authorization");
+    if (header_len == 0 || header_len >= WEB_SERVER_AUTH_HEADER_MAX) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    char header[WEB_SERVER_AUTH_HEADER_MAX];
+    if (httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) != ESP_OK) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    const char *value = header;
+    while (isspace((unsigned char)*value)) {
+        ++value;
+    }
+
+    if (strncasecmp(value, "Basic ", 6) != 0) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    value += 6;
+    while (isspace((unsigned char)*value)) {
+        ++value;
+    }
+
+    size_t decoded_len = 0;
+    int ret = mbedtls_base64_decode(NULL, 0, &decoded_len, (const unsigned char *)value, strlen(value));
+    if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL && ret != 0) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    if (decoded_len == 0 || decoded_len >= WEB_SERVER_AUTH_DECODED_MAX) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    char decoded[WEB_SERVER_AUTH_DECODED_MAX];
+    ret = mbedtls_base64_decode((unsigned char *)decoded,
+                                sizeof(decoded) - 1U,
+                                &decoded_len,
+                                (const unsigned char *)value,
+                                strlen(value));
+    if (ret != 0) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+    decoded[decoded_len] = '\0';
+
+    char *separator = strchr(decoded, ':');
+    if (separator == NULL) {
+        memset(decoded, 0, sizeof(decoded));
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    *separator = '\0';
+    const char *username = decoded;
+    const char *password = separator + 1;
+
+    if (username[0] == '\0' || password[0] == '\0') {
+        memset(decoded, 0, sizeof(decoded));
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    char password_copy[WEB_SERVER_AUTH_MAX_PASSWORD_LENGTH + 1];
+    snprintf(password_copy, sizeof(password_copy), "%s", password);
+
+    bool authorized = web_server_basic_authenticate(username, password_copy);
+    memset(password_copy, 0, sizeof(password_copy));
+    memset(decoded, 0, sizeof(decoded));
+
+    if (!authorized) {
+        web_server_send_unauthorized(req);
+        return false;
+    }
+
+    if (out_username != NULL && out_size > 0U) {
+        snprintf(out_username, out_size, "%s", username);
+    }
+
+    return true;
+}
+
+static bool web_server_require_authorization(httpd_req_t *req, bool require_csrf, char *out_username, size_t out_size)
+{
+    if (!s_basic_auth_enabled) {
+        httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "Authentication unavailable");
+        return false;
+    }
+
+    char username[WEB_SERVER_AUTH_MAX_USERNAME_LENGTH + 1];
+    char *username_ptr = (out_username != NULL) ? out_username : username;
+    size_t username_capacity = (out_username != NULL) ? out_size : sizeof(username);
+
+    if (!web_server_require_basic_auth(req, username_ptr, username_capacity)) {
+        return false;
+    }
+
+    if (require_csrf) {
+        return web_server_validate_csrf_header(req, username_ptr);
+    }
+
+    return true;
+}
+#else
+static inline void web_server_auth_init(void)
+{
+}
+
+static inline bool web_server_require_authorization(httpd_req_t *req, bool require_csrf, char *out_username, size_t out_size)
+{
+    (void)req;
+    (void)require_csrf;
+    (void)out_username;
+    (void)out_size;
+    return true;
+}
+#endif
+
+#if CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE
+static esp_err_t web_server_api_security_csrf_get_handler(httpd_req_t *req)
+{
+    char username[WEB_SERVER_AUTH_MAX_USERNAME_LENGTH + 1];
+    if (!web_server_require_authorization(req, false, username, sizeof(username))) {
+        return ESP_FAIL;
+    }
+
+    char token[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH + 1];
+    uint32_t ttl_ms = 0U;
+    if (!web_server_issue_csrf_token(username, token, sizeof(token), &ttl_ms)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to issue CSRF token");
+        return ESP_FAIL;
+    }
+
+    char response[WEB_SERVER_CSRF_TOKEN_STRING_LENGTH + 64];
+    int written = snprintf(response,
+                           sizeof(response),
+                           "{\"token\":\"%s\",\"expires_in\":%u}",
+                           token,
+                           (unsigned)ttl_ms);
+    if (written < 0 || written >= (int)sizeof(response)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to encode token");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    web_server_set_security_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, response, written);
+}
+#else
+static esp_err_t web_server_api_security_csrf_get_handler(httpd_req_t *req)
+{
+    httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "CSRF disabled");
+    return ESP_ERR_NOT_SUPPORTED;
+}
+#endif
 
 static void web_server_set_http_status_code(httpd_req_t *req, int status_code)
 {
@@ -1418,6 +1985,10 @@ esp_err_t web_server_prepare_config_snapshot(const char *uri,
 
 static esp_err_t web_server_api_config_get_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, false, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     char buffer[CONFIG_MANAGER_MAX_CONFIG_SIZE];
     size_t length = 0;
     const char *visibility = NULL;
@@ -1444,6 +2015,10 @@ static esp_err_t web_server_api_config_get_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, true, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     if (req->content_len == 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
         return ESP_ERR_INVALID_SIZE;
@@ -1483,6 +2058,10 @@ static esp_err_t web_server_api_config_post_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, false, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     const mqtt_client_config_t *config = config_manager_get_mqtt_client_config();
     const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
     if (config == NULL || topics == NULL) {
@@ -1536,6 +2115,10 @@ static esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, true, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     if (req->content_len == 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
         return ESP_ERR_INVALID_SIZE;
@@ -1871,6 +2454,10 @@ cleanup:
 
 static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, true, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     if (req->content_len == 0) {
         return web_server_send_ota_response(req, WEB_SERVER_OTA_ERROR_EMPTY_PAYLOAD, NULL, NULL);
     }
@@ -1996,6 +2583,10 @@ static esp_err_t web_server_api_ota_post_handler(httpd_req_t *req)
 
 static esp_err_t web_server_api_restart_post_handler(httpd_req_t *req)
 {
+    if (!web_server_require_authorization(req, true, NULL, 0)) {
+        return ESP_FAIL;
+    }
+
     char body[256] = {0};
     size_t received = 0U;
 
@@ -2446,6 +3037,13 @@ void web_server_init(void)
         return;
     }
 
+#if CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE
+    web_server_auth_init();
+    if (!s_basic_auth_enabled) {
+        ESP_LOGW(TAG, "HTTP authentication is not available; protected endpoints will reject requests");
+    }
+#endif
+
     esp_err_t err = web_server_mount_spiffs();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Serving static assets from SPIFFS disabled");
@@ -2524,6 +3122,16 @@ void web_server_init(void)
         .user_ctx = NULL,
     };
     httpd_register_uri_handler(s_httpd, &api_config_post);
+
+#if CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE
+    const httpd_uri_t api_security_csrf = {
+        .uri = "/api/security/csrf",
+        .method = HTTP_GET,
+        .handler = web_server_api_security_csrf_get_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_httpd, &api_security_csrf);
+#endif
 
     const httpd_uri_t api_mqtt_config_get = {
         .uri = "/api/mqtt/config",
@@ -2816,5 +3424,17 @@ void web_server_deinit(void)
     s_event_task_handle = NULL;
     s_event_task_should_stop = false;
     s_event_publisher = NULL;
+
+#if CONFIG_TINYBMS_WEB_AUTH_BASIC_ENABLE
+    if (s_auth_mutex != NULL) {
+        vSemaphoreDelete(s_auth_mutex);
+        s_auth_mutex = NULL;
+    }
+    s_basic_auth_enabled = false;
+    mbedtls_platform_zeroize(s_basic_auth_username, sizeof(s_basic_auth_username));
+    mbedtls_platform_zeroize(s_basic_auth_salt, sizeof(s_basic_auth_salt));
+    mbedtls_platform_zeroize(s_basic_auth_hash, sizeof(s_basic_auth_hash));
+    memset(s_csrf_tokens, 0, sizeof(s_csrf_tokens));
+#endif
 
     ESP_LOGI(TAG, "Web server deinitialized");

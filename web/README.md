@@ -436,6 +436,12 @@ Sauvegarde configuration.
 }
 ```
 
+### Authentification & sécurité
+
+- Les appels REST sensibles (`/api/config`, `/api/mqtt/config`, `/api/system/restart`, `/api/ota`) exigent l'envoi de l'en-tête `Authorization: Basic ...`. L'application web embarquée ouvre des boîtes de dialogue pour collecter les identifiants et les mémorise en session (`sessionStorage`).【F:web/src/js/utils/security.js†L1-L214】
+- Toute requête `POST/PUT/PATCH/DELETE` doit inclure un jeton CSRF (`X-CSRF-Token`) obtenu via `GET /api/security/csrf`. Le module `security.js` gère automatiquement le rafraîchissement du jeton et son attachement aux requêtes fetch (y compris les appels existants réalisés dans les composants).【F:web/src/js/utils/security.js†L53-L214】【F:web/dashboard.js†L2-L17】
+- Les clients CLI peuvent reproduire ce flux en combinant `curl -u user:pass .../api/security/csrf` puis en réutilisant la valeur `token` pour les requêtes suivantes.
+
 ### WebSocket API
 
 #### ws://host/ws/telemetry

@@ -1,3 +1,7 @@
+import { initSecurityInterceptors } from './utils/security.js';
+
+initSecurityInterceptors();
+
 const MQTT_CONFIG_ENDPOINT = '/api/mqtt/config';
 const MQTT_STATUS_ENDPOINT = '/api/mqtt/status';
 const MQTT_TEST_ENDPOINT = '/api/mqtt/test';

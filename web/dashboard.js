@@ -1,4 +1,5 @@
 // dashboard.js
+import { initSecurityInterceptors } from '/src/js/utils/security.js';
 import { BatteryRealtimeCharts } from '/src/js/charts/batteryCharts.js';
 import { EnergyCharts } from '/src/js/charts/energyCharts.js';
 import { UartCharts, UartTrafficChart, UartCommandDistributionChart } from '/src/js/charts/uartCharts.js';
@@ -11,6 +12,8 @@ import { ConfigRegistersManager } from '/src/components/configuration/config-reg
 import tinyBMSConfig from '/src/components/tiny/tinybms-config.js';
 import { MqttTimelineChart, MqttQosChart, MqttBandwidthChart } from '/src/js/charts/mqttDashboardCharts.js';
 import { initCanTooltips } from '/src/js/utils/canTooltips.js';
+
+initSecurityInterceptors();
 
 /**
  * Escape HTML to prevent XSS attacks
