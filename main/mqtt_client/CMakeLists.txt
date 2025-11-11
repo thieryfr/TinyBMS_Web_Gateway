@@ -1,1 +1,22 @@
 idf_component_register(SRCS "mqtt_client.c" INCLUDE_DIRS "." REQUIRES)
+
+if(CONFIG_TINYBMS_MQTT_TLS_ENABLED)
+  set(_mqtt_ca_cert "${CMAKE_CURRENT_SOURCE_DIR}/certs/mqtt_ca_cert.pem")
+  if(EXISTS "${_mqtt_ca_cert}")
+    target_add_binary_data(${COMPONENT_TARGET} "certs/mqtt_ca_cert.pem" TEXT)
+  else()
+    message(WARNING "CONFIG_TINYBMS_MQTT_TLS_ENABLED is set but '${_mqtt_ca_cert}' was not found")
+  endif()
+
+  if(CONFIG_TINYBMS_MQTT_TLS_CLIENT_CERT_ENABLED)
+    set(_mqtt_client_cert "${CMAKE_CURRENT_SOURCE_DIR}/certs/mqtt_client_cert.pem")
+    set(_mqtt_client_key "${CMAKE_CURRENT_SOURCE_DIR}/certs/mqtt_client_key.pem")
+
+    if(EXISTS "${_mqtt_client_cert}" AND EXISTS "${_mqtt_client_key}")
+      target_add_binary_data(${COMPONENT_TARGET} "certs/mqtt_client_cert.pem" TEXT)
+      target_add_binary_data(${COMPONENT_TARGET} "certs/mqtt_client_key.pem" TEXT)
+    else()
+      message(WARNING "CONFIG_TINYBMS_MQTT_TLS_CLIENT_CERT_ENABLED is set but '${_mqtt_client_cert}' or '${_mqtt_client_key}' was not found")
+    endif()
+  endif()
+endif()
