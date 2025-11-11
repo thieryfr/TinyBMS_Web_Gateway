@@ -24,6 +24,7 @@ idf_component_register(SRCS
     "wifi/wifi_state_machine.c"
     "monitoring/monitoring.c"
     "monitoring/history_logger.c"
+    "serialization/telemetry_json.c"
     "storage/nvs_energy.c"
     "storage/history_fs.c"
     "alert_manager/alert_manager.c"
@@ -43,6 +44,7 @@ idf_component_register(SRCS
                  "mqtt_gateway"
                  "wifi"
                  "monitoring"
+                 "serialization"
                  "storage"
                  "alert_manager"
     REQUIRES cjson)

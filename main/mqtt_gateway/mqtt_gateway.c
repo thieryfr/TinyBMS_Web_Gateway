@@ -20,6 +20,7 @@
 #include "mqtt_client.h"
 #include "mqtt_topics.h"
 #include "tiny_mqtt_publisher.h"
+#include "telemetry_json.h"
 
 #ifndef CONFIG_TINYBMS_MQTT_ENABLE
 #define CONFIG_TINYBMS_MQTT_ENABLE 0
@@ -265,46 +266,15 @@ static void mqtt_gateway_publish_can_ready(const can_publisher_frame_t *frame)
     }
 
     char buffer[192];
-    int written = snprintf(buffer,
-                           sizeof(buffer),
-                           "{\"type\":\"can_ready\",\"id\":\"%08" PRIX32 "\",\"timestamp\":%" PRIu64 ",\"dlc\":%u,\"data\":\"",
-                           frame->id,
-                           frame->timestamp_ms,
-                           (unsigned)frame->dlc);
-    if (written < 0 || (size_t)written >= sizeof(buffer)) {
-        ESP_LOGW(TAG, "CAN ready payload truncated for 0x%08" PRIX32, frame->id);
+    size_t length = 0U;
+    if (!telemetry_json_write_can_ready(frame, buffer, sizeof(buffer), &length)) {
+        ESP_LOGW(TAG, "CAN ready payload serialization failed for 0x%08" PRIX32, frame->id);
         return;
     }
-
-    size_t offset = (size_t)written;
-    for (uint8_t i = 0U; i < frame->dlc && i < sizeof(frame->data); ++i) {
-        if (offset + 2U >= sizeof(buffer)) {
-            ESP_LOGW(TAG, "CAN ready payload buffer exhausted for 0x%08" PRIX32, frame->id);
-            return;
-        }
-
-        int hex = snprintf(&buffer[offset], sizeof(buffer) - offset, "%02X", frame->data[i]);
-        if (hex < 0 || offset + (size_t)hex >= sizeof(buffer)) {
-            ESP_LOGW(TAG, "CAN ready payload formatting failed for 0x%08" PRIX32, frame->id);
-            return;
-        }
-        offset += (size_t)hex;
-    }
-
-    if (offset + 3U >= sizeof(buffer)) {
-        ESP_LOGW(TAG, "CAN ready payload finalisation failed for 0x%08" PRIX32, frame->id);
-        return;
-    }
-
-    int tail = snprintf(&buffer[offset], sizeof(buffer) - offset, "\"}");
-    if (tail < 0) {
-        return;
-    }
-    offset += (size_t)tail;
 
     mqtt_gateway_publish(s_gateway.can_ready_topic,
                          buffer,
-                         offset,
+                         length,
                          MQTT_TOPIC_CAN_QOS,
                          MQTT_TOPIC_CAN_RETAIN);
 }
