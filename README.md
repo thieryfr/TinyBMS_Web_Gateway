@@ -124,6 +124,7 @@ Le répertoire `docs/` ne conserve plus que les artefacts nécessaires aux outil
 - **[`UART_CAN_mapping.json`](docs/UART_CAN_mapping.json)** : référence UART ↔️ CAN utilisée par `tools/mapping_audit.py`.
 - **[`COMMUNICATION_REFERENCE.json`](docs/COMMUNICATION_REFERENCE.json)** : export JSON embarqué par l'interface web.
 - **[`shared_data.h`](docs/shared_data.h)** et **[`tiny_read_mapping.h`](docs/tiny_read_mapping.h)** : en-têtes partagés par le code `uart_bms`.
+- **[`wifi_architecture.md`](docs/wifi_architecture.md)** : description de la machine d'états Wi-Fi (STA⇄AP, timers, événements) et des responsabilités par module.
 
 Toute la documentation narrative, les guides et les analyses précédemment présents dans `docs/` ont été déplacés dans `archive/docs/`. Le fichier [`archive/docs/INDEX.md`](archive/docs/INDEX.md) centralise la table des matières de ces contenus historiques.
 
