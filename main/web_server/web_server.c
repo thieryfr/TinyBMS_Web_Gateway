@@ -98,6 +98,7 @@
 #define WEB_SERVER_AUTH_SALT_SIZE              16
 #define WEB_SERVER_AUTH_HASH_SIZE              32
 #define WEB_SERVER_AUTH_HEADER_MAX             192
+#define WEB_SERVER_MUTEX_TIMEOUT_MS            5000  // Timeout 5s pour éviter deadlock
 #define WEB_SERVER_AUTH_DECODED_MAX            96
 #define WEB_SERVER_CSRF_TOKEN_SIZE             32
 #define WEB_SERVER_CSRF_TOKEN_STRING_LENGTH    (WEB_SERVER_CSRF_TOKEN_SIZE * 2)
@@ -453,9 +454,10 @@ static esp_err_t web_server_auth_load_credentials(void)
     }
 
     if (provision_defaults) {
-        if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+        if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, pdMS_TO_TICKS(WEB_SERVER_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+            ESP_LOGW(TAG, "Failed to acquire auth mutex (timeout)");
             nvs_close(handle);
-            return ESP_ERR_INVALID_STATE;
+            return ESP_ERR_TIMEOUT;
         }
         err = web_server_auth_store_default_locked(handle);
         xSemaphoreGive(s_auth_mutex);
@@ -503,7 +505,8 @@ static bool web_server_basic_authenticate(const char *username, const char *pass
     }
 
     bool authorized = false;
-    if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+    if (s_auth_mutex == NULL || xSemaphoreTake(s_auth_mutex, pdMS_TO_TICKS(WEB_SERVER_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire auth mutex for verification (timeout)");
         return false;
     }
 
@@ -566,7 +569,8 @@ static bool web_server_issue_csrf_token(const char *username, char *out_token, s
     int64_t now_us = esp_timer_get_time();
     int64_t expires_at = now_us + WEB_SERVER_CSRF_TOKEN_TTL_US;
 
-    if (xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_auth_mutex, pdMS_TO_TICKS(WEB_SERVER_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire auth mutex for CSRF creation (timeout)");
         return false;
     }
 
@@ -598,7 +602,8 @@ static bool web_server_validate_csrf_token(const char *username, const char *tok
     bool valid = false;
     int64_t now_us = esp_timer_get_time();
 
-    if (xSemaphoreTake(s_auth_mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_auth_mutex, pdMS_TO_TICKS(WEB_SERVER_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire auth mutex for CSRF validation (timeout)");
         return false;
     }
 
@@ -3393,13 +3398,16 @@ void web_server_deinit(void)
 
     // Free all WebSocket client lists
     if (s_ws_mutex != NULL) {
-        xSemaphoreTake(s_ws_mutex, portMAX_DELAY);
-        ws_client_list_free(&s_telemetry_clients);
-        ws_client_list_free(&s_event_clients);
-        ws_client_list_free(&s_uart_clients);
-        ws_client_list_free(&s_can_clients);
-        ws_client_list_free(&s_alert_clients);
-        xSemaphoreGive(s_ws_mutex);
+        if (xSemaphoreTake(s_ws_mutex, pdMS_TO_TICKS(WEB_SERVER_MUTEX_TIMEOUT_MS)) == pdTRUE) {
+            ws_client_list_free(&s_telemetry_clients);
+            ws_client_list_free(&s_event_clients);
+            ws_client_list_free(&s_uart_clients);
+            ws_client_list_free(&s_can_clients);
+            ws_client_list_free(&s_alert_clients);
+            xSemaphoreGive(s_ws_mutex);
+        } else {
+            ESP_LOGW(TAG, "Failed to acquire WS mutex for cleanup (timeout)");
+        }
     }
 
     // Unsubscribe from event bus

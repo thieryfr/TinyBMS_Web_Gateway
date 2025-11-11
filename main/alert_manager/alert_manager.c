@@ -867,16 +867,16 @@ esp_err_t alert_manager_get_config_json(char *buffer, size_t buffer_size, size_t
         return ESP_ERR_NO_MEM;
     }
 
-    size_t len = strlen(json_str);
-    if (len >= buffer_size) {
-        free(json_str);
+    // Utiliser snprintf pour sécurité (évite buffer overflow)
+    int written = snprintf(buffer, buffer_size, "%s", json_str);
+    free(json_str);
+
+    if (written < 0 || (size_t)written >= buffer_size) {
+        ESP_LOGW(TAG, "JSON config truncated: needed %d bytes, had %zu", written, buffer_size);
         return ESP_ERR_INVALID_SIZE;
     }
 
-    strcpy(buffer, json_str);
-    *out_length = len;
-    free(json_str);
-
+    *out_length = (size_t)written;
     return ESP_OK;
 }
 
@@ -1011,16 +1011,16 @@ esp_err_t alert_manager_get_active_alerts_json(char *buffer, size_t buffer_size,
         return ESP_ERR_NO_MEM;
     }
 
-    size_t len = strlen(json_str);
-    if (len >= buffer_size) {
-        free(json_str);
+    // Utiliser snprintf pour sécurité (évite buffer overflow)
+    int written = snprintf(buffer, buffer_size, "%s", json_str);
+    free(json_str);
+
+    if (written < 0 || (size_t)written >= buffer_size) {
+        ESP_LOGW(TAG, "JSON active alerts truncated: needed %d bytes, had %zu", written, buffer_size);
         return ESP_ERR_INVALID_SIZE;
     }
 
-    strcpy(buffer, json_str);
-    *out_length = len;
-    free(json_str);
-
+    *out_length = (size_t)written;
     return ESP_OK;
 }
 
@@ -1078,15 +1078,15 @@ esp_err_t alert_manager_get_history_json(char *buffer, size_t buffer_size, size_
         return ESP_ERR_NO_MEM;
     }
 
-    size_t len = strlen(json_str);
-    if (len >= buffer_size) {
-        free(json_str);
+    // Utiliser snprintf pour sécurité (évite buffer overflow)
+    int written = snprintf(buffer, buffer_size, "%s", json_str);
+    free(json_str);
+
+    if (written < 0 || (size_t)written >= buffer_size) {
+        ESP_LOGW(TAG, "JSON history truncated: needed %d bytes, had %zu", written, buffer_size);
         return ESP_ERR_INVALID_SIZE;
     }
 
-    strcpy(buffer, json_str);
-    *out_length = len;
-    free(json_str);
-
+    *out_length = (size_t)written;
     return ESP_OK;
 }

@@ -82,6 +82,7 @@ SemaphoreHandle_t s_command_mutex = nullptr;
 SemaphoreHandle_t s_rx_buffer_mutex = nullptr;
 SemaphoreHandle_t s_snapshot_mutex = nullptr;
 SemaphoreHandle_t s_listeners_mutex = nullptr;
+SemaphoreHandle_t s_shared_listeners_mutex = nullptr;  // Protection for s_shared_listeners
 
 // Flag pour pause de polling (évite deadlock vTaskSuspend)
 static volatile bool s_poll_pause_requested = false;
@@ -154,9 +155,22 @@ static void uart_bms_notify_listeners(const uart_bms_live_data_t *data)
 
 static void uart_bms_notify_shared_listeners(const TinyBMS_LiveData& data)
 {
+    // Copier les callbacks dans un buffer local sous mutex (évite race condition)
+    SharedListenerEntry local_listeners[UART_BMS_LISTENER_SLOTS];
+
+    if (s_shared_listeners_mutex != nullptr &&
+        xSemaphoreTake(s_shared_listeners_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        memcpy(local_listeners, s_shared_listeners, sizeof(local_listeners));
+        xSemaphoreGive(s_shared_listeners_mutex);
+    } else {
+        // Si mutex non disponible, skip notification pour éviter race condition
+        return;
+    }
+
+    // Invoquer callbacks en dehors du mutex
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
-        if (s_shared_listeners[i].callback != nullptr) {
-            s_shared_listeners[i].callback(data, s_shared_listeners[i].context);
+        if (local_listeners[i].callback != nullptr) {
+            local_listeners[i].callback(data, local_listeners[i].context);
         }
     }
 }
@@ -817,6 +831,15 @@ void uart_bms_init(void)
         }
     }
 
+    if (s_shared_listeners_mutex == nullptr) {
+        s_shared_listeners_mutex = xSemaphoreCreateMutex();
+        if (s_shared_listeners_mutex == nullptr) {
+            ESP_LOGE(kTag, "Unable to allocate TinyBMS shared listeners mutex");
+            uart_driver_delete(UART_BMS_UART_PORT);
+            return;
+        }
+    }
+
     s_uart_initialised = true;
 
     esp_err_t energy_err = can_publisher_conversion_restore_energy_state();
@@ -850,6 +873,10 @@ void uart_bms_init(void)
         if (s_listeners_mutex != nullptr) {
             vSemaphoreDelete(s_listeners_mutex);
             s_listeners_mutex = nullptr;
+        }
+        if (s_shared_listeners_mutex != nullptr) {
+            vSemaphoreDelete(s_shared_listeners_mutex);
+            s_shared_listeners_mutex = nullptr;
         }
 
         uart_driver_delete(UART_BMS_UART_PORT);
@@ -1084,29 +1111,55 @@ esp_err_t uart_bms_register_shared_listener(uart_bms_shared_callback_t callback,
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (s_shared_listeners_mutex == nullptr ||
+        xSemaphoreTake(s_shared_listeners_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t result = ESP_ERR_NO_MEM;
+
+    // Vérifier si déjà enregistré
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
         if (s_shared_listeners[i].callback == callback && s_shared_listeners[i].context == context) {
-            return ESP_OK;
+            result = ESP_OK;
+            goto cleanup;
         }
     }
 
+    // Trouver slot libre
     for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
         if (s_shared_listeners[i].callback == nullptr) {
             s_shared_listeners[i].callback = callback;
             s_shared_listeners[i].context = context;
-            if (s_shared_snapshot_valid) {
-                callback(s_shared_snapshot, context);
+
+            // Appeler immédiatement si snapshot valide (hors mutex pour éviter deadlock)
+            bool call_now = s_shared_snapshot_valid;
+            TinyBMS_LiveData snapshot_copy = s_shared_snapshot;
+
+            xSemaphoreGive(s_shared_listeners_mutex);
+
+            if (call_now) {
+                callback(snapshot_copy, context);
             }
+
             return ESP_OK;
         }
     }
 
-    return ESP_ERR_NO_MEM;
+cleanup:
+    xSemaphoreGive(s_shared_listeners_mutex);
+    return result;
 }
 
 void uart_bms_unregister_shared_listener(uart_bms_shared_callback_t callback, void *context)
 {
     if (callback == nullptr) {
+        return;
+    }
+
+    if (s_shared_listeners_mutex == nullptr ||
+        xSemaphoreTake(s_shared_listeners_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(kTag, "Failed to acquire shared listeners mutex for unregister");
         return;
     }
 
@@ -1116,6 +1169,8 @@ void uart_bms_unregister_shared_listener(uart_bms_shared_callback_t callback, vo
             s_shared_listeners[i].context = nullptr;
         }
     }
+
+    xSemaphoreGive(s_shared_listeners_mutex);
 }
 
 const TinyBMS_LiveData *uart_bms_get_latest_shared(void)
@@ -1158,15 +1213,22 @@ void uart_bms_deinit(void)
     // Give task time to exit cleanly
     vTaskDelay(pdMS_TO_TICKS(200));
 
-    // Clear all listeners
+    // Clear all listeners (protégés par mutex appropriés)
     if (s_listeners_mutex != nullptr && xSemaphoreTake(s_listeners_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
             s_listeners[i].callback = nullptr;
             s_listeners[i].context = nullptr;
+        }
+        xSemaphoreGive(s_listeners_mutex);
+    }
+
+    // Clear all shared listeners (mutex séparé)
+    if (s_shared_listeners_mutex != nullptr && xSemaphoreTake(s_shared_listeners_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        for (size_t i = 0; i < UART_BMS_LISTENER_SLOTS; ++i) {
             s_shared_listeners[i].callback = nullptr;
             s_shared_listeners[i].context = nullptr;
         }
-        xSemaphoreGive(s_listeners_mutex);
+        xSemaphoreGive(s_shared_listeners_mutex);
     }
 
     // Delete UART driver
@@ -1191,6 +1253,10 @@ void uart_bms_deinit(void)
     if (s_listeners_mutex != nullptr) {
         vSemaphoreDelete(s_listeners_mutex);
         s_listeners_mutex = nullptr;
+    }
+    if (s_shared_listeners_mutex != nullptr) {
+        vSemaphoreDelete(s_shared_listeners_mutex);
+        s_shared_listeners_mutex = nullptr;
     }
 
     // Reset state
