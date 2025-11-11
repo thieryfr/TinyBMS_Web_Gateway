@@ -8,7 +8,9 @@
 
 #include "freertos/FreeRTOS.h"
 
+#include "app_config.h"
 #include "app_events.h"
+#include "config_manager.h"
 #include "mqtt_topics.h"
 
 #ifndef CONFIG_TINYBMS_MQTT_ENABLE
@@ -44,8 +46,13 @@ static tiny_mqtt_publisher_config_t s_config = {
 };
 static uint64_t s_last_publish_ms = 0;
 static bool s_listener_registered = false;
-static tiny_mqtt_publisher_message_t s_message = {0};
+static char s_metrics_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
+static size_t s_metrics_topic_length = 0U;
 static char s_payload_buffer[TINY_MQTT_PAYLOAD_CAPACITY];
+static tiny_mqtt_publisher_message_t s_message = {
+    .topic = s_metrics_topic,
+    .payload = s_payload_buffer,
+};
 
 static bool tiny_mqtt_payload_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
 {
@@ -238,6 +245,35 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
     return true;
 }
 
+static void tiny_mqtt_publisher_set_topic_internal(const char *topic)
+{
+    if (topic == NULL || topic[0] == '\0') {
+        (void)snprintf(s_metrics_topic, sizeof(s_metrics_topic), MQTT_TOPIC_FMT_METRICS, APP_DEVICE_NAME);
+    } else {
+        (void)snprintf(s_metrics_topic, sizeof(s_metrics_topic), "%s", topic);
+    }
+
+    s_metrics_topic[sizeof(s_metrics_topic) - 1U] = '\0';
+    s_metrics_topic_length = strlen(s_metrics_topic);
+    s_message.topic = s_metrics_topic;
+    s_message.topic_length = s_metrics_topic_length;
+}
+
+static void tiny_mqtt_publisher_ensure_metrics_topic(void)
+{
+    if (s_metrics_topic_length != 0U) {
+        return;
+    }
+
+    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
+    if (topics != NULL && topics->metrics[0] != '\0') {
+        tiny_mqtt_publisher_set_topic_internal(topics->metrics);
+        return;
+    }
+
+    tiny_mqtt_publisher_set_topic_internal(NULL);
+}
+
 void tiny_mqtt_publisher_set_event_publisher(event_bus_publish_fn_t publisher)
 {
     s_event_publisher = publisher;
@@ -245,12 +281,20 @@ void tiny_mqtt_publisher_set_event_publisher(event_bus_publish_fn_t publisher)
 
 void tiny_mqtt_publisher_reset(void)
 {
+    tiny_mqtt_publisher_ensure_metrics_topic();
     s_last_publish_ms = 0U;
     memset(s_payload_buffer, 0, sizeof(s_payload_buffer));
+    s_message.topic = s_metrics_topic;
+    s_message.topic_length = s_metrics_topic_length;
     s_message.payload = s_payload_buffer;
     s_message.payload_length = 0U;
     s_message.qos = s_config.qos;
     s_message.retain = s_config.retain;
+}
+
+void tiny_mqtt_publisher_set_metrics_topic(const char *topic)
+{
+    tiny_mqtt_publisher_set_topic_internal(topic);
 }
 
 void tiny_mqtt_publisher_apply_config(const tiny_mqtt_publisher_config_t *config)
@@ -309,6 +353,31 @@ void tiny_mqtt_publisher_init(const tiny_mqtt_publisher_config_t *config)
 #endif
 }
 
+bool tiny_mqtt_publisher_build_metrics_message(const uart_bms_live_data_t *data,
+                                               tiny_mqtt_publisher_message_t *message)
+{
+    if (data == NULL || message == NULL) {
+        return false;
+    }
+
+    size_t payload_length = 0U;
+    if (!build_payload(data, &payload_length)) {
+        return false;
+    }
+
+    tiny_mqtt_publisher_ensure_metrics_topic();
+
+    s_message.payload = s_payload_buffer;
+    s_message.payload_length = payload_length;
+    s_message.topic = s_metrics_topic;
+    s_message.topic_length = s_metrics_topic_length;
+    s_message.qos = s_config.qos;
+    s_message.retain = s_config.retain;
+
+    *message = s_message;
+    return true;
+}
+
 void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *context)
 {
     (void)context;
@@ -322,15 +391,11 @@ void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *c
         return;
     }
 
-    size_t payload_length = 0U;
-    if (!build_payload(data, &payload_length)) {
+    if (!tiny_mqtt_publisher_build_metrics_message(data, &s_message)) {
         return;
     }
 
     s_last_publish_ms = timestamp_ms;
-    s_message.payload_length = payload_length;
-    s_message.qos = s_config.qos;
-    s_message.retain = s_config.retain;
 
     if (s_event_publisher == NULL) {
         return;

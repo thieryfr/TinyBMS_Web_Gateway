@@ -187,6 +187,7 @@ static esp_err_t init_mqtt_publisher(void)
 
     // Get MQTT configuration
     const mqtt_client_config_t *mqtt_cfg = config_manager_get_mqtt_client_config();
+    const config_manager_mqtt_topics_t *topics = config_manager_get_mqtt_topics();
 
     // Configure metrics publisher with defaults
     tiny_mqtt_publisher_config_t metrics_cfg = {
@@ -201,6 +202,12 @@ static esp_err_t init_mqtt_publisher(void)
         ESP_LOGI(TAG, "  - Using MQTT QoS level: %d", metrics_cfg.qos);
     } else {
         ESP_LOGW(TAG, "  - MQTT configuration not available, using default QoS");
+    }
+
+    if (topics != NULL) {
+        tiny_mqtt_publisher_set_metrics_topic(topics->metrics);
+    } else {
+        tiny_mqtt_publisher_set_metrics_topic(NULL);
     }
 
     // Initialize publisher

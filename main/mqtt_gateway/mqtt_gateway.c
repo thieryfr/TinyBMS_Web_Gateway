@@ -218,11 +218,12 @@ static void mqtt_gateway_publish_metrics_message(const tiny_mqtt_publisher_messa
         qos = 2;
     }
 
-    mqtt_gateway_publish(s_gateway.metrics_topic,
-                         message->payload,
-                         message->payload_length,
-                         qos,
-                         message->retain);
+    const char *topic = s_gateway.metrics_topic;
+    if (message->topic != NULL && message->topic_length > 0U) {
+        topic = message->topic;
+    }
+
+    mqtt_gateway_publish(topic, message->payload, message->payload_length, qos, message->retain);
 }
 
 static void mqtt_gateway_publish_config(const event_bus_event_t *event)
@@ -351,7 +352,11 @@ static void mqtt_gateway_load_topics(void)
     (void)snprintf(fallback_can_ready, sizeof(fallback_can_ready), MQTT_TOPIC_FMT_CAN_STREAM, APP_DEVICE_NAME, "ready");
     (void)snprintf(fallback_alerts, sizeof(fallback_alerts), "%s/alerts", APP_DEVICE_NAME);
 
+    const char *metrics_source =
+        (topics != NULL && topics->metrics[0] != '\0') ? topics->metrics : fallback_metrics;
+
     if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+        tiny_mqtt_publisher_set_metrics_topic(metrics_source);
         return;
     }
 
@@ -385,6 +390,8 @@ static void mqtt_gateway_load_topics(void)
                            fallback_alerts);
 
     mqtt_gateway_unlock_ctx();
+
+    tiny_mqtt_publisher_set_metrics_topic(metrics_source);
 }
 
 static void mqtt_gateway_record_event(mqtt_client_event_id_t id, const char *error)

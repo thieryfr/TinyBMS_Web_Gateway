@@ -1,6 +1,7 @@
 #include "unity.h"
 
 #include "app_events.h"
+#include "config_manager.h"
 #include "tiny_mqtt_publisher.h"
 
 #include <string.h>
@@ -9,6 +10,7 @@ static bool s_publish_called = false;
 static unsigned s_publish_count = 0U;
 static tiny_mqtt_publisher_message_t s_captured_message = {0};
 static char s_captured_payload[TINY_MQTT_MAX_PAYLOAD_SIZE];
+static char s_captured_topic[CONFIG_MANAGER_MQTT_TOPIC_MAX_LENGTH];
 
 static void reset_capture(void)
 {
@@ -16,6 +18,7 @@ static void reset_capture(void)
     s_publish_count = 0U;
     memset(&s_captured_message, 0, sizeof(s_captured_message));
     memset(s_captured_payload, 0, sizeof(s_captured_payload));
+    memset(s_captured_topic, 0, sizeof(s_captured_topic));
 }
 
 static void clear_capture_flags(void)
@@ -23,6 +26,7 @@ static void clear_capture_flags(void)
     s_publish_called = false;
     memset(&s_captured_message, 0, sizeof(s_captured_message));
     memset(s_captured_payload, 0, sizeof(s_captured_payload));
+    memset(s_captured_topic, 0, sizeof(s_captured_topic));
 }
 
 static bool capture_event(const event_bus_event_t *event, TickType_t timeout)
@@ -38,10 +42,15 @@ static bool capture_event(const event_bus_event_t *event, TickType_t timeout)
     const tiny_mqtt_publisher_message_t *message =
         (const tiny_mqtt_publisher_message_t *)event->payload;
     if (message != NULL && message->payload != NULL && message->payload_length < sizeof(s_captured_payload)) {
+        if (message->topic != NULL && message->topic_length < sizeof(s_captured_topic)) {
+            memcpy(s_captured_topic, message->topic, message->topic_length);
+            s_captured_topic[message->topic_length] = '\0';
+        }
         memcpy(s_captured_payload, message->payload, message->payload_length);
         s_captured_payload[message->payload_length] = '\0';
         s_captured_message = *message;
         s_captured_message.payload = s_captured_payload;
+        s_captured_message.topic = s_captured_topic;
         s_publish_called = true;
     }
     ++s_publish_count;
@@ -79,6 +88,7 @@ static uart_bms_live_data_t build_sample(uint64_t timestamp_ms)
 TEST_CASE("tiny_mqtt_publisher_generates_metrics_snapshot", "[mqtt][tiny_mqtt_publisher]")
 {
     tiny_mqtt_publisher_set_event_publisher(capture_event);
+    tiny_mqtt_publisher_set_metrics_topic("test/device/metrics");
     tiny_mqtt_publisher_reset();
     reset_capture();
 
@@ -95,6 +105,7 @@ TEST_CASE("tiny_mqtt_publisher_generates_metrics_snapshot", "[mqtt][tiny_mqtt_pu
     TEST_ASSERT_TRUE(s_publish_called);
     TEST_ASSERT_EQUAL(1, s_captured_message.qos);
     TEST_ASSERT_FALSE(s_captured_message.retain);
+    TEST_ASSERT_EQUAL_STRING("test/device/metrics", s_captured_message.topic);
     TEST_ASSERT_NOT_NULL(s_captured_message.payload);
     TEST_ASSERT_GREATER_THAN(0U, s_captured_message.payload_length);
 
@@ -117,6 +128,7 @@ TEST_CASE("tiny_mqtt_publisher_generates_metrics_snapshot", "[mqtt][tiny_mqtt_pu
 TEST_CASE("tiny_mqtt_publisher_respects_publish_interval", "[mqtt][tiny_mqtt_publisher]")
 {
     tiny_mqtt_publisher_set_event_publisher(capture_event);
+    tiny_mqtt_publisher_set_metrics_topic("test/device/metrics");
     tiny_mqtt_publisher_reset();
     reset_capture();
 
@@ -148,6 +160,7 @@ TEST_CASE("tiny_mqtt_publisher_respects_publish_interval", "[mqtt][tiny_mqtt_pub
 TEST_CASE("tiny_mqtt_publisher_keeps_interval_when_updating_qos", "[mqtt][tiny_mqtt_publisher]")
 {
     tiny_mqtt_publisher_set_event_publisher(capture_event);
+    tiny_mqtt_publisher_set_metrics_topic("test/device/metrics");
     tiny_mqtt_publisher_reset();
     reset_capture();
 
@@ -180,5 +193,23 @@ TEST_CASE("tiny_mqtt_publisher_keeps_interval_when_updating_qos", "[mqtt][tiny_m
     TEST_ASSERT_TRUE(s_publish_called);
     TEST_ASSERT_EQUAL(2, s_captured_message.qos);
     TEST_ASSERT_TRUE(s_captured_message.retain);
+}
+
+TEST_CASE("tiny_mqtt_publisher_build_metrics_message_helper", "[mqtt][tiny_mqtt_publisher]")
+{
+    tiny_mqtt_publisher_set_metrics_topic("helper/topic");
+    tiny_mqtt_publisher_reset();
+
+    uart_bms_live_data_t sample = build_sample(4200U);
+
+    tiny_mqtt_publisher_message_t message = {0};
+    bool ok = tiny_mqtt_publisher_build_metrics_message(&sample, &message);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_NOT_NULL(message.topic);
+    TEST_ASSERT_EQUAL_STRING("helper/topic", message.topic);
+    TEST_ASSERT_NOT_NULL(message.payload);
+    TEST_ASSERT_GREATER_THAN_UINT32(0U, message.payload_length);
+    TEST_ASSERT_LESS_THAN_UINT32(TINY_MQTT_MAX_PAYLOAD_SIZE, message.payload_length);
+    TEST_ASSERT_NOT_NULL(strstr(message.payload, "\"timestamp_ms\":4200"));
 }
 
