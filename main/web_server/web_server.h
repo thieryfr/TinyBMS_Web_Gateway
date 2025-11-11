@@ -24,20 +24,29 @@
  *   - GET  /api/status
  *   - GET  /api/config (snapshot public; ajouter `?include_secrets=1` pour le snapshot complet si autorisé)
  *   - POST /api/config
+ *   - GET  /api/security/csrf (récupération du jeton CSRF synchronisé)
  *   - POST /api/ota
  *   - GET  /api/can/status
  *   - WS   /ws/telemetry
  *   - WS   /ws/events
  *
+ * Les routes sensibles (configuration, OTA, redémarrage, MQTT) sont protégées par
+ * une authentification HTTP Basic. Les requêtes modifiant l'état doivent en plus
+ * inclure l'en-tête `X-CSRF-Token` obtenu via `/api/security/csrf`.
+ *
  * Quick validation examples (replace ${HOST} with the device IP):
- *   curl -sS http://${HOST}/api/status | jq
- *   curl -sS http://${HOST}/api/config | jq
- *   curl -sS -X POST http://${HOST}/api/config -H 'Content-Type: application/json' \
+ *   curl -su admin:changeme http://${HOST}/api/status | jq
+ *   curl -su admin:changeme http://${HOST}/api/config | jq
+ *   CSRF=$(curl -su admin:changeme http://${HOST}/api/security/csrf | jq -r '.token')
+ *   curl -su admin:changeme -X POST http://${HOST}/api/config \
+ *        -H "Content-Type: application/json" -H "X-CSRF-Token: ${CSRF}" \
  *        -d '{"demo":true}'
- *   curl -sS -X POST http://${HOST}/api/ota -H 'Content-Type: multipart/form-data' \
+ *   curl -su admin:changeme -X POST http://${HOST}/api/ota \
+ *        -H "Content-Type: multipart/form-data" -H "X-CSRF-Token: ${CSRF}" \
  *        -F 'firmware=@tinybms_web_gateway.bin;type=application/octet-stream'
- *   curl -sS -X POST http://${HOST}/api/system/restart -d '{"target":"gateway"}' \
- *        -H 'Content-Type: application/json'
+ *   curl -su admin:changeme -X POST http://${HOST}/api/system/restart \
+ *        -H "Content-Type: application/json" -H "X-CSRF-Token: ${CSRF}" \
+ *        -d '{"target":"gateway"}'
  */
 void web_server_init(void);
 

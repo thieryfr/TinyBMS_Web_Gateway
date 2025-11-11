@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node enhanced-test-server.js",
     "dev": "nodemon enhanced-test-server.js",
-    "test": "node test-runner.js",
+    "test": "node --test \"tests/**/*.js\"",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

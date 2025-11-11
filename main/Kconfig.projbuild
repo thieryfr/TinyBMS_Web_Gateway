@@ -12,6 +12,34 @@ menu "Infrastructure"
             single task.
 endmenu
 
+menu "Security"
+    config TINYBMS_WEB_AUTH_BASIC_ENABLE
+        bool "Enable HTTP Basic authentication for REST API"
+        default y
+        help
+            Protect sensitive REST endpoints with HTTP Basic authentication.
+            Credentials are stored in NVS using a salted SHA-256 hash and can
+            be rotated without reflashing the firmware.
+
+    config TINYBMS_WEB_AUTH_USERNAME
+        string "Default HTTP Basic username"
+        depends on TINYBMS_WEB_AUTH_BASIC_ENABLE
+        default "admin"
+        help
+            Username provisioned on the first boot. The credential is persisted
+            in NVS and can later be updated securely through the configuration
+            APIs.
+
+    config TINYBMS_WEB_AUTH_PASSWORD
+        string "Default HTTP Basic password"
+        depends on TINYBMS_WEB_AUTH_BASIC_ENABLE
+        default "changeme"
+        help
+            Password provisioned on first boot. It is stored as a salted
+            SHA-256 hash in NVS; make sure to rotate the default value during
+            commissioning.
+endmenu
+
 menu "Storage"
     config TINYBMS_HISTORY_FS_ENABLE
         bool "Enable flash history storage"

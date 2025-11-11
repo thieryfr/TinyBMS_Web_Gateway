@@ -137,3 +137,9 @@ Toute la documentation narrative, les guides et les analyses précédemment pré
 Les assets statiques sont disponibles dans `web/`. Ils seront intégrés dans une partition SPIFFS et servis via le module `web_server`.
 
 L'endpoint `GET /api/config` renvoie par défaut un **snapshot public** où tous les champs sensibles (mots de passe Wi-Fi, secrets MQTT, etc.) sont masqués par la valeur `"********"`. Le client peut demander le snapshot complet via le paramètre de requête `include_secrets=1`, mais seuls les requérants explicitement autorisés récupèrent les valeurs en clair. La réponse HTTP comporte l'en-tête `X-Config-Snapshot` indiquant `public` ou `full` selon le niveau de visibilité obtenu.
+
+### 🔐 Sécurité des API
+
+- **Authentification** : les routes critiques (`/api/config`, `/api/mqtt/config`, `/api/system/restart`, `/api/ota`) exigent désormais une authentification HTTP Basic. Les identifiants par défaut (`admin` / `changeme`) servent uniquement à l'initialisation et sont stockés en NVS sous forme de hachage SHA-256 salé. Modifiez-les dans `menuconfig` (`Security → HTTP Basic authentication`) avant toute mise en service.【F:main/Kconfig.projbuild†L17-L41】【F:sdkconfig.defaults†L5-L13】
+- **Protection CSRF** : toute requête mutante doit envoyer l'en-tête `X-CSRF-Token` obtenu via `GET /api/security/csrf`. Le front-end embarqué gère automatiquement la récupération et le rafraîchissement du jeton en plus de l'authentification Basic.【F:main/web_server/web_server.c†L630-L718】【F:web/src/js/utils/security.js†L1-L214】
+- **Clients externes** : pour appeler l'API depuis un script, utilisez `curl -u <user>:<pass>` puis stockez le jeton CSRF (`curl .../api/security/csrf | jq -r '.token'`) avant tout `POST/PUT/PATCH/DELETE`. Un exemple complet figure dans la documentation de `web_server.h` (section « Quick validation »).【F:main/web_server/web_server.h†L11-L33】

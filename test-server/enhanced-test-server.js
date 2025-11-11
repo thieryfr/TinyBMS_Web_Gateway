@@ -21,6 +21,7 @@ import { UartSimulator } from './simulators/uart-simulator.js';
 import { CanSimulator } from './simulators/can-simulator.js';
 import { EventSimulator } from './simulators/event-simulator.js';
 import { AlarmSimulator } from './simulators/alarm-simulator.js';
+import { requireAuth, issueCsrfToken } from './security/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -159,7 +160,11 @@ app.get('/api/status', (req, res) => {
  * GET /api/config
  * Configuration complète du dispositif
  */
-app.get('/api/config', (req, res) => {
+app.get('/api/security/csrf', requireAuth(), (req, res) => {
+  res.json(issueCsrfToken(req.auth.username));
+});
+
+app.get('/api/config', requireAuth(), (req, res) => {
   const config = configManager.getConfig();
   res.json(config);
 });
@@ -168,7 +173,7 @@ app.get('/api/config', (req, res) => {
  * POST /api/config
  * Mise à jour de la configuration
  */
-app.post('/api/config', (req, res) => {
+app.post('/api/config', requireAuth({ requireCsrf: true }), (req, res) => {
   try {
     const updated = configManager.updateConfig(req.body);
     
@@ -199,7 +204,7 @@ app.post('/api/config', (req, res) => {
 /**
  * GET /api/mqtt/config
  */
-app.get('/api/mqtt/config', (req, res) => {
+app.get('/api/mqtt/config', requireAuth(), (req, res) => {
   const mqttConfig = configManager.getMqttConfig();
   res.json(mqttConfig);
 });
@@ -207,7 +212,7 @@ app.get('/api/mqtt/config', (req, res) => {
 /**
  * POST /api/mqtt/config
  */
-app.post('/api/mqtt/config', (req, res) => {
+app.post('/api/mqtt/config', requireAuth({ requireCsrf: true }), (req, res) => {
   try {
     const updated = configManager.updateMqttConfig(req.body);
     

@@ -1,4 +1,7 @@
+import { initSecurityInterceptors } from './utils/security.js';
 import { normalizeEventBusMetrics, coerceNumber } from './codeMetricsUtils.js';
+
+initSecurityInterceptors();
 
 const REFRESH_INTERVAL_MS = 10000;
 
