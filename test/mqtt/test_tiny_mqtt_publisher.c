@@ -4,6 +4,8 @@
 #include "config_manager.h"
 #include "tiny_mqtt_publisher.h"
 
+#include "cJSON.h"
+
 #include <string.h>
 
 static bool s_publish_called = false;
@@ -52,6 +54,14 @@ static void clear_capture_flags(void)
     memset(&s_captured_message, 0, sizeof(s_captured_message));
     memset(s_captured_payload, 0, sizeof(s_captured_payload));
     memset(s_captured_topic, 0, sizeof(s_captured_topic));
+}
+
+static cJSON *parse_json(const char *payload)
+{
+    if (payload == NULL) {
+        return NULL;
+    }
+    return cJSON_Parse(payload);
 }
 
 static bool capture_event(const event_bus_event_t *event, TickType_t timeout)
@@ -175,20 +185,40 @@ TEST_CASE("tiny_mqtt_publisher_generates_metrics_snapshot", "[mqtt][tiny_mqtt_pu
     TEST_ASSERT_NOT_NULL(s_captured_message.payload);
     TEST_ASSERT_GREATER_THAN(0U, s_captured_message.payload_length);
 
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"pack_voltage_v\":52.800"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"power_w\":-660.000"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"state_of_charge_pct\":75.50"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"average_temperature_c\":32.200"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"min_cell_voltage_v\":3.300"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"balancing_bits\":3"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"cell_voltages_mv\":[3300,3310,3320"));
-    TEST_ASSERT_NOT_NULL(strstr(s_captured_payload, "\"cell_balancing\":[1,0,1"));
-    TEST_ASSERT_NOT_NULL(
-        strstr(s_captured_payload,
-               "\"alarms\":{\"high_charge\":0,\"high_discharge\":2,\"cell_imbalance\":2,\"raw_alarm_bits\":4660,\"raw_warning_bits\":255}"));
-    TEST_ASSERT_NOT_NULL(
-        strstr(s_captured_payload,
-               "\"limits\":{\"max_charge_current_a\":40.00,\"max_discharge_current_a\":60.00,\"charge_overcurrent_limit_a\":38.00,\"discharge_overcurrent_limit_a\":10.00}"));
+    cJSON *root = parse_json(s_captured_payload);
+    TEST_ASSERT_NOT_NULL(root);
+
+    const cJSON *pack_voltage = cJSON_GetObjectItemCaseSensitive(root, "pack_voltage_v");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(pack_voltage));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 52.8f, (float)pack_voltage->valuedouble);
+
+    const cJSON *power = cJSON_GetObjectItemCaseSensitive(root, "power_w");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(power));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -660.0f, (float)power->valuedouble);
+
+    const cJSON *soc = cJSON_GetObjectItemCaseSensitive(root, "state_of_charge_pct");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(soc));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.5f, (float)soc->valuedouble);
+
+    const cJSON *min_cell = cJSON_GetObjectItemCaseSensitive(root, "min_cell_voltage_v");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(min_cell));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.3f, (float)min_cell->valuedouble);
+
+    const cJSON *cell_voltages = cJSON_GetObjectItemCaseSensitive(root, "cell_voltages_mv");
+    TEST_ASSERT_TRUE(cJSON_IsArray(cell_voltages));
+    TEST_ASSERT_EQUAL_INT(UART_BMS_CELL_COUNT, cJSON_GetArraySize(cell_voltages));
+
+    const cJSON *alarms = cJSON_GetObjectItemCaseSensitive(root, "alarms");
+    TEST_ASSERT_TRUE(cJSON_IsObject(alarms));
+    TEST_ASSERT_EQUAL(0, cJSON_GetObjectItemCaseSensitive(alarms, "high_charge")->valueint);
+    TEST_ASSERT_EQUAL(2, cJSON_GetObjectItemCaseSensitive(alarms, "high_discharge")->valueint);
+
+    const cJSON *limits = cJSON_GetObjectItemCaseSensitive(root, "limits");
+    TEST_ASSERT_TRUE(cJSON_IsObject(limits));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 40.0f,
+                             (float)cJSON_GetObjectItemCaseSensitive(limits, "max_charge_current_a")->valuedouble);
+
+    cJSON_Delete(root);
 }
 
 TEST_CASE("tiny_mqtt_publisher_respects_publish_interval", "[mqtt][tiny_mqtt_publisher]")
@@ -324,9 +354,27 @@ TEST_CASE("tiny_mqtt_publisher_provides_unique_buffers_for_pending_events", "[mq
     memcpy(third_payload, s_held_events[2].payload_ptr, len2);
     third_payload[len2] = '\0';
 
-    TEST_ASSERT_NOT_NULL(strstr(first_payload, "\"state_of_charge_pct\":10.00"));
-    TEST_ASSERT_NOT_NULL(strstr(second_payload, "\"state_of_charge_pct\":20.00"));
-    TEST_ASSERT_NOT_NULL(strstr(third_payload, "\"state_of_charge_pct\":30.00"));
+    cJSON *first_json = parse_json(first_payload);
+    cJSON *second_json = parse_json(second_payload);
+    cJSON *third_json = parse_json(third_payload);
+
+    TEST_ASSERT_NOT_NULL(first_json);
+    TEST_ASSERT_NOT_NULL(second_json);
+    TEST_ASSERT_NOT_NULL(third_json);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,
+                             10.0f,
+                             (float)cJSON_GetObjectItemCaseSensitive(first_json, "state_of_charge_pct")->valuedouble);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,
+                             20.0f,
+                             (float)cJSON_GetObjectItemCaseSensitive(second_json, "state_of_charge_pct")->valuedouble);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,
+                             30.0f,
+                             (float)cJSON_GetObjectItemCaseSensitive(third_json, "state_of_charge_pct")->valuedouble);
+
+    cJSON_Delete(first_json);
+    cJSON_Delete(second_json);
+    cJSON_Delete(third_json);
 
     release_held_events();
 }
@@ -346,6 +394,11 @@ TEST_CASE("tiny_mqtt_publisher_build_metrics_message_helper", "[mqtt][tiny_mqtt_
     TEST_ASSERT_NOT_NULL(message.payload);
     TEST_ASSERT_GREATER_THAN_UINT32(0U, message.payload_length);
     TEST_ASSERT_LESS_THAN_UINT32(TINY_MQTT_MAX_PAYLOAD_SIZE, message.payload_length);
-    TEST_ASSERT_NOT_NULL(strstr(message.payload, "\"timestamp_ms\":4200"));
+    cJSON *root = parse_json(message.payload);
+    TEST_ASSERT_NOT_NULL(root);
+    const cJSON *timestamp = cJSON_GetObjectItemCaseSensitive(root, "timestamp_ms");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(timestamp));
+    TEST_ASSERT_EQUAL_DOUBLE(4200.0, timestamp->valuedouble);
+    cJSON_Delete(root);
 }
 

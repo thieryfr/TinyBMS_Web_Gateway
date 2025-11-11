@@ -14,6 +14,7 @@
 
 #include "sdkconfig.h"
 
+#include "cJSON.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_timer.h"
@@ -24,6 +25,7 @@
 #include "freertos/semphr.h"
 
 #include "history_fs.h"
+#include "telemetry_json.h"
 
 static const char *TAG = "history_logger";
 
@@ -72,7 +74,7 @@ static volatile bool s_task_should_exit = false;
 
 // Buffer de retry pour récupération d'erreurs d'écriture
 #define HISTORY_RETRY_BUFFER_SIZE 32
-static char s_retry_buffer[HISTORY_RETRY_BUFFER_SIZE][256];
+static char s_retry_buffer[HISTORY_RETRY_BUFFER_SIZE][512];
 static size_t s_retry_buffer_count = 0;
 static SemaphoreHandle_t s_retry_mutex = NULL;
 
@@ -204,7 +206,7 @@ static esp_err_t history_logger_open_file(time_t now)
     history_logger_format_identifier(now, identifier, sizeof(identifier));
 
     char filename[sizeof(s_active_filename)];
-    int written = snprintf(filename, sizeof(filename), "history-%s.csv", identifier);
+    int written = snprintf(filename, sizeof(filename), "history-%s.jsonl", identifier);
     if (written < 0 || written >= (int)sizeof(filename)) {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -225,17 +227,10 @@ static esp_err_t history_logger_open_file(time_t now)
         return ESP_ERR_INVALID_SIZE;
     }
 
-    bool new_file = access(path, F_OK) != 0;
-
     FILE *file = fopen(path, "a");
     if (file == NULL) {
         ESP_LOGE(TAG, "Unable to open history file %s", path);
         return ESP_FAIL;
-    }
-
-    if (new_file) {
-        fprintf(file, "timestamp_iso,timestamp_ms,pack_voltage_v,pack_current_a,state_of_charge_pct,state_of_health_pct,average_temperature_c\n");
-        fflush(file);
     }
 
     strlcpy(s_active_filename, filename, sizeof(s_active_filename));
@@ -245,44 +240,15 @@ static esp_err_t history_logger_open_file(time_t now)
     return ESP_OK;
 }
 
-static void history_logger_format_iso(time_t now, char *buffer, size_t size)
-{
-    if (buffer == NULL || size == 0) {
-        return;
-    }
-
-    if (now <= 0) {
-        snprintf(buffer, size, "1970-01-01T00:00:00Z");
-        return;
-    }
-
-    struct tm tm_now;
-    gmtime_r(&now, &tm_now);
-    strftime(buffer, size, "%Y-%m-%dT%H:%M:%SZ", &tm_now);
-}
-
 static void history_logger_write_sample(FILE *file, time_t now, const uart_bms_live_data_t *sample)
 {
     if (file == NULL || sample == NULL) {
         return;
     }
 
-    char iso[32];
-    history_logger_format_iso(now, iso, sizeof(iso));
-
-    char line[256];
-    int len = snprintf(line, sizeof(line),
-                      "%s,%" PRIu64 ",%.3f,%.3f,%.2f,%.2f,%.2f",
-                      iso,
-                      sample->timestamp_ms,
-                      sample->pack_voltage_v,
-                      sample->pack_current_a,
-                      sample->state_of_charge_pct,
-                      sample->state_of_health_pct,
-                      sample->average_temperature_c);
-
-    if (len < 0 || len >= (int)sizeof(line)) {
-        ESP_LOGW(TAG, "Failed to format sample line");
+    char line[512];
+    if (!telemetry_json_write_history_sample(sample, now, line, sizeof(line), NULL)) {
+        ESP_LOGW(TAG, "Failed to serialize history sample");
         return;
     }
 
@@ -292,7 +258,7 @@ static void history_logger_write_sample(FILE *file, time_t now, const uart_bms_l
         // Ajouter au buffer de retry si pas plein
         if (s_retry_mutex != NULL && xSemaphoreTake(s_retry_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             if (s_retry_buffer_count < HISTORY_RETRY_BUFFER_SIZE) {
-                strlcpy(s_retry_buffer[s_retry_buffer_count], line, 256);
+                strlcpy(s_retry_buffer[s_retry_buffer_count], line, sizeof(s_retry_buffer[0]));
                 s_retry_buffer_count++;
                 ESP_LOGI(TAG, "Buffered failed write for retry (%zu in queue)",
                         s_retry_buffer_count);
@@ -570,12 +536,12 @@ static bool history_logger_is_history_file(const struct dirent *entry)
 
     const char *name = entry->d_name;
     size_t len = strlen(name);
-    if (len < 4) {
+    if (len < 6) {
         return false;
     }
 
-    const char *suffix = name + len - 4;
-    if (strcasecmp(suffix, ".csv") != 0) {
+    const char *suffix = name + len - 6;
+    if (strcasecmp(suffix, ".jsonl") != 0) {
         return false;
     }
 
@@ -689,53 +655,44 @@ static bool history_logger_parse_line(const char *line, history_logger_archive_s
         return false;
     }
 
-    char buffer[256];
-    strlcpy(buffer, line, sizeof(buffer));
-
-    char *saveptr = NULL;
-    char *token = strtok_r(buffer, ",", &saveptr);
-    if (token == NULL) {
+    cJSON *root = cJSON_Parse(line);
+    if (root == NULL) {
         return false;
     }
-    strlcpy(out_sample->timestamp_iso, token, sizeof(out_sample->timestamp_iso));
 
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
+    bool ok = false;
+    const cJSON *type = cJSON_GetObjectItemCaseSensitive(root, "type");
+    if (type != NULL && cJSON_IsString(type) && type->valuestring != NULL &&
+        strcmp(type->valuestring, "history_sample") != 0) {
+        goto cleanup;
     }
-    out_sample->timestamp_ms = strtoull(token, NULL, 10);
 
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
+    const cJSON *iso = cJSON_GetObjectItemCaseSensitive(root, "timestamp_iso");
+    const cJSON *timestamp = cJSON_GetObjectItemCaseSensitive(root, "timestamp_ms");
+    const cJSON *pack_voltage = cJSON_GetObjectItemCaseSensitive(root, "pack_voltage_v");
+    const cJSON *pack_current = cJSON_GetObjectItemCaseSensitive(root, "pack_current_a");
+    const cJSON *soc = cJSON_GetObjectItemCaseSensitive(root, "state_of_charge_pct");
+    const cJSON *soh = cJSON_GetObjectItemCaseSensitive(root, "state_of_health_pct");
+    const cJSON *avg_temp = cJSON_GetObjectItemCaseSensitive(root, "average_temperature_c");
+
+    if (!cJSON_IsString(iso) || iso->valuestring == NULL || !cJSON_IsNumber(timestamp) ||
+        !cJSON_IsNumber(pack_voltage) || !cJSON_IsNumber(pack_current) || !cJSON_IsNumber(soc) ||
+        !cJSON_IsNumber(soh) || !cJSON_IsNumber(avg_temp)) {
+        goto cleanup;
     }
-    out_sample->pack_voltage_v = strtof(token, NULL);
 
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
-    }
-    out_sample->pack_current_a = strtof(token, NULL);
+    strlcpy(out_sample->timestamp_iso, iso->valuestring, sizeof(out_sample->timestamp_iso));
+    out_sample->timestamp_ms = (uint64_t)timestamp->valuedouble;
+    out_sample->pack_voltage_v = (float)pack_voltage->valuedouble;
+    out_sample->pack_current_a = (float)pack_current->valuedouble;
+    out_sample->state_of_charge_pct = (float)soc->valuedouble;
+    out_sample->state_of_health_pct = (float)soh->valuedouble;
+    out_sample->average_temperature_c = (float)avg_temp->valuedouble;
+    ok = true;
 
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
-    }
-    out_sample->state_of_charge_pct = strtof(token, NULL);
-
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
-    }
-    out_sample->state_of_health_pct = strtof(token, NULL);
-
-    token = strtok_r(NULL, ",", &saveptr);
-    if (token == NULL) {
-        return false;
-    }
-    out_sample->average_temperature_c = strtof(token, NULL);
-
-    return true;
+cleanup:
+    cJSON_Delete(root);
+    return ok;
 }
 
 esp_err_t history_logger_load_archive(const char *filename, size_t limit, history_logger_archive_t *out_archive)
@@ -785,18 +742,10 @@ esp_err_t history_logger_load_archive(const char *filename, size_t limit, histor
         return ESP_ERR_NO_MEM;
     }
 
-    char line[256];
+    char line[512];
     size_t total = 0;
-    bool header_skipped = false;
 
     while (fgets(line, sizeof(line), file) != NULL) {
-        if (!header_skipped) {
-            header_skipped = true;
-            if (strstr(line, "timestamp_iso") != NULL) {
-                continue;
-            }
-        }
-
         history_logger_archive_sample_t sample;
         if (!history_logger_parse_line(line, &sample)) {
             continue;
