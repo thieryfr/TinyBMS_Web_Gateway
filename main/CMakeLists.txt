@@ -25,6 +25,7 @@ idf_component_register(SRCS
     "monitoring/monitoring.c"
     "monitoring/history_logger.c"
     "serialization/telemetry_json.c"
+    "storage/system_boot_counter.c"
     "storage/nvs_energy.c"
     "storage/history_fs.c"
     "alert_manager/alert_manager.c"

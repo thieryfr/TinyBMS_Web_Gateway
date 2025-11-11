@@ -11,6 +11,7 @@
 
 #include "can_publisher.h"
 #include "uart_bms.h"
+#include "system_boot_counter.h"
 
 #ifdef ESP_PLATFORM
 #include "esp_timer.h"
@@ -136,6 +137,7 @@ static bool telemetry_json_populate_metrics(const uart_bms_live_data_t *data, cJ
     if (cJSON_AddStringToObject(root, "type", TELEMETRY_JSON_METRICS_TYPE) == NULL ||
         cJSON_AddNumberToObject(root, "timestamp_ms", (double)telemetry_json_extract_timestamp_ms(data)) == NULL ||
         cJSON_AddNumberToObject(root, "uptime_s", (double)data->uptime_seconds) == NULL ||
+        cJSON_AddNumberToObject(root, "boot_count", (double)system_boot_counter_get()) == NULL ||
         cJSON_AddNumberToObject(root, "cycle_count", (double)data->cycle_count) == NULL ||
         cJSON_AddNumberToObject(root, "pack_voltage_v", pack_voltage) == NULL ||
         cJSON_AddNumberToObject(root, "pack_current_a", pack_current) == NULL ||
@@ -300,6 +302,7 @@ static bool telemetry_json_populate_history(const uart_bms_live_data_t *sample,
     if (cJSON_AddStringToObject(root, "type", TELEMETRY_JSON_HISTORY_TYPE) == NULL ||
         cJSON_AddStringToObject(root, "timestamp_iso", iso) == NULL ||
         cJSON_AddNumberToObject(root, "timestamp_ms", (double)sample->timestamp_ms) == NULL ||
+        cJSON_AddNumberToObject(root, "boot_count", (double)system_boot_counter_get()) == NULL ||
         cJSON_AddNumberToObject(root, "pack_voltage_v",
                                  telemetry_json_sanitize_float(sample->pack_voltage_v)) == NULL ||
         cJSON_AddNumberToObject(root, "pack_current_a",

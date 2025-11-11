@@ -15,6 +15,7 @@
 #include "mqtt_topics.h"
 #include "history_fs.h"
 #include "history_logger.h"
+#include "system_boot_counter.h"
 #include "status_led.h"
 
 #include "freertos/FreeRTOS.h"
@@ -321,6 +322,14 @@ void app_main(void)
     ESP_LOGI(TAG, "========================================");
 
     esp_err_t ret;
+
+    uint32_t boot_count = 0U;
+    ret = system_boot_counter_increment_and_get(&boot_count);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Boot counter updated to %u", (unsigned)boot_count);
+    } else {
+        ESP_LOGW(TAG, "Failed to update boot counter: %s", esp_err_to_name(ret));
+    }
 
     // Initialize event bus (must be first)
     event_bus_init();

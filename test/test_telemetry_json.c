@@ -1,6 +1,7 @@
 #include "unity.h"
 
 #include "telemetry_json.h"
+#include "system_boot_counter.h"
 
 #include "cJSON.h"
 #include "can_publisher.h"
@@ -36,6 +37,8 @@ TEST_CASE("telemetry_json_metrics_schema", "[telemetry]")
         sample.cell_balancing[i] = (uint8_t)(i % 2U);
     }
 
+    system_boot_counter_mock_set(7U);
+
     char buffer[1024];
     size_t length = 0U;
     TEST_ASSERT_TRUE(telemetry_json_write_metrics(&sample, buffer, sizeof(buffer), &length));
@@ -57,6 +60,10 @@ TEST_CASE("telemetry_json_metrics_schema", "[telemetry]")
     const cJSON *cell_voltages = cJSON_GetObjectItemCaseSensitive(root, "cell_voltages_mv");
     TEST_ASSERT_TRUE(cJSON_IsArray(cell_voltages));
     TEST_ASSERT_EQUAL_INT(UART_BMS_CELL_COUNT, cJSON_GetArraySize(cell_voltages));
+
+    const cJSON *boot = cJSON_GetObjectItemCaseSensitive(root, "boot_count");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(boot));
+    TEST_ASSERT_EQUAL_DOUBLE(7.0, boot->valuedouble);
 
     const cJSON *alarms = cJSON_GetObjectItemCaseSensitive(root, "alarms");
     TEST_ASSERT_TRUE(cJSON_IsObject(alarms));
@@ -121,6 +128,8 @@ TEST_CASE("telemetry_json_history_schema", "[telemetry]")
 
     char buffer[256];
     size_t length = 0U;
+
+    system_boot_counter_mock_set(21U);
     TEST_ASSERT_TRUE(telemetry_json_write_history_sample(&sample, now, buffer, sizeof(buffer), &length));
 
     cJSON *root = cJSON_ParseWithLength(buffer, length);
@@ -137,6 +146,10 @@ TEST_CASE("telemetry_json_history_schema", "[telemetry]")
     const cJSON *pack_voltage = cJSON_GetObjectItemCaseSensitive(root, "pack_voltage_v");
     TEST_ASSERT_TRUE(cJSON_IsNumber(pack_voltage));
     TEST_ASSERT_EQUAL_DOUBLE(sample.pack_voltage_v, pack_voltage->valuedouble);
+
+    const cJSON *boot = cJSON_GetObjectItemCaseSensitive(root, "boot_count");
+    TEST_ASSERT_TRUE(cJSON_IsNumber(boot));
+    TEST_ASSERT_EQUAL_DOUBLE(21.0, boot->valuedouble);
 
     cJSON_Delete(root);
 }
