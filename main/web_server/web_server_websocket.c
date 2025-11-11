@@ -481,6 +481,7 @@ void web_server_websocket_broadcast_event(uint32_t event_id, const char *payload
     case APP_EVENT_ID_WIFI_STA_LOST_IP:
     case APP_EVENT_ID_WIFI_AP_STARTED:
     case APP_EVENT_ID_WIFI_AP_STOPPED:
+    case APP_EVENT_ID_WIFI_AP_FAILED:
     case APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED:
     case APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED:
     case APP_EVENT_ID_STORAGE_HISTORY_READY:

@@ -226,6 +226,7 @@ static void status_led_handle_event(const event_bus_event_t *event)
     case APP_EVENT_ID_MONITORING_DIAGNOSTICS:
     case APP_EVENT_ID_UI_NOTIFICATION:
     case APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED:
+    case APP_EVENT_ID_WIFI_AP_FAILED:
     case APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED: {
         status_led_command_t cmd = {
             .type = STATUS_LED_COMMAND_ACTIVITY_PULSE,
