@@ -26,13 +26,21 @@ static SemaphoreHandle_t s_bus_lock = NULL;
 static portMUX_TYPE s_init_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static const char *TAG = "event_bus";
 
+// Timeout pour acquisition mutex (5 secondes - évite deadlock)
+#define EVENT_BUS_MUTEX_TIMEOUT_MS 5000
+
 static bool event_bus_take_lock(void)
 {
     if (s_bus_lock == NULL) {
         return false;
     }
 
-    return xSemaphoreTake(s_bus_lock, portMAX_DELAY) == pdTRUE;
+    if (xSemaphoreTake(s_bus_lock, pdMS_TO_TICKS(EVENT_BUS_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire event bus lock (timeout)");
+        return false;
+    }
+
+    return true;
 }
 
 static void event_bus_give_lock(void)
@@ -66,7 +74,8 @@ void event_bus_deinit(void)
         return;
     }
 
-    if (xSemaphoreTake(s_bus_lock, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_bus_lock, pdMS_TO_TICKS(EVENT_BUS_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire lock for deinit (timeout)");
         return;
     }
 

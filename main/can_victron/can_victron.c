@@ -993,18 +993,29 @@ void can_victron_deinit(void)
     // Give task time to exit cleanly
     vTaskDelay(pdMS_TO_TICKS(200));
 
-    // Stop TWAI driver
-    if (s_driver_started) {
-        esp_err_t err = twai_stop();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to stop TWAI: %s", esp_err_to_name(err));
-        }
+    // Stop TWAI driver (utiliser helper thread-safe)
+    if (can_victron_is_driver_started()) {
+        // Acquérir mutex TWAI avant stop
+        if (s_twai_mutex != NULL && xSemaphoreTake(s_twai_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            esp_err_t err = twai_stop();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to stop TWAI: %s", esp_err_to_name(err));
+            }
 
-        err = twai_driver_uninstall();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to uninstall TWAI driver: %s", esp_err_to_name(err));
-        } else {
-            ESP_LOGI(TAG, "TWAI driver uninstalled");
+            err = twai_driver_uninstall();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to uninstall TWAI driver: %s", esp_err_to_name(err));
+            } else {
+                ESP_LOGI(TAG, "TWAI driver uninstalled");
+            }
+
+            xSemaphoreGive(s_twai_mutex);
+
+            // Mettre à jour flag driver_started sous mutex approprié
+            if (s_driver_state_mutex != NULL && xSemaphoreTake(s_driver_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                s_driver_started = false;
+                xSemaphoreGive(s_driver_state_mutex);
+            }
         }
     }
 
