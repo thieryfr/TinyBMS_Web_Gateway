@@ -1,5 +1,6 @@
 #include "history_logger.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -14,7 +15,6 @@
 
 #include "sdkconfig.h"
 
-#include "cJSON.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_timer.h"
@@ -28,6 +28,8 @@
 #include "telemetry_json.h"
 
 static const char *TAG = "history_logger";
+
+#define HISTORY_LOGGER_MAX_LINE_LENGTH 512U
 
 #ifndef CONFIG_TINYBMS_HISTORY_ENABLE
 #define CONFIG_TINYBMS_HISTORY_ENABLE 1
@@ -246,7 +248,7 @@ static void history_logger_write_sample(FILE *file, time_t now, const uart_bms_l
         return;
     }
 
-    char line[512];
+    char line[HISTORY_LOGGER_MAX_LINE_LENGTH];
     if (!telemetry_json_write_history_sample(sample, now, line, sizeof(line), NULL)) {
         ESP_LOGW(TAG, "Failed to serialize history sample");
         return;
@@ -649,50 +651,194 @@ void history_logger_free_file_list(history_logger_file_info_t *files)
     free(files);
 }
 
+static const char *history_logger_locate_field_start(const char *line, const char *key)
+{
+    if (line == NULL || key == NULL) {
+        return NULL;
+    }
+
+    size_t key_len = strlen(key);
+    if (key_len == 0U || key_len > 48U) {
+        return NULL;
+    }
+
+    char needle[64];
+    int written = snprintf(needle, sizeof(needle), "\"%s\"", key);
+    if (written < 0 || (size_t)written >= sizeof(needle)) {
+        return NULL;
+    }
+
+    const char *cursor = line;
+    while ((cursor = strstr(cursor, needle)) != NULL) {
+        cursor += (size_t)written;
+
+        const char *colon = strchr(cursor, ':');
+        if (colon == NULL) {
+            return NULL;
+        }
+
+        colon++;
+        while (isspace((unsigned char)*colon)) {
+            colon++;
+        }
+
+        return colon;
+    }
+
+    return NULL;
+}
+
+static bool history_logger_parse_string_field(const char *line, const char *key, char *buffer, size_t buffer_size)
+{
+    if (buffer == NULL || buffer_size == 0U) {
+        return false;
+    }
+
+    const char *value = history_logger_locate_field_start(line, key);
+    if (value == NULL || *value != '"') {
+        return false;
+    }
+
+    value++;
+    const char *end = value;
+    while (*end != '\0') {
+        if (*end == '\\') {
+            if (*(end + 1) == '\0') {
+                break;
+            }
+            end += 2;
+            continue;
+        }
+
+        if (*end == '"') {
+            break;
+        }
+
+        end++;
+    }
+
+    if (*end != '"') {
+        return false;
+    }
+
+    size_t copy_len = (size_t)(end - value);
+    if (copy_len >= buffer_size) {
+        copy_len = buffer_size - 1U;
+    }
+
+    memcpy(buffer, value, copy_len);
+    buffer[copy_len] = '\0';
+    return true;
+}
+
+static bool history_logger_parse_number_field(const char *line, const char *key, double *out_value)
+{
+    if (out_value == NULL) {
+        return false;
+    }
+
+    const char *value = history_logger_locate_field_start(line, key);
+    if (value == NULL) {
+        return false;
+    }
+
+    errno = 0;
+    char *endptr = NULL;
+    double parsed = strtod(value, &endptr);
+    if (value == endptr || errno != 0) {
+        return false;
+    }
+
+    *out_value = parsed;
+    return true;
+}
+
+static size_t history_logger_tail_bytes(size_t sample_capacity)
+{
+    size_t bytes = sample_capacity * HISTORY_LOGGER_MAX_LINE_LENGTH;
+    if (bytes > CONFIG_TINYBMS_HISTORY_MAX_BYTES) {
+        bytes = CONFIG_TINYBMS_HISTORY_MAX_BYTES;
+    }
+    return bytes;
+}
+
+static void history_logger_seek_to_recent(FILE *file, size_t max_bytes, char *scratch, size_t scratch_size)
+{
+    if (file == NULL) {
+        return;
+    }
+
+    if (max_bytes == 0U || scratch == NULL || scratch_size == 0U) {
+        rewind(file);
+        return;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        rewind(file);
+        return;
+    }
+
+    long file_size = ftell(file);
+    if (file_size <= 0) {
+        rewind(file);
+        return;
+    }
+
+    long offset = 0;
+    if ((size_t)file_size > max_bytes) {
+        offset = file_size - (long)max_bytes;
+    }
+
+    if (offset <= 0 || fseek(file, offset, SEEK_SET) != 0) {
+        rewind(file);
+        return;
+    }
+
+    // Discard potential partial line to start at the next newline boundary.
+    (void)fgets(scratch, scratch_size, file);
+}
+
 static bool history_logger_parse_line(const char *line, history_logger_archive_sample_t *out_sample)
 {
     if (line == NULL || out_sample == NULL) {
         return false;
     }
 
-    cJSON *root = cJSON_Parse(line);
-    if (root == NULL) {
+    char type[32];
+    if (history_logger_parse_string_field(line, "type", type, sizeof(type)) &&
+        strcmp(type, "history_sample") != 0) {
         return false;
     }
 
-    bool ok = false;
-    const cJSON *type = cJSON_GetObjectItemCaseSensitive(root, "type");
-    if (type != NULL && cJSON_IsString(type) && type->valuestring != NULL &&
-        strcmp(type->valuestring, "history_sample") != 0) {
-        goto cleanup;
+    if (!history_logger_parse_string_field(line, "timestamp_iso", out_sample->timestamp_iso,
+                                           sizeof(out_sample->timestamp_iso))) {
+        return false;
     }
 
-    const cJSON *iso = cJSON_GetObjectItemCaseSensitive(root, "timestamp_iso");
-    const cJSON *timestamp = cJSON_GetObjectItemCaseSensitive(root, "timestamp_ms");
-    const cJSON *pack_voltage = cJSON_GetObjectItemCaseSensitive(root, "pack_voltage_v");
-    const cJSON *pack_current = cJSON_GetObjectItemCaseSensitive(root, "pack_current_a");
-    const cJSON *soc = cJSON_GetObjectItemCaseSensitive(root, "state_of_charge_pct");
-    const cJSON *soh = cJSON_GetObjectItemCaseSensitive(root, "state_of_health_pct");
-    const cJSON *avg_temp = cJSON_GetObjectItemCaseSensitive(root, "average_temperature_c");
+    double timestamp_ms = 0.0;
+    double pack_voltage_v = 0.0;
+    double pack_current_a = 0.0;
+    double state_of_charge_pct = 0.0;
+    double state_of_health_pct = 0.0;
+    double average_temperature_c = 0.0;
 
-    if (!cJSON_IsString(iso) || iso->valuestring == NULL || !cJSON_IsNumber(timestamp) ||
-        !cJSON_IsNumber(pack_voltage) || !cJSON_IsNumber(pack_current) || !cJSON_IsNumber(soc) ||
-        !cJSON_IsNumber(soh) || !cJSON_IsNumber(avg_temp)) {
-        goto cleanup;
+    if (!history_logger_parse_number_field(line, "timestamp_ms", &timestamp_ms) ||
+        !history_logger_parse_number_field(line, "pack_voltage_v", &pack_voltage_v) ||
+        !history_logger_parse_number_field(line, "pack_current_a", &pack_current_a) ||
+        !history_logger_parse_number_field(line, "state_of_charge_pct", &state_of_charge_pct) ||
+        !history_logger_parse_number_field(line, "state_of_health_pct", &state_of_health_pct) ||
+        !history_logger_parse_number_field(line, "average_temperature_c", &average_temperature_c)) {
+        return false;
     }
 
-    strlcpy(out_sample->timestamp_iso, iso->valuestring, sizeof(out_sample->timestamp_iso));
-    out_sample->timestamp_ms = (uint64_t)timestamp->valuedouble;
-    out_sample->pack_voltage_v = (float)pack_voltage->valuedouble;
-    out_sample->pack_current_a = (float)pack_current->valuedouble;
-    out_sample->state_of_charge_pct = (float)soc->valuedouble;
-    out_sample->state_of_health_pct = (float)soh->valuedouble;
-    out_sample->average_temperature_c = (float)avg_temp->valuedouble;
-    ok = true;
+    out_sample->timestamp_ms = (uint64_t)timestamp_ms;
+    out_sample->pack_voltage_v = (float)pack_voltage_v;
+    out_sample->pack_current_a = (float)pack_current_a;
+    out_sample->state_of_charge_pct = (float)state_of_charge_pct;
+    out_sample->state_of_health_pct = (float)state_of_health_pct;
+    out_sample->average_temperature_c = (float)average_temperature_c;
 
-cleanup:
-    cJSON_Delete(root);
-    return ok;
+    return true;
 }
 
 esp_err_t history_logger_load_archive(const char *filename, size_t limit, history_logger_archive_t *out_archive)
@@ -742,7 +888,9 @@ esp_err_t history_logger_load_archive(const char *filename, size_t limit, histor
         return ESP_ERR_NO_MEM;
     }
 
-    char line[512];
+    const size_t tail_bytes = history_logger_tail_bytes(capacity);
+    char line[HISTORY_LOGGER_MAX_LINE_LENGTH];
+    history_logger_seek_to_recent(file, tail_bytes, line, sizeof(line));
     size_t total = 0;
 
     while (fgets(line, sizeof(line), file) != NULL) {
