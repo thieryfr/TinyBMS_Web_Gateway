@@ -250,6 +250,13 @@
           "path": "/api/metrics/runtime",
           "description": "Runtime metrics (memory, time, tasks)",
           "returns": "application/json",
+          "fields": [
+            {
+              "name": "boot_count",
+              "type": "uint32",
+              "description": "Compteur de redémarrages du gateway (persisté en NVS, exposé dans MQTT et l'historique)"
+            }
+          ],
           "source_file": "web_server.c:2609-2615"
         },
         {

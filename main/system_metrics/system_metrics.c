@@ -18,6 +18,7 @@
 #include "freertos/task.h"
 
 #include "event_bus.h"
+#include "system_boot_counter.h"
 
 #define TAG "sys_metrics"
 
@@ -188,7 +189,13 @@ esp_err_t system_metrics_collect_runtime(system_metrics_runtime_t *out_runtime)
     out_runtime->timestamp_ms = timestamp_us / 1000ULL;
     out_runtime->uptime_s = (uint32_t)(timestamp_us / 1000000ULL);
 
-    out_runtime->boot_count = 1U;
+    esp_err_t boot_err = system_boot_counter_init();
+    if (boot_err == ESP_OK) {
+        out_runtime->boot_count = system_boot_counter_get();
+    } else {
+        ESP_LOGW(TAG, "Boot counter unavailable: %s", esp_err_to_name(boot_err));
+        out_runtime->boot_count = 0U;
+    }
     out_runtime->cycle_count = 0U;
 
     out_runtime->reset_reason = esp_reset_reason();
