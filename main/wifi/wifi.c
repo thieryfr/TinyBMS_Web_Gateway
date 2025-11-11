@@ -95,6 +95,7 @@ static const wifi_event_descriptor_t s_wifi_event_descriptors[] = {
     {APP_EVENT_ID_WIFI_STA_LOST_IP, "wifi_sta_lost_ip", "Station lost IPv4"},
     {APP_EVENT_ID_WIFI_AP_STARTED, "wifi_ap_started", "Fallback AP started"},
     {APP_EVENT_ID_WIFI_AP_STOPPED, "wifi_ap_stopped", "Fallback AP stopped"},
+    {APP_EVENT_ID_WIFI_AP_FAILED, "wifi_ap_failed", "Fallback AP start failed"},
     {APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED, "wifi_ap_client_connected", "AP client connected"},
     {APP_EVENT_ID_WIFI_AP_CLIENT_DISCONNECTED, "wifi_ap_client_disconnected", "AP client disconnected"},
 };
@@ -195,6 +196,21 @@ static void wifi_schedule_sta_retry(uint32_t delay_ms)
 
 static void wifi_sta_retry_timer_callback(TimerHandle_t timer);
 
+static bool wifi_clear_ap_fallback_flag(void)
+{
+    if (s_wifi_state_mutex == NULL) {
+        return false;
+    }
+
+    if (xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return false;
+    }
+
+    s_ap_fallback_active = false;
+    xSemaphoreGive(s_wifi_state_mutex);
+    return true;
+}
+
 static void wifi_publish_event(app_event_id_t id)
 {
     if (s_event_publisher == NULL) {
@@ -230,7 +246,7 @@ static void wifi_start_ap_mode(void)
 {
 #if CONFIG_TINYBMS_WIFI_AP_FALLBACK
     // Vérifier et définir flag AP sous mutex pour éviter race condition
-    bool ap_flag_locked = false;
+    bool ap_flag_set = false;
     if (s_wifi_state_mutex != NULL &&
         xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (s_ap_fallback_active) {
@@ -238,10 +254,11 @@ static void wifi_start_ap_mode(void)
             return;
         }
         s_ap_fallback_active = true;
-        ap_flag_locked = true;
+        ap_flag_set = true;
         xSemaphoreGive(s_wifi_state_mutex);
     } else {
         ESP_LOGW(TAG, "Cannot start AP, mutex timeout");
+        wifi_publish_event(APP_EVENT_ID_WIFI_AP_FAILED);
         return;
     }
 
@@ -249,6 +266,14 @@ static void wifi_start_ap_mode(void)
         s_ap_netif = esp_netif_create_default_wifi_ap();
         if (s_ap_netif == NULL) {
             ESP_LOGE(TAG, "Failed to create Wi-Fi AP network interface");
+            if (ap_flag_set) {
+                bool cleared = wifi_clear_ap_fallback_flag();
+                if (!cleared) {
+                    ESP_LOGW(TAG, "Failed to clear AP fallback flag after netif creation failure");
+                }
+                configASSERT(cleared);
+            }
+            wifi_publish_event(APP_EVENT_ID_WIFI_AP_FAILED);
             return;
         }
     }
@@ -278,11 +303,14 @@ static void wifi_start_ap_mode(void)
                  "Fallback AP password shorter than %u characters, refusing to start",
                  WIFI_AP_MIN_PASSWORD_LENGTH);
 
-        if (ap_flag_locked &&
-            xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            s_ap_fallback_active = false;
-            xSemaphoreGive(s_wifi_state_mutex);
+        if (ap_flag_set) {
+            bool cleared = wifi_clear_ap_fallback_flag();
+            if (!cleared) {
+                ESP_LOGW(TAG, "Failed to clear AP fallback flag after password validation error");
+            }
+            configASSERT(cleared);
         }
+        wifi_publish_event(APP_EVENT_ID_WIFI_AP_FAILED);
         return;
     }
 
