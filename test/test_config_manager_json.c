@@ -4,6 +4,10 @@
 #include "cJSON.h"
 
 #include <stdio.h>
+#include <string.h>
+
+extern void test_wifi_reset_sta_restart_count(void);
+extern int test_wifi_get_sta_restart_count(void);
 
 TEST_CASE("config_manager_snapshot_masks_secrets_and_escapes", "[config_manager]")
 {
@@ -56,4 +60,56 @@ TEST_CASE("config_manager_snapshot_masks_secrets_and_escapes", "[config_manager]
     TEST_ASSERT_EQUAL_STRING(config_manager_mask_secret("password"), password->valuestring);
 
     cJSON_Delete(root);
+}
+
+TEST_CASE("config_manager_generates_secure_ap_secret_on_boot", "[config_manager][wifi]")
+{
+    config_manager_deinit();
+    config_manager_init();
+
+    const config_manager_wifi_settings_t *wifi = config_manager_get_wifi_settings();
+    TEST_ASSERT_NOT_NULL(wifi);
+    size_t password_len = strlen(wifi->ap.password);
+    TEST_ASSERT_TRUE_MESSAGE(password_len >= 8, "Fallback AP password must be at least 8 characters");
+}
+
+TEST_CASE("config_manager_preserves_generated_ap_secret_when_short_password_requested", "[config_manager][wifi]")
+{
+    config_manager_deinit();
+    config_manager_init();
+
+    const config_manager_wifi_settings_t *initial = config_manager_get_wifi_settings();
+    TEST_ASSERT_NOT_NULL(initial);
+
+    char expected_password[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH];
+    strncpy(expected_password, initial->ap.password, sizeof(expected_password));
+    expected_password[sizeof(expected_password) - 1] = '\0';
+
+    const char *config_payload =
+        "{\"wifi\":{\"ap\":{\"password\":\"short\"}}}";
+    TEST_ASSERT_EQUAL(ESP_OK, config_manager_set_config_json(config_payload, strlen(config_payload)));
+
+    const config_manager_wifi_settings_t *updated = config_manager_get_wifi_settings();
+    TEST_ASSERT_NOT_NULL(updated);
+    TEST_ASSERT_EQUAL_STRING(expected_password, updated->ap.password);
+}
+
+TEST_CASE("config_manager_requests_wifi_restart_when_sta_credentials_change", "[config_manager][wifi]")
+{
+    config_manager_deinit();
+    config_manager_init();
+
+    test_wifi_reset_sta_restart_count();
+
+    const char *config_payload =
+        "{\"wifi\":{\"sta\":{\"ssid\":\"NewNetwork\",\"password\":\"hunter4242\"}}}";
+    TEST_ASSERT_EQUAL(ESP_OK, config_manager_set_config_json(config_payload, strlen(config_payload)));
+    TEST_ASSERT_GREATER_THAN(0, test_wifi_get_sta_restart_count());
+
+    test_wifi_reset_sta_restart_count();
+
+    const char *no_change_payload =
+        "{\"wifi\":{\"sta\":{\"ssid\":\"NewNetwork\"}}}";
+    TEST_ASSERT_EQUAL(ESP_OK, config_manager_set_config_json(no_change_payload, strlen(no_change_payload)));
+    TEST_ASSERT_EQUAL(0, test_wifi_get_sta_restart_count());
 }

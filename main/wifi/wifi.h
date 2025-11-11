@@ -12,6 +12,11 @@ extern "C" {
 void wifi_set_event_publisher(event_bus_publish_fn_t publisher);
 
 /**
+ * @brief Force Wi-Fi back to station mode and trigger a reconnection attempt.
+ */
+void wifi_start_sta_mode(void);
+
+/**
  * @brief Initialise the Wi-Fi subsystem according to the project configuration.
  *
  * The function is safe to call multiple times and can be invoked even when
