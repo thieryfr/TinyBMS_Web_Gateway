@@ -15,16 +15,12 @@
  * **Thread-Safe Functions** (mutex-protected):
  * - config_manager_set_uart_poll_interval_ms()
  * - All future setter functions (TODO: add mutex protection)
- *
- * **Read-Only Functions** (not currently mutex-protected):
- * - config_manager_get_*() functions
- * - NOTE: Reader-writer lock may be needed for full thread safety
+ * - config_manager_get_*() functions (return thread-safe snapshots)
  *
  * **Initialization**: Must call config_manager_init() before other functions.
  *
- * @warning Getter functions currently read global state without mutex protection.
- *          This is safe if configuration changes are infrequent, but may cause
- *          inconsistencies if settings are modified during reads.
+ * Getter functions take the internal mutex while duplicating their respective
+ * configuration structures and return pointers to immutable snapshots.
  *
  * @section config_usage Usage Example
  * @code
@@ -57,6 +53,8 @@
 #define CONFIG_MANAGER_CAN_HANDSHAKE_MAX_LENGTH  8
 #define CONFIG_MANAGER_CAN_STRING_MAX_LENGTH     32
 #define CONFIG_MANAGER_CAN_SERIAL_MAX_LENGTH     32
+
+#define CONFIG_MANAGER_SECRET_MASK "********"
 
 typedef struct {
     char name[CONFIG_MANAGER_DEVICE_NAME_MAX_LENGTH];
@@ -140,6 +138,8 @@ esp_err_t config_manager_set_mqtt_topics(const config_manager_mqtt_topics_t *top
 
 const config_manager_wifi_settings_t *config_manager_get_wifi_settings(void);
 const config_manager_can_settings_t *config_manager_get_can_settings(void);
+
+const char *config_manager_mask_secret(const char *value);
 
 #define CONFIG_MANAGER_MAX_CONFIG_SIZE 2048
 #define CONFIG_MANAGER_MAX_REGISTERS_JSON 4096
