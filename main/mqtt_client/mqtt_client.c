@@ -1,5 +1,6 @@
 #include "mqtt_client.h"
 #include "mqtt_topics.h"
+#include "mqtts_config.h"
 
 #include <inttypes.h>
 #include <string.h>
@@ -290,6 +291,13 @@ esp_err_t mqtt_client_apply_configuration(const mqtt_client_config_t *config)
         s_ctx.client = NULL;
     }
 
+    // Validate URI for MQTTS compliance
+    esp_err_t uri_err = mqtts_config_validate_uri(config->broker_uri);
+    if (uri_err != ESP_OK) {
+        mqtt_client_unlock();
+        return uri_err;
+    }
+
     esp_mqtt_client_config_t esp_config = {
         .broker.address.uri = config->broker_uri,
         .session.keepalive = config->keepalive_seconds,
@@ -301,6 +309,33 @@ esp_err_t mqtt_client_apply_configuration(const mqtt_client_config_t *config)
 
     if (config->password[0] != '\0') {
         esp_config.credentials.authentication.password = config->password;
+    }
+
+    // Configure TLS/SSL if enabled
+    if (mqtts_config_is_enabled()) {
+        const char *ca_cert = mqtts_config_get_ca_cert(NULL);
+        if (ca_cert != NULL && mqtts_config_verify_server()) {
+            esp_config.broker.verification.certificate = ca_cert;
+            esp_config.broker.verification.skip_cert_common_name_check = false;
+            ESP_LOGI(TAG, "MQTTS: Server certificate verification enabled");
+        }
+
+        if (mqtts_config_client_cert_enabled()) {
+            const char *client_cert = mqtts_config_get_client_cert(NULL);
+            const char *client_key = mqtts_config_get_client_key(NULL);
+            if (client_cert != NULL && client_key != NULL) {
+                esp_config.credentials.authentication.certificate = client_cert;
+                esp_config.credentials.authentication.key = client_key;
+                ESP_LOGI(TAG, "MQTTS: Client certificate authentication enabled (mTLS)");
+            } else {
+                ESP_LOGW(TAG, "MQTTS: Client cert enabled but certs not embedded");
+            }
+        }
+
+        ESP_LOGI(TAG, "✓ MQTTS configured (encrypted connection)");
+    } else {
+        ESP_LOGW(TAG, "⚠️  MQTTS disabled - unencrypted MQTT connection");
+        ESP_LOGW(TAG, "⚠️  Enable CONFIG_TINYBMS_MQTT_TLS_ENABLED for production");
     }
 
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&esp_config);
@@ -428,6 +463,16 @@ esp_err_t mqtt_client_test_connection(const mqtt_client_config_t *config,
         timeout_ms = 5000U;
     }
 
+    // Validate URI for MQTTS compliance
+    esp_err_t uri_err = mqtts_config_validate_uri(config->broker_uri);
+    if (uri_err != ESP_OK) {
+        vEventGroupDelete(events);
+        if (error_message != NULL && error_size > 0U) {
+            (void)snprintf(error_message, error_size, "URI MQTT non sécurisée rejetée (MQTTS requis).");
+        }
+        return uri_err;
+    }
+
     esp_mqtt_client_config_t esp_config = {
         .broker.address.uri = config->broker_uri,
         .session.keepalive = config->keepalive_seconds,
@@ -441,6 +486,24 @@ esp_err_t mqtt_client_test_connection(const mqtt_client_config_t *config,
 
     if (config->password[0] != '\0') {
         esp_config.credentials.authentication.password = config->password;
+    }
+
+    // Configure TLS/SSL if enabled (same as production)
+    if (mqtts_config_is_enabled()) {
+        const char *ca_cert = mqtts_config_get_ca_cert(NULL);
+        if (ca_cert != NULL && mqtts_config_verify_server()) {
+            esp_config.broker.verification.certificate = ca_cert;
+            esp_config.broker.verification.skip_cert_common_name_check = false;
+        }
+
+        if (mqtts_config_client_cert_enabled()) {
+            const char *client_cert = mqtts_config_get_client_cert(NULL);
+            const char *client_key = mqtts_config_get_client_key(NULL);
+            if (client_cert != NULL && client_key != NULL) {
+                esp_config.credentials.authentication.certificate = client_cert;
+                esp_config.credentials.authentication.key = client_key;
+            }
+        }
     }
 
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&esp_config);
