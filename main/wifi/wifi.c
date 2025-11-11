@@ -8,6 +8,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/timers.h"
 
 #include "config_manager.h"
 #ifdef ESP_PLATFORM
@@ -140,9 +141,44 @@ static int s_retry_count = 0;
 static esp_event_handler_instance_t s_wifi_event_handle = NULL;
 static esp_event_handler_instance_t s_ip_got_handle = NULL;
 static esp_event_handler_instance_t s_ip_lost_handle = NULL;
+static TimerHandle_t s_sta_retry_timer = NULL;
 
 // Mutex pour protéger les variables d'état WiFi
 static SemaphoreHandle_t s_wifi_state_mutex = NULL;
+
+#define WIFI_AP_MIN_PASSWORD_LENGTH 8U
+#define WIFI_AP_STA_RETRY_INTERVAL_MS 60000U
+
+static void wifi_stop_sta_retry_timer(void)
+{
+    if (s_sta_retry_timer == NULL) {
+        return;
+    }
+
+    if (xTimerIsTimerActive(s_sta_retry_timer) == pdTRUE) {
+        if (xTimerStop(s_sta_retry_timer, 0) != pdPASS) {
+            ESP_LOGW(TAG, "Failed to stop STA retry timer");
+        }
+    }
+}
+
+static void wifi_schedule_sta_retry(uint32_t delay_ms)
+{
+    if (s_sta_retry_timer == NULL) {
+        return;
+    }
+
+    TickType_t delay_ticks = pdMS_TO_TICKS(delay_ms);
+    if (delay_ticks == 0) {
+        delay_ticks = 1;
+    }
+
+    if (xTimerChangePeriod(s_sta_retry_timer, delay_ticks, 0) != pdPASS) {
+        ESP_LOGW(TAG, "Failed to schedule STA retry timer");
+    }
+}
+
+static void wifi_sta_retry_timer_callback(TimerHandle_t timer);
 
 static void wifi_publish_event(app_event_id_t id)
 {
@@ -179,12 +215,15 @@ static void wifi_start_ap_mode(void)
 {
 #if CONFIG_TINYBMS_WIFI_AP_FALLBACK
     // Vérifier et définir flag AP sous mutex pour éviter race condition
-    if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    bool ap_flag_locked = false;
+    if (s_wifi_state_mutex != NULL &&
+        xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (s_ap_fallback_active) {
             xSemaphoreGive(s_wifi_state_mutex);
             return;
         }
         s_ap_fallback_active = true;
+        ap_flag_locked = true;
         xSemaphoreGive(s_wifi_state_mutex);
     } else {
         ESP_LOGW(TAG, "Cannot start AP, mutex timeout");
@@ -219,23 +258,27 @@ static void wifi_start_ap_mode(void)
     ap_config.ap.beacon_interval = 100;
 
     size_t password_len = strlen(ap_password);
-    if (password_len > 0 && password_len < 8) {
-        ESP_LOGW(TAG, "Fallback AP password too short, switching to open network");
-        password_len = 0;
+    if (password_len < WIFI_AP_MIN_PASSWORD_LENGTH) {
+        ESP_LOGE(TAG,
+                 "Fallback AP password shorter than %u characters, refusing to start",
+                 WIFI_AP_MIN_PASSWORD_LENGTH);
+
+        if (ap_flag_locked &&
+            xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            s_ap_fallback_active = false;
+            xSemaphoreGive(s_wifi_state_mutex);
+        }
+        return;
     }
 
-    if (password_len > 0) {
-        strlcpy((char *)ap_config.ap.password,
-                ap_password,
-                sizeof(ap_config.ap.password));
-        ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
-        ap_config.ap.pmf_cfg = (wifi_pmf_config_t){
-            .capable = true,
-            .required = false,
-        };
-    } else {
-        ap_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
+    strlcpy((char *)ap_config.ap.password,
+            ap_password,
+            sizeof(ap_config.ap.password));
+    ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+    ap_config.ap.pmf_cfg = (wifi_pmf_config_t){
+        .capable = true,
+        .required = false,
+    };
 
     ESP_LOGW(TAG, "Starting Wi-Fi fallback access point '%s'", ap_config.ap.ssid);
 
@@ -247,6 +290,8 @@ static void wifi_start_ap_mode(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    wifi_schedule_sta_retry(WIFI_AP_STA_RETRY_INTERVAL_MS);
 
     // Reset retry count sous mutex (s_ap_fallback_active déjà défini au début)
     if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -297,6 +342,78 @@ static void wifi_configure_sta(void)
     }
 }
 
+void wifi_start_sta_mode(void)
+{
+#if CONFIG_TINYBMS_WIFI_ENABLE
+#ifdef ESP_PLATFORM
+    if (!s_wifi_initialised) {
+        ESP_LOGW(TAG, "Ignoring request to start STA mode: Wi-Fi not initialised");
+        return;
+    }
+
+    wifi_stop_sta_retry_timer();
+
+    if (s_wifi_state_mutex != NULL &&
+        xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (s_ap_fallback_active) {
+            ESP_LOGI(TAG, "Stopping fallback AP to retry STA connection");
+        }
+        s_ap_fallback_active = false;
+        s_retry_count = 0;
+        xSemaphoreGive(s_wifi_state_mutex);
+    }
+
+    esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_ERR_WIFI_NOT_INIT) {
+        ESP_LOGW(TAG, "esp_wifi_stop before STA restart returned %s", esp_err_to_name(err));
+    }
+
+    wifi_configure_sta();
+
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start Wi-Fi station mode: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG, "Wi-Fi station mode started");
+#else
+    ESP_LOGI(TAG, "Wi-Fi station mode start requested (host build stub)");
+#endif
+#else
+    ESP_LOGI(TAG, "Wi-Fi support disabled, station mode start ignored");
+#endif
+}
+
+static void wifi_sta_retry_timer_callback(TimerHandle_t timer)
+{
+    (void)timer;
+
+    bool fallback_active = false;
+    if (s_wifi_state_mutex != NULL &&
+        xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        fallback_active = s_ap_fallback_active;
+        xSemaphoreGive(s_wifi_state_mutex);
+    }
+
+    if (!fallback_active) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Retrying STA connection while fallback AP is active");
+    wifi_start_sta_mode();
+
+    if (s_wifi_state_mutex != NULL &&
+        xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        fallback_active = s_ap_fallback_active;
+        xSemaphoreGive(s_wifi_state_mutex);
+    }
+
+    if (fallback_active) {
+        wifi_schedule_sta_retry(WIFI_AP_STA_RETRY_INTERVAL_MS);
+    }
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     (void)arg;
@@ -316,6 +433,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             case WIFI_EVENT_STA_CONNECTED:
                 ESP_LOGI(TAG, "Wi-Fi connected to '%s'", sta_ssid);
                 s_retry_count = 0;
+                wifi_stop_sta_retry_timer();
                 wifi_publish_event(APP_EVENT_ID_WIFI_STA_CONNECTED);
                 break;
             case WIFI_EVENT_STA_DISCONNECTED: {
@@ -379,10 +497,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             case WIFI_EVENT_AP_START:
                 wifi_publish_event(APP_EVENT_ID_WIFI_AP_STARTED);
                 ESP_LOGI(TAG, "Wi-Fi access point started");
+                wifi_schedule_sta_retry(WIFI_AP_STA_RETRY_INTERVAL_MS);
                 break;
             case WIFI_EVENT_AP_STOP:
                 wifi_publish_event(APP_EVENT_ID_WIFI_AP_STOPPED);
                 ESP_LOGI(TAG, "Wi-Fi access point stopped");
+                wifi_stop_sta_retry_timer();
                 break;
             case WIFI_EVENT_AP_STACONNECTED: {
                 wifi_publish_event(APP_EVENT_ID_WIFI_AP_CLIENT_CONNECTED);
@@ -426,6 +546,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == IP_EVENT) {
         if (event_id == IP_EVENT_STA_GOT_IP) {
             wifi_publish_event(APP_EVENT_ID_WIFI_STA_GOT_IP);
+            wifi_stop_sta_retry_timer();
 
             // Réinitialiser les compteurs sous mutex
             if (s_wifi_state_mutex != NULL && xSemaphoreTake(s_wifi_state_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -469,6 +590,17 @@ void wifi_init(void)
         if (s_wifi_state_mutex == NULL) {
             ESP_LOGE(TAG, "Failed to create WiFi state mutex");
             return;
+        }
+    }
+
+    if (s_sta_retry_timer == NULL) {
+        s_sta_retry_timer = xTimerCreate("wifi_sta_retry",
+                                         pdMS_TO_TICKS(WIFI_AP_STA_RETRY_INTERVAL_MS),
+                                         pdFALSE,
+                                         NULL,
+                                         wifi_sta_retry_timer_callback);
+        if (s_sta_retry_timer == NULL) {
+            ESP_LOGW(TAG, "Failed to allocate STA retry timer");
         }
     }
 
@@ -593,6 +725,12 @@ void wifi_deinit(void)
     if (s_ap_netif != NULL) {
         esp_netif_destroy(s_ap_netif);
         s_ap_netif = NULL;
+    }
+
+    if (s_sta_retry_timer != NULL) {
+        xTimerStop(s_sta_retry_timer, 0);
+        xTimerDelete(s_sta_retry_timer, 0);
+        s_sta_retry_timer = NULL;
     }
 
     // Destroy mutex

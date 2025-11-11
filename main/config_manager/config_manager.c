@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include "cJSON.h"
 
@@ -25,6 +26,11 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_spiffs.h"
+#include "esp_system.h"
+#endif
+
+#if CONFIG_TINYBMS_WIFI_ENABLE
+void wifi_start_sta_mode(void) __attribute__((weak));
 #endif
 
 #define CONFIG_MANAGER_REGISTER_EVENT_BUFFERS 4
@@ -50,6 +56,7 @@
 #define CONFIG_MANAGER_MQTT_TOPIC_RAW_KEY    "mqtt_t_crw"
 #define CONFIG_MANAGER_MQTT_TOPIC_DEC_KEY    "mqtt_t_cdc"
 #define CONFIG_MANAGER_MQTT_TOPIC_RDY_KEY    "mqtt_t_crd"
+#define CONFIG_MANAGER_WIFI_AP_SECRET_KEY    "wifi_ap_secret"
 
 #ifndef CONFIG_TINYBMS_MQTT_BROKER_URI
 #define CONFIG_TINYBMS_MQTT_BROKER_URI "mqtt://localhost"
@@ -112,6 +119,13 @@
 #define CONFIG_TINYBMS_WIFI_AP_PASSWORD ""
 #endif
 
+#define CONFIG_MANAGER_WIFI_PASSWORD_MIN_LENGTH 8U
+#define CONFIG_MANAGER_WIFI_AP_SECRET_LENGTH    16U
+
+#ifndef CONFIG_TINYBMS_WIFI_ENABLE
+#define CONFIG_TINYBMS_WIFI_ENABLE 1
+#endif
+
 #ifndef CONFIG_TINYBMS_WIFI_AP_CHANNEL
 #define CONFIG_TINYBMS_WIFI_AP_CHANNEL 1
 #endif
@@ -141,6 +155,152 @@ static void config_manager_make_register_key(uint16_t address, char *out_key, si
     }
     if (snprintf(out_key, out_size, CONFIG_MANAGER_REGISTER_KEY_PREFIX "%04X", (unsigned)address) >= (int)out_size) {
         out_key[out_size - 1] = '\0';
+    }
+}
+
+static void config_manager_generate_random_bytes(uint8_t *buffer, size_t length)
+{
+    if (buffer == NULL || length == 0) {
+        return;
+    }
+
+#ifdef ESP_PLATFORM
+    esp_fill_random(buffer, length);
+#else
+    static bool seeded = false;
+    if (!seeded) {
+        seeded = true;
+        unsigned int seed = (unsigned int)time(NULL);
+        seed ^= (unsigned int)clock();
+        srand(seed);
+    }
+    for (size_t i = 0; i < length; ++i) {
+        buffer[i] = (uint8_t)(rand() & 0xFF);
+    }
+#endif
+}
+
+static void config_manager_generate_ap_secret(char *out, size_t out_size)
+{
+    if (out == NULL || out_size == 0) {
+        return;
+    }
+
+    static const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const size_t alphabet_len = sizeof(alphabet) - 1U;
+    if (alphabet_len == 0U) {
+        out[0] = '\0';
+        return;
+    }
+
+    uint8_t random_bytes[CONFIG_MANAGER_WIFI_AP_SECRET_LENGTH];
+    memset(random_bytes, 0, sizeof(random_bytes));
+    config_manager_generate_random_bytes(random_bytes, sizeof(random_bytes));
+
+    size_t required = CONFIG_MANAGER_WIFI_AP_SECRET_LENGTH + 1U;
+    if (out_size < required) {
+        required = out_size;
+    }
+
+    size_t limit = required - 1U;
+    for (size_t i = 0; i < limit; ++i) {
+        out[i] = alphabet[random_bytes[i] % alphabet_len];
+    }
+    out[limit] = '\0';
+}
+
+static void config_manager_store_ap_secret_to_nvs(const char *secret)
+{
+#ifdef ESP_PLATFORM
+    if (secret == NULL || secret[0] == '\0') {
+        return;
+    }
+
+    if (config_manager_init_nvs() != ESP_OK) {
+        return;
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS for AP secret: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_set_str(handle, CONFIG_MANAGER_WIFI_AP_SECRET_KEY, secret);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to persist AP secret: %s", esp_err_to_name(err));
+    }
+    nvs_close(handle);
+#else
+    (void)secret;
+#endif
+}
+
+static void config_manager_ensure_ap_secret_loaded(void)
+{
+    if (s_wifi_ap_secret_loaded) {
+        return;
+    }
+
+#ifdef ESP_PLATFORM
+    if (config_manager_init_nvs() != ESP_OK) {
+        config_manager_generate_ap_secret(s_wifi_ap_secret, sizeof(s_wifi_ap_secret));
+        s_wifi_ap_secret_loaded = true;
+        return;
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(CONFIG_MANAGER_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS for Wi-Fi secret: %s", esp_err_to_name(err));
+        config_manager_generate_ap_secret(s_wifi_ap_secret, sizeof(s_wifi_ap_secret));
+        s_wifi_ap_secret_loaded = true;
+        return;
+    }
+
+    size_t length = sizeof(s_wifi_ap_secret);
+    err = nvs_get_str(handle, CONFIG_MANAGER_WIFI_AP_SECRET_KEY, s_wifi_ap_secret, &length);
+    if (err == ESP_ERR_NVS_NOT_FOUND ||
+        strlen(s_wifi_ap_secret) < CONFIG_MANAGER_WIFI_PASSWORD_MIN_LENGTH) {
+        config_manager_generate_ap_secret(s_wifi_ap_secret, sizeof(s_wifi_ap_secret));
+        if (strlen(s_wifi_ap_secret) >= CONFIG_MANAGER_WIFI_PASSWORD_MIN_LENGTH) {
+            config_manager_store_ap_secret_to_nvs(s_wifi_ap_secret);
+        }
+    } else if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read AP secret from NVS: %s", esp_err_to_name(err));
+        config_manager_generate_ap_secret(s_wifi_ap_secret, sizeof(s_wifi_ap_secret));
+    }
+
+    nvs_close(handle);
+#else
+    config_manager_generate_ap_secret(s_wifi_ap_secret, sizeof(s_wifi_ap_secret));
+#endif
+
+    s_wifi_ap_secret_loaded = true;
+}
+
+static void config_manager_apply_ap_secret_if_needed(config_manager_wifi_settings_t *wifi)
+{
+    if (wifi == NULL) {
+        return;
+    }
+
+    size_t password_len = strnlen(wifi->ap.password, sizeof(wifi->ap.password));
+    if (password_len >= CONFIG_MANAGER_WIFI_PASSWORD_MIN_LENGTH) {
+        return;
+    }
+
+    config_manager_ensure_ap_secret_loaded();
+    if (strlen(s_wifi_ap_secret) >= CONFIG_MANAGER_WIFI_PASSWORD_MIN_LENGTH) {
+        config_manager_copy_string(wifi->ap.password,
+                                   sizeof(wifi->ap.password),
+                                   s_wifi_ap_secret);
+    } else {
+        ESP_LOGW(TAG, "No valid AP secret available; fallback AP will remain disabled");
     }
 }
 
@@ -232,6 +392,9 @@ static config_manager_wifi_settings_t s_wifi_settings = {
         .max_clients = CONFIG_TINYBMS_WIFI_AP_MAX_CLIENTS,
     },
 };
+
+static char s_wifi_ap_secret[CONFIG_MANAGER_WIFI_PASSWORD_MAX_LENGTH] = {0};
+static bool s_wifi_ap_secret_loaded = false;
 
 static config_manager_can_settings_t s_can_settings = {
     .twai = {
@@ -897,6 +1060,8 @@ static void config_manager_load_persistent_settings(void)
             s_register_raw_values[i] = aligned;
         }
     }
+
+    config_manager_apply_ap_secret_if_needed(&s_wifi_settings);
 }
 
 static esp_err_t config_manager_store_poll_interval(uint32_t interval_ms)
@@ -1538,6 +1703,7 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
     config_manager_can_settings_t can = s_can_settings;
     uint32_t poll_interval = s_uart_poll_interval_ms;
     bool poll_interval_updated = false;
+    bool sta_credentials_changed = false;
 
     const cJSON *device_obj = config_manager_get_object(root, "device");
     if (device_obj != NULL) {
@@ -1624,6 +1790,11 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
             }
         }
     }
+
+    sta_credentials_changed = (strcmp(wifi.sta.ssid, s_wifi_settings.sta.ssid) != 0) ||
+                              (strcmp(wifi.sta.password, s_wifi_settings.sta.password) != 0);
+
+    config_manager_apply_ap_secret_if_needed(&wifi);
 
     const cJSON *can_obj = config_manager_get_object(root, "can");
     if (can_obj != NULL) {
@@ -1774,7 +1945,19 @@ static esp_err_t config_manager_apply_config_payload(const char *json,
         }
     }
 
+    bool restart_sta = false;
+#if CONFIG_TINYBMS_WIFI_ENABLE
+    restart_sta = (apply_runtime && sta_credentials_changed && snapshot_err == ESP_OK);
+#endif
+
     config_manager_unlock();
+
+#if CONFIG_TINYBMS_WIFI_ENABLE
+    if (restart_sta && wifi_start_sta_mode != NULL) {
+        wifi_start_sta_mode();
+    }
+#endif
+
     return snapshot_err;
 }
 
@@ -2531,6 +2714,8 @@ void config_manager_deinit(void)
     memset(&s_uart_pins, 0, sizeof(s_uart_pins));
     memset(&s_wifi_settings, 0, sizeof(s_wifi_settings));
     memset(&s_can_settings, 0, sizeof(s_can_settings));
+    memset(s_wifi_ap_secret, 0, sizeof(s_wifi_ap_secret));
+    s_wifi_ap_secret_loaded = false;
 
     ESP_LOGI(TAG, "Config manager deinitialized");
 }
