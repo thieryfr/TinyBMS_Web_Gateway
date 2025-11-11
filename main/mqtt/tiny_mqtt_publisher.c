@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -54,6 +55,11 @@ static tiny_mqtt_publisher_message_t s_message = {
     .payload = s_payload_buffer,
 };
 
+typedef struct {
+    tiny_mqtt_publisher_message_t message;
+    char payload[TINY_MQTT_PAYLOAD_CAPACITY];
+} tiny_mqtt_publisher_event_buffer_t;
+
 static bool tiny_mqtt_payload_append(char *buffer, size_t buffer_size, size_t *offset, const char *fmt, ...)
 {
     if (buffer == NULL || buffer_size == 0 || offset == NULL || fmt == NULL) {
@@ -84,6 +90,13 @@ static float sanitize_float(float value)
         return 0.0f;
     }
     return value;
+}
+
+static void tiny_mqtt_publisher_release_event_buffer(void *context)
+{
+    if (context != NULL) {
+        free(context);
+    }
 }
 
 static uint16_t encode_alarm_level(bool triggered)
@@ -134,9 +147,12 @@ static bool should_publish(uint64_t timestamp_ms)
     return timestamp_ms >= next_allowed;
 }
 
-static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
+static bool build_payload(const uart_bms_live_data_t *data,
+                          char *buffer,
+                          size_t buffer_size,
+                          size_t *out_length)
 {
-    if (data == NULL) {
+    if (data == NULL || buffer == NULL || buffer_size == 0U) {
         return false;
     }
 
@@ -167,8 +183,8 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
     uint64_t timestamp_ms = extract_timestamp_ms(data);
 
     size_t offset = 0;
-    if (!tiny_mqtt_payload_append(s_payload_buffer,
-                                  sizeof(s_payload_buffer),
+    if (!tiny_mqtt_payload_append(buffer,
+                                  buffer_size,
                                   &offset,
                                   "{\"type\":\"tinybms_metrics\",\"timestamp_ms\":%" PRIu64 ",\"uptime_s\":%" PRIu32 ",\"cycle_count\":%" PRIu32 ","
                                   "\"pack_voltage_v\":%.3f,\"pack_current_a\":%.3f,\"power_w\":%.3f,\"state_of_charge_pct\":%.2f,"
@@ -190,14 +206,14 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
         return false;
     }
 
-    if (!tiny_mqtt_payload_append(s_payload_buffer, sizeof(s_payload_buffer), &offset, "\"cell_voltages_mv\":[")) {
+    if (!tiny_mqtt_payload_append(buffer, buffer_size, &offset, "\"cell_voltages_mv\":[")) {
         return false;
     }
 
     for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
         unsigned value = (unsigned)data->cell_voltage_mv[i];
-        if (!tiny_mqtt_payload_append(s_payload_buffer,
-                                      sizeof(s_payload_buffer),
+        if (!tiny_mqtt_payload_append(buffer,
+                                      buffer_size,
                                       &offset,
                                       "%s%u",
                                       (i == 0) ? "" : ",",
@@ -206,14 +222,14 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
         }
     }
 
-    if (!tiny_mqtt_payload_append(s_payload_buffer, sizeof(s_payload_buffer), &offset, "],\"cell_balancing\":[")) {
+    if (!tiny_mqtt_payload_append(buffer, buffer_size, &offset, "],\"cell_balancing\":[")) {
         return false;
     }
 
     for (size_t i = 0; i < UART_BMS_CELL_COUNT; ++i) {
         unsigned value = (data->cell_balancing[i] != 0U) ? 1U : 0U;
-        if (!tiny_mqtt_payload_append(s_payload_buffer,
-                                      sizeof(s_payload_buffer),
+        if (!tiny_mqtt_payload_append(buffer,
+                                      buffer_size,
                                       &offset,
                                       "%s%u",
                                       (i == 0) ? "" : ",",
@@ -222,8 +238,8 @@ static bool build_payload(const uart_bms_live_data_t *data, size_t *out_length)
         }
     }
 
-    if (!tiny_mqtt_payload_append(s_payload_buffer,
-                                  sizeof(s_payload_buffer),
+    if (!tiny_mqtt_payload_append(buffer,
+                                  buffer_size,
                                   &offset,
                                   "],\"alarms\":{\"high_charge\":%u,\"high_discharge\":%u,\"cell_imbalance\":%u,\"raw_alarm_bits\":%u,\"raw_warning_bits\":%u},"
                                   "\"limits\":{\"max_charge_current_a\":%.2f,\"max_discharge_current_a\":%.2f,\"charge_overcurrent_limit_a\":%.2f,\"discharge_overcurrent_limit_a\":%.2f}}",
@@ -361,7 +377,7 @@ bool tiny_mqtt_publisher_build_metrics_message(const uart_bms_live_data_t *data,
     }
 
     size_t payload_length = 0U;
-    if (!build_payload(data, &payload_length)) {
+    if (!build_payload(data, s_payload_buffer, sizeof(s_payload_buffer), &payload_length)) {
         return false;
     }
 
@@ -373,6 +389,10 @@ bool tiny_mqtt_publisher_build_metrics_message(const uart_bms_live_data_t *data,
     s_message.topic_length = s_metrics_topic_length;
     s_message.qos = s_config.qos;
     s_message.retain = s_config.retain;
+
+    if (payload_length < sizeof(s_payload_buffer)) {
+        s_payload_buffer[payload_length] = '\0';
+    }
 
     *message = s_message;
     return true;
@@ -391,24 +411,49 @@ void tiny_mqtt_publisher_on_bms_update(const uart_bms_live_data_t *data, void *c
         return;
     }
 
-    if (!tiny_mqtt_publisher_build_metrics_message(data, &s_message)) {
+    tiny_mqtt_publisher_event_buffer_t *event_buffer =
+        (tiny_mqtt_publisher_event_buffer_t *)malloc(sizeof(tiny_mqtt_publisher_event_buffer_t));
+    if (event_buffer == NULL) {
         return;
     }
+
+    size_t payload_length = 0U;
+    if (!build_payload(data, event_buffer->payload, sizeof(event_buffer->payload), &payload_length)) {
+        free(event_buffer);
+        return;
+    }
+
+    if (payload_length < sizeof(event_buffer->payload)) {
+        event_buffer->payload[payload_length] = '\0';
+    }
+
+    tiny_mqtt_publisher_ensure_metrics_topic();
+
+    event_buffer->message.topic = s_metrics_topic;
+    event_buffer->message.topic_length = s_metrics_topic_length;
+    event_buffer->message.payload = event_buffer->payload;
+    event_buffer->message.payload_length = payload_length;
+    event_buffer->message.qos = s_config.qos;
+    event_buffer->message.retain = s_config.retain;
 
     s_last_publish_ms = timestamp_ms;
 
     if (s_event_publisher == NULL) {
+        free(event_buffer);
         return;
     }
 
     event_bus_event_t event = {
         .id = APP_EVENT_ID_MQTT_METRICS,
-        .payload = &s_message,
-        .payload_size = sizeof(s_message),
+        .payload = &event_buffer->message,
+        .payload_size = sizeof(event_buffer->message),
+        .dispose = tiny_mqtt_publisher_release_event_buffer,
+        .dispose_context = event_buffer,
     };
 
     if (!s_event_publisher(&event, pdMS_TO_TICKS(50))) {
         ESP_LOGW(TAG, "Unable to publish TinyBMS MQTT metrics event");
+        tiny_mqtt_publisher_release_event_buffer(event_buffer);
     }
 }
 

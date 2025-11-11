@@ -665,6 +665,7 @@ static void mqtt_gateway_event_task(void *context)
     event_bus_event_t event = {0};
     while (event_bus_receive(s_gateway.subscription, &event, portMAX_DELAY)) {
         mqtt_gateway_handle_event(&event);
+        event_bus_release(&event);
     }
 
     vTaskDelete(NULL);

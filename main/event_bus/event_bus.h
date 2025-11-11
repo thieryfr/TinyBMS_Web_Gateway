@@ -24,10 +24,15 @@ typedef uint32_t event_bus_event_id_t;
  * that the pointed data remains valid until all subscribers have consumed the
  * message or copy the data before publishing.
  */
+typedef void (*event_bus_payload_dispose_fn_t)(void *context);
+
 typedef struct {
-    event_bus_event_id_t id;   /**< Application specific event identifier. */
-    const void *payload;       /**< Optional pointer to the event payload. */
-    size_t payload_size;       /**< Size of the payload in bytes. */
+    event_bus_event_id_t id;        /**< Application specific event identifier. */
+    const void *payload;            /**< Optional pointer to the event payload. */
+    size_t payload_size;            /**< Size of the payload in bytes. */
+    event_bus_payload_dispose_fn_t dispose; /**< Optional cleanup invoked when the payload is no longer needed. */
+    void *dispose_context;          /**< Context passed to ::dispose. */
+    void *lifetime;                 /**< Reserved for internal lifetime tracking. */
 } event_bus_event_t;
 
 struct event_bus_subscription;
@@ -121,6 +126,16 @@ void event_bus_unsubscribe(event_bus_subscription_handle_t handle);
  *         event was discarded for that subscriber after the timeout expired.
  */
 bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout);
+
+/**
+ * @brief Release resources associated with an event payload.
+ *
+ * Subscribers must invoke this helper once they are done processing an event
+ * received via ::event_bus_receive or ::event_bus_dispatch. When no
+ * ::event_bus_payload_dispose_fn_t is attached to the event this function is a
+ * no-op.
+ */
+void event_bus_release(const event_bus_event_t *event);
 
 /**
  * @brief Convenience function to access the canonical publisher implementation.

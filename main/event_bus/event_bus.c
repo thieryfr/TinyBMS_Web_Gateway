@@ -21,10 +21,60 @@ typedef struct event_bus_subscription {
     struct event_bus_subscription *next;
 } event_bus_subscription_t;
 
+typedef struct {
+    event_bus_payload_dispose_fn_t dispose;
+    void *context;
+    uint32_t refcount;
+} event_bus_event_lifetime_t;
+
 static event_bus_subscription_t *s_subscribers = NULL;
 static SemaphoreHandle_t s_bus_lock = NULL;
 static portMUX_TYPE s_init_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE s_lifetime_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static const char *TAG = "event_bus";
+
+static void event_bus_lifetime_retain(event_bus_event_lifetime_t *lifetime)
+{
+    if (lifetime == NULL) {
+        return;
+    }
+
+    portENTER_CRITICAL(&s_lifetime_spinlock);
+    lifetime->refcount++;
+    portEXIT_CRITICAL(&s_lifetime_spinlock);
+}
+
+static bool event_bus_lifetime_release(event_bus_event_lifetime_t *lifetime)
+{
+    if (lifetime == NULL) {
+        return false;
+    }
+
+    bool should_dispose = false;
+
+    portENTER_CRITICAL(&s_lifetime_spinlock);
+    if (lifetime->refcount > 0U) {
+        lifetime->refcount--;
+        if (lifetime->refcount == 0U) {
+            should_dispose = true;
+        }
+    }
+    portEXIT_CRITICAL(&s_lifetime_spinlock);
+
+    return should_dispose;
+}
+
+static void event_bus_lifetime_dispose(event_bus_event_lifetime_t *lifetime)
+{
+    if (lifetime == NULL) {
+        return;
+    }
+
+    if (lifetime->dispose != NULL) {
+        lifetime->dispose(lifetime->context);
+    }
+    vPortFree(lifetime);
+}
 
 // Timeout pour acquisition mutex (5 secondes - évite deadlock)
 #define EVENT_BUS_MUTEX_TIMEOUT_MS 5000
@@ -208,10 +258,24 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
         return false;
     }
 
+    event_bus_event_lifetime_t *shared_lifetime = NULL;
+    if (event->dispose != NULL) {
+        shared_lifetime = pvPortMalloc(sizeof(event_bus_event_lifetime_t));
+        if (shared_lifetime == NULL) {
+            event_bus_give_lock();
+            return false;
+        }
+        shared_lifetime->dispose = event->dispose;
+        shared_lifetime->context = event->dispose_context;
+        shared_lifetime->refcount = 0U;
+    }
+
     bool success = true;
     event_bus_subscription_t *subscriber = s_subscribers;
     while (subscriber != NULL) {
-        if (xQueueSend(subscriber->queue, event, timeout) != pdTRUE) {
+        event_bus_event_t queued = *event;
+        queued.lifetime = shared_lifetime;
+        if (xQueueSend(subscriber->queue, &queued, timeout) != pdTRUE) {
             success = false;
             subscriber->dropped_events++;
 
@@ -233,11 +297,18 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
                              subscriber->dropped_events);
                 }
             }
+        } else {
+            event_bus_lifetime_retain(shared_lifetime);
         }
         subscriber = subscriber->next;
     }
 
     event_bus_give_lock();
+
+    if (shared_lifetime != NULL && shared_lifetime->refcount == 0U) {
+        event_bus_lifetime_dispose(shared_lifetime);
+    }
+
     return success;
 }
 
@@ -264,6 +335,7 @@ bool event_bus_dispatch(event_bus_subscription_handle_t handle, TickType_t timeo
     }
 
     handle->callback(&event, handle->context);
+    event_bus_release(&event);
     return true;
 }
 
@@ -304,4 +376,20 @@ size_t event_bus_get_all_metrics(event_bus_subscription_metrics_t *out_metrics, 
 
     event_bus_give_lock();
     return count;
+}
+
+void event_bus_release(const event_bus_event_t *event)
+{
+    if (event == NULL) {
+        return;
+    }
+
+    event_bus_event_lifetime_t *lifetime = (event_bus_event_lifetime_t *)event->lifetime;
+    if (lifetime == NULL) {
+        return;
+    }
+
+    if (event_bus_lifetime_release(lifetime)) {
+        event_bus_lifetime_dispose(lifetime);
+    }
 }
