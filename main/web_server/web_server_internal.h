@@ -67,6 +67,16 @@ extern bool g_basic_auth_enabled;
 void web_server_set_security_headers(httpd_req_t *req);
 
 /**
+ * @brief Format timestamp to ISO8601 string
+ */
+bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t size);
+
+/**
+ * @brief Send JSON response with chunking
+ */
+esp_err_t web_server_send_json(httpd_req_t *req, const char *buffer, size_t length);
+
+/**
  * @brief Take server mutex with timeout
  */
 bool web_server_lock(TickType_t timeout);
@@ -134,6 +144,15 @@ esp_err_t web_server_api_config_get_handler(httpd_req_t *req);
 esp_err_t web_server_api_config_post_handler(httpd_req_t *req);
 esp_err_t web_server_api_mqtt_config_get_handler(httpd_req_t *req);
 esp_err_t web_server_api_mqtt_config_post_handler(httpd_req_t *req);
+esp_err_t web_server_api_mqtt_status_handler(httpd_req_t *req);
+esp_err_t web_server_api_mqtt_test_handler(httpd_req_t *req);
+esp_err_t web_server_api_can_status_handler(httpd_req_t *req);
+esp_err_t web_server_api_history_handler(httpd_req_t *req);
+esp_err_t web_server_api_history_files_handler(httpd_req_t *req);
+esp_err_t web_server_api_history_archive_handler(httpd_req_t *req);
+esp_err_t web_server_api_history_download_handler(httpd_req_t *req);
+esp_err_t web_server_api_registers_get_handler(httpd_req_t *req);
+esp_err_t web_server_api_registers_post_handler(httpd_req_t *req);
 esp_err_t web_server_api_ota_post_handler(httpd_req_t *req);
 esp_err_t web_server_api_restart_post_handler(httpd_req_t *req);
 esp_err_t web_server_api_metrics_runtime_handler(httpd_req_t *req);
@@ -152,6 +171,15 @@ esp_err_t web_server_api_security_csrf_get_handler(httpd_req_t *req);
 esp_err_t web_server_static_get_handler(httpd_req_t *req);
 
 // ============================================================================
+// Static file functions (from web_server_static.c)
+// ============================================================================
+
+/**
+ * @brief Mount SPIFFS filesystem
+ */
+esp_err_t web_server_mount_spiffs(void);
+
+// ============================================================================
 // WebSocket handlers (from web_server_websocket.c)
 // ============================================================================
 
@@ -159,6 +187,16 @@ esp_err_t web_server_telemetry_ws_handler(httpd_req_t *req);
 esp_err_t web_server_events_ws_handler(httpd_req_t *req);
 esp_err_t web_server_uart_ws_handler(httpd_req_t *req);
 esp_err_t web_server_can_ws_handler(httpd_req_t *req);
+
+/**
+ * @brief Cleanup WebSocket client lists
+ */
+void web_server_websocket_cleanup(void);
+
+/**
+ * @brief Broadcast event to appropriate WebSocket clients
+ */
+void web_server_websocket_broadcast_event(uint32_t event_id, const char *payload, size_t length);
 
 #ifdef __cplusplus
 }
