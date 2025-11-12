@@ -1,0 +1,15 @@
+{
+  "name": "tinybms-mac-local",
+  "version": "0.1.0",
+  "description": "Interface locale Mac pour configurer TinyBMS via USB-UART",
+  "type": "module",
+  "scripts": {
+    "start": "node ./src/server.js",
+    "list-registers": "node ./scripts/list-registers.js",
+    "refresh-registers": "node ./scripts/refresh-registers-json.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "serialport": "^12.0.0"
+  }
+}

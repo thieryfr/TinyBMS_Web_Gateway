@@ -1,0 +1,1226 @@
+[
+  {
+    "address": 300,
+    "addressHex": "0x012c",
+    "key": "fully_charged_voltage_mv",
+    "label": "Fully Charged Voltage",
+    "unit": "mV",
+    "group": "battery",
+    "comment": "Cell voltage when considered fully charged",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1200,
+    "maxRaw": 4500,
+    "stepRaw": 10,
+    "defaultRaw": 3650,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1200,
+    "maxUser": 4500,
+    "defaultUser": 3650,
+    "stepUser": 10
+  },
+  {
+    "address": 301,
+    "addressHex": "0x012d",
+    "key": "fully_discharged_voltage_mv",
+    "label": "Fully Discharged Voltage",
+    "unit": "mV",
+    "group": "battery",
+    "comment": "Cell voltage considered fully discharged",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1000,
+    "maxRaw": 3500,
+    "stepRaw": 10,
+    "defaultRaw": 3250,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1000,
+    "maxUser": 3500,
+    "defaultUser": 3250,
+    "stepUser": 10
+  },
+  {
+    "address": 303,
+    "addressHex": "0x012f",
+    "key": "early_balancing_threshold_mv",
+    "label": "Early Balancing Threshold",
+    "unit": "mV",
+    "group": "battery",
+    "comment": "Cell voltage threshold that enables balancing",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1000,
+    "maxRaw": 4500,
+    "stepRaw": 10,
+    "defaultRaw": 3400,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1000,
+    "maxUser": 4500,
+    "defaultUser": 3400,
+    "stepUser": 10
+  },
+  {
+    "address": 304,
+    "addressHex": "0x0130",
+    "key": "charge_finished_current_ma",
+    "label": "Charge Finished Current",
+    "unit": "mA",
+    "group": "battery",
+    "comment": "Current threshold signalling charge completion",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 100,
+    "maxRaw": 5000,
+    "stepRaw": 10,
+    "defaultRaw": 1000,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 100,
+    "maxUser": 5000,
+    "defaultUser": 1000,
+    "stepUser": 10
+  },
+  {
+    "address": 305,
+    "addressHex": "0x0131",
+    "key": "peak_discharge_current_a",
+    "label": "Peak Discharge Current Cutoff",
+    "unit": "A",
+    "group": "battery",
+    "comment": "Instantaneous discharge protection limit",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1,
+    "maxRaw": 750,
+    "stepRaw": 1,
+    "defaultRaw": 70,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1,
+    "maxUser": 750,
+    "defaultUser": 70,
+    "stepUser": 1
+  },
+  {
+    "address": 306,
+    "addressHex": "0x0132",
+    "key": "battery_capacity_ah",
+    "label": "Battery Capacity",
+    "unit": "Ah",
+    "group": "battery",
+    "comment": "Pack capacity used for SOC calculations",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 0.01,
+    "precision": 2,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 10,
+    "maxRaw": 65500,
+    "stepRaw": 1,
+    "defaultRaw": 31400,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 0.1,
+    "maxUser": 655,
+    "defaultUser": 314,
+    "stepUser": 0.01
+  },
+  {
+    "address": 307,
+    "addressHex": "0x0133",
+    "key": "cell_count",
+    "label": "Number of Series Cells",
+    "unit": "cells",
+    "group": "battery",
+    "comment": "Configured number of series-connected cells",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 4,
+    "maxRaw": 16,
+    "stepRaw": 1,
+    "defaultRaw": 16,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 4,
+        "label": "4 cells"
+      },
+      {
+        "value": 5,
+        "label": "5 cells"
+      },
+      {
+        "value": 6,
+        "label": "6 cells"
+      },
+      {
+        "value": 7,
+        "label": "7 cells"
+      },
+      {
+        "value": 8,
+        "label": "8 cells"
+      },
+      {
+        "value": 9,
+        "label": "9 cells"
+      },
+      {
+        "value": 10,
+        "label": "10 cells"
+      },
+      {
+        "value": 11,
+        "label": "11 cells"
+      },
+      {
+        "value": 12,
+        "label": "12 cells"
+      },
+      {
+        "value": 13,
+        "label": "13 cells"
+      },
+      {
+        "value": 14,
+        "label": "14 cells"
+      },
+      {
+        "value": 15,
+        "label": "15 cells"
+      },
+      {
+        "value": 16,
+        "label": "16 cells"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 16,
+    "stepUser": null
+  },
+  {
+    "address": 308,
+    "addressHex": "0x0134",
+    "key": "allowed_disbalance_mv",
+    "label": "Allowed Cell Disbalance",
+    "unit": "mV",
+    "group": "battery",
+    "comment": "Maximum per-cell delta before alarms",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 15,
+    "maxRaw": 100,
+    "stepRaw": 1,
+    "defaultRaw": 15,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 15,
+    "maxUser": 100,
+    "defaultUser": 15,
+    "stepUser": 1
+  },
+  {
+    "address": 310,
+    "addressHex": "0x0136",
+    "key": "charger_startup_delay_s",
+    "label": "Charger Startup Delay",
+    "unit": "s",
+    "group": "charger",
+    "comment": "Delay before enabling the charger",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 5,
+    "maxRaw": 60,
+    "stepRaw": 1,
+    "defaultRaw": 20,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 5,
+    "maxUser": 60,
+    "defaultUser": 20,
+    "stepUser": 1
+  },
+  {
+    "address": 311,
+    "addressHex": "0x0137",
+    "key": "charger_disable_delay_s",
+    "label": "Charger Disable Delay",
+    "unit": "s",
+    "group": "charger",
+    "comment": "Delay before disabling charger after fault",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 0,
+    "maxRaw": 60,
+    "stepRaw": 1,
+    "defaultRaw": 5,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 0,
+    "maxUser": 60,
+    "defaultUser": 5,
+    "stepUser": 1
+  },
+  {
+    "address": 315,
+    "addressHex": "0x013b",
+    "key": "overvoltage_cutoff_mv",
+    "label": "Over-voltage Cutoff",
+    "unit": "mV",
+    "group": "safety",
+    "comment": "Cell voltage threshold to stop charging",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1200,
+    "maxRaw": 4500,
+    "stepRaw": 10,
+    "defaultRaw": 3800,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1200,
+    "maxUser": 4500,
+    "defaultUser": 3800,
+    "stepUser": 10
+  },
+  {
+    "address": 316,
+    "addressHex": "0x013c",
+    "key": "undervoltage_cutoff_mv",
+    "label": "Under-voltage Cutoff",
+    "unit": "mV",
+    "group": "safety",
+    "comment": "Cell voltage threshold to stop discharging",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 800,
+    "maxRaw": 3500,
+    "stepRaw": 10,
+    "defaultRaw": 2800,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 800,
+    "maxUser": 3500,
+    "defaultUser": 2800,
+    "stepUser": 10
+  },
+  {
+    "address": 317,
+    "addressHex": "0x013d",
+    "key": "discharge_overcurrent_a",
+    "label": "Discharge Over-current Cutoff",
+    "unit": "A",
+    "group": "safety",
+    "comment": "Current limit for discharge protection",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1,
+    "maxRaw": 750,
+    "stepRaw": 1,
+    "defaultRaw": 65,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1,
+    "maxUser": 750,
+    "defaultUser": 65,
+    "stepUser": 1
+  },
+  {
+    "address": 318,
+    "addressHex": "0x013e",
+    "key": "charge_overcurrent_a",
+    "label": "Charge Over-current Cutoff",
+    "unit": "A",
+    "group": "safety",
+    "comment": "Current limit for charge protection",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1,
+    "maxRaw": 750,
+    "stepRaw": 1,
+    "defaultRaw": 90,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1,
+    "maxUser": 750,
+    "defaultUser": 90,
+    "stepUser": 1
+  },
+  {
+    "address": 319,
+    "addressHex": "0x013f",
+    "key": "overheat_cutoff_c",
+    "label": "Overheat Cutoff",
+    "unit": "°C",
+    "group": "safety",
+    "comment": "Temperature threshold to stop charging/discharging",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 20,
+    "maxRaw": 90,
+    "stepRaw": 1,
+    "defaultRaw": 60,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 20,
+    "maxUser": 90,
+    "defaultUser": 60,
+    "stepUser": 1
+  },
+  {
+    "address": 320,
+    "addressHex": "0x0140",
+    "key": "low_temp_charge_cutoff_c",
+    "label": "Low Temperature Charge Cutoff",
+    "unit": "°C",
+    "group": "safety",
+    "comment": "Temperature below which charging is disabled",
+    "type": "int16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": -40,
+    "maxRaw": 10,
+    "stepRaw": 1,
+    "defaultRaw": 0,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": -40,
+    "maxUser": 10,
+    "defaultUser": 0,
+    "stepUser": 1
+  },
+  {
+    "address": 321,
+    "addressHex": "0x0141",
+    "key": "charge_restart_level_percent",
+    "label": "Charge Restart Level",
+    "unit": "%",
+    "group": "advanced",
+    "comment": "SOC threshold to re-enable charging",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 60,
+    "maxRaw": 95,
+    "stepRaw": 1,
+    "defaultRaw": 80,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 60,
+    "maxUser": 95,
+    "defaultUser": 80,
+    "stepUser": 1
+  },
+  {
+    "address": 322,
+    "addressHex": "0x0142",
+    "key": "battery_max_cycles",
+    "label": "Battery Maximum Cycles Count",
+    "unit": "cycles",
+    "group": "advanced",
+    "comment": "Total cycle counter limit",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 10,
+    "maxRaw": 65000,
+    "stepRaw": 10,
+    "defaultRaw": 5000,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 10,
+    "maxUser": 65000,
+    "defaultUser": 5000,
+    "stepUser": 10
+  },
+  {
+    "address": 323,
+    "addressHex": "0x0143",
+    "key": "state_of_health_permille",
+    "label": "State Of Health",
+    "unit": "‰",
+    "group": "advanced",
+    "comment": "Settable SOH value",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 0.01,
+    "precision": 2,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 0,
+    "maxRaw": 50000,
+    "stepRaw": 1,
+    "defaultRaw": 100,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 0,
+    "maxUser": 500,
+    "defaultUser": 1,
+    "stepUser": 0.01
+  },
+  {
+    "address": 328,
+    "addressHex": "0x0148",
+    "key": "state_of_charge_permille",
+    "label": "State Of Charge",
+    "unit": "‰",
+    "group": "advanced",
+    "comment": "Manual SOC override",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 0.01,
+    "precision": 2,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 0,
+    "maxRaw": 50000,
+    "stepRaw": 1,
+    "defaultRaw": 40,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 0,
+    "maxUser": 500,
+    "defaultUser": 0.4,
+    "stepUser": 0.01
+  },
+  {
+    "address": 329,
+    "addressHex": "0x0149",
+    "key": "invert_ext_current_sensor",
+    "label": "Invert External Current Sensor",
+    "unit": "flag",
+    "group": "advanced",
+    "comment": "Invert external shunt polarity",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Normal"
+      },
+      {
+        "value": 1,
+        "label": "Invert"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 330,
+    "addressHex": "0x014a",
+    "key": "charger_type",
+    "label": "Charger Type",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Defines charger behavior",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 1,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Variable (Reserved)"
+      },
+      {
+        "value": 1,
+        "label": "Constant Current"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 1,
+    "stepUser": null
+  },
+  {
+    "address": 331,
+    "addressHex": "0x014b",
+    "key": "load_switch_type",
+    "label": "Load Switch Type",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Output used for load switching",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "FET"
+      },
+      {
+        "value": 1,
+        "label": "AIDO1"
+      },
+      {
+        "value": 2,
+        "label": "AIDO2"
+      },
+      {
+        "value": 3,
+        "label": "DIDO1"
+      },
+      {
+        "value": 4,
+        "label": "DIDO2"
+      },
+      {
+        "value": 5,
+        "label": "AIHO1 Active Low"
+      },
+      {
+        "value": 6,
+        "label": "AIHO1 Active High"
+      },
+      {
+        "value": 7,
+        "label": "AIHO2 Active Low"
+      },
+      {
+        "value": 8,
+        "label": "AIHO2 Active High"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 332,
+    "addressHex": "0x014c",
+    "key": "automatic_recovery_count",
+    "label": "Automatic Recovery Attempts",
+    "unit": "count",
+    "group": "system",
+    "comment": "Number of automatic recovery tries",
+    "type": "uint16",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": true,
+    "hasMax": true,
+    "minRaw": 1,
+    "maxRaw": 30,
+    "stepRaw": 1,
+    "defaultRaw": 5,
+    "valueClass": "numeric",
+    "enum": [],
+    "minUser": 1,
+    "maxUser": 30,
+    "defaultUser": 5,
+    "stepUser": 1
+  },
+  {
+    "address": 333,
+    "addressHex": "0x014d",
+    "key": "charger_switch_type",
+    "label": "Charger Switch Type",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Output controlling the charger",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 1,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 1,
+        "label": "Charge FET"
+      },
+      {
+        "value": 2,
+        "label": "AIDO1"
+      },
+      {
+        "value": 3,
+        "label": "AIDO2"
+      },
+      {
+        "value": 4,
+        "label": "DIDO1"
+      },
+      {
+        "value": 5,
+        "label": "DIDO2"
+      },
+      {
+        "value": 6,
+        "label": "AIHO1 Active Low"
+      },
+      {
+        "value": 7,
+        "label": "AIHO1 Active High"
+      },
+      {
+        "value": 8,
+        "label": "AIHO2 Active Low"
+      },
+      {
+        "value": 9,
+        "label": "AIHO2 Active High"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 1,
+    "stepUser": null
+  },
+  {
+    "address": 334,
+    "addressHex": "0x014e",
+    "key": "ignition_source",
+    "label": "Ignition Source",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Input used to sense ignition",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Disabled"
+      },
+      {
+        "value": 1,
+        "label": "AIDO1"
+      },
+      {
+        "value": 2,
+        "label": "AIDO2"
+      },
+      {
+        "value": 3,
+        "label": "DIDO1"
+      },
+      {
+        "value": 4,
+        "label": "DIDO2"
+      },
+      {
+        "value": 5,
+        "label": "AIHO1"
+      },
+      {
+        "value": 6,
+        "label": "AIHO2"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 335,
+    "addressHex": "0x014f",
+    "key": "charger_detection_source",
+    "label": "Charger Detection Source",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Source used to detect presence of charger",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 1,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 1,
+        "label": "Internal"
+      },
+      {
+        "value": 2,
+        "label": "AIDO1"
+      },
+      {
+        "value": 3,
+        "label": "AIDO2"
+      },
+      {
+        "value": 4,
+        "label": "DIDO1"
+      },
+      {
+        "value": 5,
+        "label": "DIDO2"
+      },
+      {
+        "value": 6,
+        "label": "AIHO1"
+      },
+      {
+        "value": 7,
+        "label": "AIHO2"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 1,
+    "stepUser": null
+  },
+  {
+    "address": 337,
+    "addressHex": "0x0151",
+    "key": "precharge_pin",
+    "label": "Precharge Output",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Output used to precharge the contactor",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Disabled"
+      },
+      {
+        "value": 2,
+        "label": "Discharge FET"
+      },
+      {
+        "value": 3,
+        "label": "AIDO1"
+      },
+      {
+        "value": 4,
+        "label": "AIDO2"
+      },
+      {
+        "value": 5,
+        "label": "DIDO1"
+      },
+      {
+        "value": 6,
+        "label": "DIDO2"
+      },
+      {
+        "value": 7,
+        "label": "AIHO1 Active Low"
+      },
+      {
+        "value": 8,
+        "label": "AIHO1 Active High"
+      },
+      {
+        "value": 9,
+        "label": "AIHO2 Active Low"
+      },
+      {
+        "value": 16,
+        "label": "AIHO2 Active High"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 338,
+    "addressHex": "0x0152",
+    "key": "precharge_duration",
+    "label": "Precharge Duration",
+    "unit": "s",
+    "group": "system",
+    "comment": "Duration of precharge before closing main contactor",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 1,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 7,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "0.1 s"
+      },
+      {
+        "value": 1,
+        "label": "0.2 s"
+      },
+      {
+        "value": 2,
+        "label": "0.5 s"
+      },
+      {
+        "value": 3,
+        "label": "1 s"
+      },
+      {
+        "value": 4,
+        "label": "2 s"
+      },
+      {
+        "value": 5,
+        "label": "3 s"
+      },
+      {
+        "value": 6,
+        "label": "4 s"
+      },
+      {
+        "value": 7,
+        "label": "5 s"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 7,
+    "stepUser": null
+  },
+  {
+    "address": 339,
+    "addressHex": "0x0153",
+    "key": "temperature_sensor_type",
+    "label": "Temperature Sensor Type",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Defines type of connected temp sensors",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Dual 10K NTC"
+      },
+      {
+        "value": 1,
+        "label": "Multipoint Active Sensor"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 340,
+    "addressHex": "0x0154",
+    "key": "operation_mode",
+    "label": "BMS Operation Mode",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Dual or single port operation",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Dual Port"
+      },
+      {
+        "value": 1,
+        "label": "Single Port"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 341,
+    "addressHex": "0x0155",
+    "key": "single_port_switch_type",
+    "label": "Single Port Switch Type",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Output used when operating in single-port mode",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "FET"
+      },
+      {
+        "value": 1,
+        "label": "AIDO1"
+      },
+      {
+        "value": 2,
+        "label": "AIDO2"
+      },
+      {
+        "value": 3,
+        "label": "DIDO1"
+      },
+      {
+        "value": 4,
+        "label": "DIDO2"
+      },
+      {
+        "value": 5,
+        "label": "AIHO1 Active Low"
+      },
+      {
+        "value": 6,
+        "label": "AIHO1 Active High"
+      },
+      {
+        "value": 7,
+        "label": "AIHO2 Active Low"
+      },
+      {
+        "value": 8,
+        "label": "AIHO2 Active High"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 342,
+    "addressHex": "0x0156",
+    "key": "broadcast_interval",
+    "label": "Broadcast Interval",
+    "unit": "mode",
+    "group": "system",
+    "comment": "UART broadcast period",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 0,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Disabled"
+      },
+      {
+        "value": 1,
+        "label": "0.1 s"
+      },
+      {
+        "value": 2,
+        "label": "0.2 s"
+      },
+      {
+        "value": 3,
+        "label": "0.5 s"
+      },
+      {
+        "value": 4,
+        "label": "1 s"
+      },
+      {
+        "value": 5,
+        "label": "2 s"
+      },
+      {
+        "value": 6,
+        "label": "5 s"
+      },
+      {
+        "value": 7,
+        "label": "10 s"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 0,
+    "stepUser": null
+  },
+  {
+    "address": 343,
+    "addressHex": "0x0157",
+    "key": "communication_protocol",
+    "label": "Communication Protocol",
+    "unit": "mode",
+    "group": "system",
+    "comment": "Protocol used on UART port",
+    "type": "enum",
+    "access": "rw",
+    "scale": 1,
+    "precision": 0,
+    "hasMin": false,
+    "hasMax": false,
+    "minRaw": 0,
+    "maxRaw": 0,
+    "stepRaw": 0,
+    "defaultRaw": 1,
+    "valueClass": "enum",
+    "enum": [
+      {
+        "value": 0,
+        "label": "Binary"
+      },
+      {
+        "value": 1,
+        "label": "ASCII"
+      }
+    ],
+    "minUser": null,
+    "maxUser": null,
+    "defaultUser": 1,
+    "stepUser": null
+  }
+]
