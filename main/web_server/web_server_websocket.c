@@ -257,8 +257,11 @@ static void web_server_broadcast_battery_snapshot(ws_client_t **list, const char
         return;
     }
 
-    if (payload_length >= MONITORING_SNAPSHOT_MAX_SIZE) {
-        ESP_LOGW(TAG, "Telemetry snapshot too large to wrap (%zu bytes)", payload_length);
+    // Account for JSON wrapper overhead: {"battery":} = 12 bytes + safety margin
+    #define WRAPPER_OVERHEAD 20
+    if (payload_length > MONITORING_SNAPSHOT_MAX_SIZE - WRAPPER_OVERHEAD) {
+        ESP_LOGW(TAG, "Telemetry snapshot too large to wrap (%zu bytes, max %d with wrapper)",
+                 payload_length, MONITORING_SNAPSHOT_MAX_SIZE - WRAPPER_OVERHEAD);
         return;
     }
 

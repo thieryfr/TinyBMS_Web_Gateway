@@ -126,8 +126,10 @@ esp_err_t mqtt_client_init(const mqtt_client_event_listener_t *listener)
         }
     }
 
-    if (!mqtt_client_lock(pdMS_TO_TICKS(50))) {
-        return ESP_ERR_INVALID_STATE;
+    // Use longer timeout during initialization (5 seconds)
+    if (!mqtt_client_lock(pdMS_TO_TICKS(5000))) {
+        ESP_LOGE(TAG, "Failed to acquire mutex during init after 5000ms");
+        return ESP_ERR_TIMEOUT;
     }
 
     if (listener != NULL) {
@@ -154,8 +156,10 @@ esp_err_t mqtt_client_start(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (!mqtt_client_lock(pdMS_TO_TICKS(50))) {
-        return ESP_ERR_INVALID_STATE;
+    // Use longer timeout during start (5 seconds)
+    if (!mqtt_client_lock(pdMS_TO_TICKS(5000))) {
+        ESP_LOGE(TAG, "Failed to acquire mutex during start after 5000ms");
+        return ESP_ERR_TIMEOUT;
     }
 
     if (s_ctx.started) {
@@ -164,18 +168,23 @@ esp_err_t mqtt_client_start(void)
     }
 
 #ifdef ESP_PLATFORM
-    if (s_ctx.client != NULL) {
-        esp_err_t err = esp_mqtt_client_start(s_ctx.client);
-        if (err != ESP_OK) {
-            mqtt_client_unlock();
-            return err;
-        }
-    } else {
-        ESP_LOGW(TAG, "MQTT client handle not configured, start deferred");
+    if (s_ctx.client == NULL) {
+        ESP_LOGW(TAG, "MQTT client handle not configured");
+        mqtt_client_unlock();
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = esp_mqtt_client_start(s_ctx.client);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start MQTT client: %s", esp_err_to_name(err));
+        mqtt_client_unlock();
+        return err;
     }
 #endif
 
+    // Only set started flag if successfully started
     s_ctx.started = true;
+    ESP_LOGI(TAG, "MQTT client started successfully");
 
     mqtt_client_unlock();
 

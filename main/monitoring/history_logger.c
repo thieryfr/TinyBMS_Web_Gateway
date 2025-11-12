@@ -75,7 +75,8 @@ static bool s_directory_ready = false;
 static volatile bool s_task_should_exit = false;
 
 // Buffer de retry pour récupération d'erreurs d'écriture
-#define HISTORY_RETRY_BUFFER_SIZE 32
+// Reduced from 32 to 8 entries to save 12 KB of RAM (from 16 KB to 4 KB)
+#define HISTORY_RETRY_BUFFER_SIZE 8
 static char s_retry_buffer[HISTORY_RETRY_BUFFER_SIZE][512];
 static size_t s_retry_buffer_count = 0;
 static SemaphoreHandle_t s_retry_mutex = NULL;
