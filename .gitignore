@@ -9,3 +9,4 @@ build/
 *.pyc
 __pycache__/
 .DS_Store
+mac-local/node_modules/
