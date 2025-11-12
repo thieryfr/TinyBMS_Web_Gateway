@@ -38,6 +38,16 @@ Par défaut, le serveur écoute sur `http://localhost:5173`.
 3. Sélectionner le port série détecté puis cliquer sur **Se connecter**.
 4. La page charge automatiquement les registres TinyBMS et permet de modifier la configuration via les formulaires existants.
 
+## 📋 Liste des registres lus/écrits
+
+Le catalogue complet des registres TinyBMS exposés par l’interface est généré automatiquement à partir du firmware. Pour le consulter sans lancer le serveur, exécutez :
+
+```bash
+npm run list-registers
+```
+
+La commande affiche un tableau Markdown comprenant l’adresse, la clé, le libellé, les droits d’accès et le type de chaque registre.
+
 ## ⚙️ Configuration
 
 Les paramètres par défaut (baudrate 115200 bauds) conviennent au TinyBMS. Ils peuvent être ajustés dans `src/server.js` si nécessaire.
