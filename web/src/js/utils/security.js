@@ -1,4 +1,5 @@
 const AUTH_STORAGE_KEY = 'tinybms:basic-auth';
+const AUTH_DISABLE_STORAGE_KEY = 'tinybms:disable-auth';
 const CSRF_TTL_FALLBACK_MS = 15 * 60 * 1000;
 const METHODS_REQUIRING_CSRF = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -7,6 +8,63 @@ let cachedAuth = null;
 let csrfToken = null;
 let csrfExpiry = 0;
 let authPromise = null;
+let authDisabled = false;
+
+authDisabled = determineAuthDisabled();
+
+function determineAuthDisabled() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    let disabled = false;
+
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('disableAuth')) {
+            const rawValue = params.get('disableAuth');
+            const normalized = (rawValue || '').trim().toLowerCase();
+            disabled = normalized === ''
+                || normalized === '1'
+                || normalized === 'true'
+                || normalized === 'yes';
+
+            if (!disabled && (normalized === '0' || normalized === 'false' || normalized === 'no')) {
+                try {
+                    window.sessionStorage?.removeItem(AUTH_DISABLE_STORAGE_KEY);
+                } catch (error) {
+                    console.warn('[security] Unable to persist auth disable flag:', error);
+                }
+                return false;
+            }
+
+            try {
+                window.sessionStorage?.setItem(AUTH_DISABLE_STORAGE_KEY, disabled ? 'true' : 'false');
+            } catch (error) {
+                console.warn('[security] Unable to persist auth disable flag:', error);
+            }
+        }
+    } catch (error) {
+        console.warn('[security] Unable to read disableAuth query parameter:', error);
+    }
+
+    if (!disabled) {
+        try {
+            disabled = window.sessionStorage?.getItem(AUTH_DISABLE_STORAGE_KEY) === 'true';
+        } catch (error) {
+            console.warn('[security] Unable to read auth disable flag:', error);
+        }
+    }
+
+    if (!disabled) {
+        const devHosts = new Set(['localhost', '127.0.0.1', '::1']);
+        if (devHosts.has(window.location.hostname)) {
+            return true;
+        }
+    }
+
+    return disabled;
+}
 
 function base64Encode(text) {
     const encoder = new TextEncoder();
@@ -59,6 +117,9 @@ function invalidateCredentials() {
 }
 
 async function promptForCredentials() {
+    if (authDisabled) {
+        throw new Error('Authentication is disabled');
+    }
     const username = window.prompt('Nom d\'utilisateur (HTTP Basic)');
     if (username === null || username.trim() === '') {
         throw new Error('Authentication cancelled');
@@ -162,6 +223,12 @@ export function initSecurityInterceptors() {
         return;
     }
 
+    authDisabled = determineAuthDisabled();
+    if (authDisabled) {
+        console.info('[security] HTTP authentication disabled for development');
+        return;
+    }
+
     const originalFetch = window.fetch.bind(window);
 
     window.fetch = async (input, init = {}) => {
@@ -228,4 +295,5 @@ export function resetSecurityStateForTesting() {
     cachedAuth = null;
     authPromise = null;
     invalidateCsrfToken();
+    authDisabled = determineAuthDisabled();
 }
