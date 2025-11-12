@@ -55,7 +55,8 @@ Les paramètres par défaut (baudrate 115200 bauds) conviennent au TinyBMS. Ils 
 
 ## 📁 Structure
 
-- `src/registers.js` : parse les métadonnées des registres TinyBMS depuis le firmware.
+- `data/registers.json` : catalogue précompilé des registres TinyBMS embarqué avec l'application.
+- `src/registers.js` : charge le catalogue JSON embarqué (ou retombe sur le fichier généré du firmware si présent).
 - `src/serial.js` : gère la communication USB-UART (construction/parsing des trames TinyBMS).
 - `src/server.js` : serveur Express + API REST.
 - `public/` : interface web (HTML/CSS/JS) hébergée par Express.
@@ -70,3 +71,13 @@ Les paramètres par défaut (baudrate 115200 bauds) conviennent au TinyBMS. Ils 
 ## 🧪 Tests
 
 Les tests automatisés ne sont pas fournis pour ce module. Vérifiez la communication en suivant les logs dans le terminal (`npm start`).
+
+### 🔁 Mise à jour du catalogue lors du développement
+
+Si vous travaillez depuis le dépôt complet et que le firmware évolue, régénérez le fichier `data/registers.json` avec :
+
+```bash
+npm run refresh-registers
+```
+
+La commande lit `main/config_manager/generated_tiny_rw_registers.inc` et écrase le JSON embarqué. Copiez ensuite `mac-local/` sur le Mac mini pour profiter du nouveau catalogue hors-ligne.

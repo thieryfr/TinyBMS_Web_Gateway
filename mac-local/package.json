@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node ./src/server.js",
-    "list-registers": "node ./scripts/list-registers.js"
+    "list-registers": "node ./scripts/list-registers.js",
+    "refresh-registers": "node ./scripts/refresh-registers-json.js"
   },
   "dependencies": {
     "express": "^4.19.2",

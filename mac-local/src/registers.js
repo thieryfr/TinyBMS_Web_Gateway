@@ -11,11 +11,25 @@ const generatedFilePath = path.join(
   'config_manager',
   'generated_tiny_rw_registers.inc',
 );
+const bundledCataloguePath = path.join(__dirname, '..', 'data', 'registers.json');
 
 let cachedCatalogue = null;
 
 function readGeneratedFile() {
   return fs.readFileSync(generatedFilePath, 'utf8');
+}
+
+function loadBundledCatalogue() {
+  try {
+    const contents = fs.readFileSync(bundledCataloguePath, 'utf8');
+    const data = JSON.parse(contents);
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+    return data;
+  } catch (error) {
+    return null;
+  }
 }
 
 function parseEnumTables(source) {
@@ -200,11 +214,24 @@ function parseDescriptorBlock(block, enums) {
   };
 }
 
-function buildCatalogue() {
+function buildCatalogueFromGeneratedSource() {
+  if (!fs.existsSync(generatedFilePath)) {
+    throw new Error(
+      "Impossible de charger le catalogue des registres depuis le firmware (fichier 'main/config_manager/generated_tiny_rw_registers.inc' introuvable).",
+    );
+  }
   const source = readGeneratedFile();
   const enums = parseEnumTables(source);
   const blocks = extractDescriptorBlocks(source);
   return blocks.map((block) => parseDescriptorBlock(block, enums));
+}
+
+function buildCatalogue() {
+  const bundled = loadBundledCatalogue();
+  if (bundled) {
+    return bundled;
+  }
+  return buildCatalogueFromGeneratedSource();
 }
 
 export function getRegisterCatalogue() {
@@ -212,6 +239,10 @@ export function getRegisterCatalogue() {
     cachedCatalogue = buildCatalogue();
   }
   return cachedCatalogue;
+}
+
+export function getGeneratedCatalogue() {
+  return buildCatalogueFromGeneratedSource();
 }
 
 export function findRegisterDescriptorByKey(key) {
@@ -286,6 +317,7 @@ export function userToRawValue(descriptor, userValue) {
 
 export default {
   getRegisterCatalogue,
+  getGeneratedCatalogue,
   findRegisterDescriptorByKey,
   rawToUserValue,
   userToRawValue,
