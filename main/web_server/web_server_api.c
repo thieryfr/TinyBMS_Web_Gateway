@@ -712,10 +712,85 @@ static void web_server_parse_mqtt_uri(const char *uri,
                                       size_t host_size,
                                       uint16_t *port_out)
 {
+    // Initialize outputs
     if (scheme != NULL && scheme_size > 0) {
         scheme[0] = '\0';
     }
+    if (host != NULL && host_size > 0) {
+        host[0] = '\0';
+    }
+    if (port_out != NULL) {
+        *port_out = 1883U;
+    }
 
+    if (uri == NULL) {
+        if (scheme != NULL && scheme_size > 0) {
+            (void)snprintf(scheme, scheme_size, "%s", "mqtt");
+        }
+        return;
+    }
+
+    const char *authority = uri;
+    const char *sep = strstr(uri, "://");
+    char scheme_buffer[16] = "mqtt";
+    if (sep != NULL) {
+        size_t len = (size_t)(sep - uri);
+        if (len >= sizeof(scheme_buffer)) {
+            len = sizeof(scheme_buffer) - 1U;
+        }
+        memcpy(scheme_buffer, uri, len);
+        scheme_buffer[len] = '\0';
+        authority = sep + 3;
+    }
+
+    for (size_t i = 0; scheme_buffer[i] != '\0'; ++i) {
+        scheme_buffer[i] = (char)tolower((unsigned char)scheme_buffer[i]);
+    }
+    if (scheme != NULL && scheme_size > 0) {
+        (void)snprintf(scheme, scheme_size, "%s", scheme_buffer);
+    }
+
+    uint16_t port = (strcmp(scheme_buffer, "mqtts") == 0) ? 8883U : 1883U;
+    if (authority == NULL || authority[0] == '\0') {
+        if (port_out != NULL) {
+            *port_out = port;
+        }
+        return;
+    }
+
+    const char *path = strpbrk(authority, "/?");
+    size_t length = (path != NULL) ? (size_t)(path - authority) : strlen(authority);
+    if (length == 0) {
+        if (port_out != NULL) {
+            *port_out = port;
+        }
+        return;
+    }
+
+    char host_buffer[MQTT_CLIENT_MAX_URI_LENGTH];
+    if (length >= sizeof(host_buffer)) {
+        length = sizeof(host_buffer) - 1U;
+    }
+    memcpy(host_buffer, authority, length);
+    host_buffer[length] = '\0';
+
+    char *colon = strrchr(host_buffer, ':');
+    if (colon != NULL) {
+        *colon = '\0';
+        ++colon;
+        char *endptr = NULL;
+        unsigned long parsed = strtoul(colon, &endptr, 10);
+        if (endptr != colon && parsed <= UINT16_MAX) {
+            port = (uint16_t)parsed;
+        }
+    }
+
+    if (host != NULL && host_size > 0) {
+        (void)snprintf(host, host_size, "%s", host_buffer);
+    }
+    if (port_out != NULL) {
+        *port_out = port;
+    }
 }
 
 static bool web_server_query_value_truthy(const char *value, size_t length)
@@ -797,84 +872,6 @@ static const char *web_server_mqtt_event_to_string(mqtt_client_event_id_t id)
             return "error";
         default:
             return "unknown";
-    }
-}
-
-
-    if (host != NULL && host_size > 0) {
-        host[0] = '\0';
-    }
-    if (port_out != NULL) {
-        *port_out = 1883U;
-    }
-
-    if (uri == NULL) {
-        if (scheme != NULL && scheme_size > 0) {
-            (void)snprintf(scheme, scheme_size, "%s", "mqtt");
-        }
-        return;
-    }
-
-    const char *authority = uri;
-    const char *sep = strstr(uri, "://");
-    char scheme_buffer[16] = "mqtt";
-    if (sep != NULL) {
-        size_t len = (size_t)(sep - uri);
-        if (len >= sizeof(scheme_buffer)) {
-            len = sizeof(scheme_buffer) - 1U;
-        }
-        memcpy(scheme_buffer, uri, len);
-        scheme_buffer[len] = '\0';
-        authority = sep + 3;
-    }
-
-    for (size_t i = 0; scheme_buffer[i] != '\0'; ++i) {
-        scheme_buffer[i] = (char)tolower((unsigned char)scheme_buffer[i]);
-    }
-    if (scheme != NULL && scheme_size > 0) {
-        (void)snprintf(scheme, scheme_size, "%s", scheme_buffer);
-    }
-
-    uint16_t port = (strcmp(scheme_buffer, "mqtts") == 0) ? 8883U : 1883U;
-    if (authority == NULL || authority[0] == '\0') {
-        if (port_out != NULL) {
-            *port_out = port;
-        }
-        return;
-    }
-
-    const char *path = strpbrk(authority, "/?");
-    size_t length = (path != NULL) ? (size_t)(path - authority) : strlen(authority);
-    if (length == 0) {
-        if (port_out != NULL) {
-            *port_out = port;
-        }
-        return;
-    }
-
-    char host_buffer[MQTT_CLIENT_MAX_URI_LENGTH];
-    if (length >= sizeof(host_buffer)) {
-        length = sizeof(host_buffer) - 1U;
-    }
-    memcpy(host_buffer, authority, length);
-    host_buffer[length] = '\0';
-
-    char *colon = strrchr(host_buffer, ':');
-    if (colon != NULL) {
-        *colon = '\0';
-        ++colon;
-        char *endptr = NULL;
-        unsigned long parsed = strtoul(colon, &endptr, 10);
-        if (endptr != colon && parsed <= UINT16_MAX) {
-            port = (uint16_t)parsed;
-        }
-    }
-
-    if (host != NULL && host_size > 0) {
-        (void)snprintf(host, host_size, "%s", host_buffer);
-    }
-    if (port_out != NULL) {
-        *port_out = port;
     }
 }
 

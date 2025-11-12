@@ -48,7 +48,7 @@ typedef struct ws_client {
 // Global state (WebSocket clients)
 // ============================================================================
 
-SemaphoreHandle_t g_server_mutex = NULL;  // Also used as ws_mutex
+// g_server_mutex is defined in web_server.c and declared in web_server_internal.h
 static ws_client_t *s_telemetry_clients = NULL;
 static ws_client_t *s_event_clients = NULL;
 static ws_client_t *s_uart_clients = NULL;

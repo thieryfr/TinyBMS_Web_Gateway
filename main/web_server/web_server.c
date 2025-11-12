@@ -176,7 +176,7 @@ static const char *web_server_twai_state_to_string(twai_state_t state)
 
 static event_bus_publish_fn_t s_event_publisher = NULL;
 static httpd_handle_t s_httpd = NULL;
-static SemaphoreHandle_t s_ws_mutex = NULL;
+SemaphoreHandle_t g_server_mutex = NULL;  // Global mutex for WebSocket synchronization
 static event_bus_subscription_handle_t s_event_subscription = NULL;
 static TaskHandle_t s_event_task_handle = NULL;
 static volatile bool s_event_task_should_stop = false;
@@ -318,11 +318,11 @@ void web_server_set_config_secret_authorizer(web_server_secret_authorizer_fn_t a
 
 void web_server_init(void)
 {
-    if (s_ws_mutex == NULL) {
-        s_ws_mutex = xSemaphoreCreateMutex();
+    if (g_server_mutex == NULL) {
+        g_server_mutex = xSemaphoreCreateMutex();
     }
 
-    if (s_ws_mutex == NULL) {
+    if (g_server_mutex == NULL) {
         ESP_LOGE(TAG, "Failed to create websocket mutex");
         return;
     }
@@ -691,9 +691,9 @@ void web_server_deinit(void)
     }
 
     // Destroy websocket mutex
-    if (s_ws_mutex != NULL) {
-        vSemaphoreDelete(s_ws_mutex);
-        s_ws_mutex = NULL;
+    if (g_server_mutex != NULL) {
+        vSemaphoreDelete(g_server_mutex);
+        g_server_mutex = NULL;
     }
 
     // Unmount SPIFFS (may already be unmounted by config_manager)

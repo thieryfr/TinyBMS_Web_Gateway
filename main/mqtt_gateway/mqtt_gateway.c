@@ -326,7 +326,7 @@ static void mqtt_gateway_load_topics(void)
         (topics != NULL && topics->metrics[0] != '\0') ? topics->metrics : fallback_metrics;
 
     if (!mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
-        tiny_mqtt_publisher_set_metrics_topic(metrics_source);
+        ESP_LOGW(TAG, "Failed to acquire gateway mutex for topic configuration");
         return;
     }
 
