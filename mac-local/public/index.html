@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TinyBMS Config • Interface Mac</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.42.0/tabler-icons.min.css" />
+    <link rel="stylesheet" href="/css/mac-app.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="container-xl py-5">
+        <header class="mb-4">
+          <h1 class="mb-2">TinyBMS • Interface locale Mac</h1>
+          <p class="text-secondary">
+            Configurez votre TinyBMS via un câble USB ↔ UART connecté directement au Mac mini.
+          </p>
+        </header>
+
+        <section class="connection-card">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+              <label for="serial-port" class="form-label text-secondary">Port série TinyBMS</label>
+              <select id="serial-port" class="form-select"></select>
+            </div>
+            <div class="col-md-2">
+              <label for="baud-rate" class="form-label text-secondary">Baudrate</label>
+              <input type="number" id="baud-rate" class="form-control" value="115200" step="1200" min="9600" />
+            </div>
+            <div class="col-md-4 text-end">
+              <div class="btn-group">
+                <button id="refresh-ports" class="btn btn-outline-secondary">
+                  <i class="ti ti-refresh me-1"></i>Actualiser
+                </button>
+                <button id="connect-port" class="btn btn-primary">
+                  <i class="ti ti-plug-connected me-1"></i>Se connecter
+                </button>
+                <button id="disconnect-port" class="btn btn-outline-danger" disabled>
+                  <i class="ti ti-plug-off me-1"></i>Déconnecter
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="connection-status" id="connection-status">
+            <span class="badge bg-secondary" id="connection-badge">Déconnecté</span>
+            <span id="connection-details">Aucun périphérique connecté.</span>
+          </div>
+          <div id="config-loading-message" hidden>
+            <i class="ti ti-loader-2 me-2"></i>Lecture des registres TinyBMS en cours…
+          </div>
+          <div id="connection-error" class="text-danger mt-3" hidden></div>
+        </section>
+
+        <section id="registers-card" class="registers-card" hidden>
+          <div class="card card-dark bg-dark text-white">
+            <div class="card-header d-flex flex-wrap align-items-center gap-2 justify-content-between">
+              <div>
+                <h2 class="card-title h3 mb-1">Registres TinyBMS</h2>
+                <p class="text-secondary mb-0">Lecture et écriture directes des paramètres.</p>
+              </div>
+              <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                  <label for="group-filter" class="form-label text-secondary mb-1">Groupe</label>
+                  <select id="group-filter" class="form-select form-select-sm">
+                    <option value="__all__">Tous les groupes</option>
+                  </select>
+                </div>
+                <button id="refresh-registers" class="btn btn-outline-secondary btn-sm">
+                  <i class="ti ti-refresh me-1"></i>Rafraîchir
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="registers-feedback" class="alert alert-info" role="alert" hidden></div>
+              <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover align-middle" id="registers-table">
+                  <thead>
+                    <tr>
+                      <th>Adresse</th>
+                      <th>Nom</th>
+                      <th>Valeur</th>
+                      <th>Unité</th>
+                      <th>Accès</th>
+                      <th>Description</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer>
+          TinyBMS-GW • Interface locale Mac © 2025
+        </footer>
+      </div>
+    </div>
+
+    <script type="module" src="/js/mac-app.js"></script>
+  </body>
+</html>
