@@ -9,6 +9,7 @@
 
 #include "alert_manager.h"
 #include "web_server.h"
+#include "web_server_internal.h"
 
 #include <string.h>
 
@@ -19,7 +20,6 @@ static const char *TAG = "web_server_alerts";
 // WebSocket client list for alerts (defined in web_server.c)
 extern ws_client_t *s_alert_clients;
 extern httpd_handle_t s_httpd;
-extern SemaphoreHandle_t s_ws_mutex;
 
 // External WebSocket helper functions (from web_server.c)
 extern void ws_client_list_add(ws_client_t **list, int fd);
