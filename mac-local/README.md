@@ -8,7 +8,8 @@ Cette application Node.js fournit une interface web locale exécutée sur le Mac
 - Lecture complète des registres de configuration TinyBMS (via `/api/registers`)
 - Écriture des registres individuels (`POST /api/registers`)
 - Redémarrage du TinyBMS (`POST /api/system/restart`)
-- Interface web réutilisant le module de configuration existant (`tinybms-config.js`)
+- Interface web autonome (HTML/CSS/JS) fournie intégralement dans `mac-local/public`
+- Tableau interactif des registres avec filtrage par groupe et édition inline
 
 ## 🔌 Pré-requis
 
@@ -36,7 +37,7 @@ Par défaut, le serveur écoute sur `http://localhost:5173`.
 1. Brancher le TinyBMS au Mac via le câble USB-UART.
 2. Ouvrir `http://localhost:5173` dans le navigateur du Mac mini.
 3. Sélectionner le port série détecté puis cliquer sur **Se connecter**.
-4. La page charge automatiquement les registres TinyBMS et permet de modifier la configuration via les formulaires existants.
+4. La page charge automatiquement le catalogue des registres TinyBMS et affiche un tableau interactif pour lire ou modifier les valeurs autorisées.
 
 ## 📋 Liste des registres lus/écrits
 
@@ -64,6 +65,7 @@ Les paramètres par défaut (baudrate 115200 bauds) conviennent au TinyBMS. Ils 
 - L'upload OTA n'est pas supporté dans cette version (renvoie HTTP 501).
 - Assurez-vous qu'aucun autre service n'utilise le port série pendant la configuration.
 - Le serveur doit être relancé si le périphérique USB est débranché/rebranché.
+- Le dossier `mac-local/` est autonome : copiez-le tel quel sur un Mac disposant de Node.js pour utiliser l'outil sans dépendre du code ESP32.
 
 ## 🧪 Tests
 

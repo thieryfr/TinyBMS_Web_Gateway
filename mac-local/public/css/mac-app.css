@@ -27,13 +27,32 @@ h1 {
   font-size: 0.85rem;
 }
 
-#tinybms-config-container {
+.registers-card {
   margin-top: 32px;
 }
 
-#tinybms-config-container.loading {
-  opacity: 0.5;
-  pointer-events: none;
+.registers-card .card {
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.35);
+}
+
+.registers-card .card-header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.registers-card table th,
+.registers-card table td {
+  white-space: nowrap;
+}
+
+.registers-card table td.description {
+  white-space: normal;
+  max-width: 320px;
+}
+
+.opacity-50 {
+  opacity: 0.5 !important;
 }
 
 #config-loading-message {

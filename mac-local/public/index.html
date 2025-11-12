@@ -53,8 +53,45 @@
           <div id="connection-error" class="text-danger mt-3" hidden></div>
         </section>
 
-        <section id="tinybms-config-container" data-src="/assets/tiny/tinybms-config.html" hidden>
-          <!-- Le contenu du module tinybms-config sera injecté ici -->
+        <section id="registers-card" class="registers-card" hidden>
+          <div class="card card-dark bg-dark text-white">
+            <div class="card-header d-flex flex-wrap align-items-center gap-2 justify-content-between">
+              <div>
+                <h2 class="card-title h3 mb-1">Registres TinyBMS</h2>
+                <p class="text-secondary mb-0">Lecture et écriture directes des paramètres.</p>
+              </div>
+              <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                  <label for="group-filter" class="form-label text-secondary mb-1">Groupe</label>
+                  <select id="group-filter" class="form-select form-select-sm">
+                    <option value="__all__">Tous les groupes</option>
+                  </select>
+                </div>
+                <button id="refresh-registers" class="btn btn-outline-secondary btn-sm">
+                  <i class="ti ti-refresh me-1"></i>Rafraîchir
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="registers-feedback" class="alert alert-info" role="alert" hidden></div>
+              <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover align-middle" id="registers-table">
+                  <thead>
+                    <tr>
+                      <th>Adresse</th>
+                      <th>Nom</th>
+                      <th>Valeur</th>
+                      <th>Unité</th>
+                      <th>Accès</th>
+                      <th>Description</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </section>
 
         <footer>
