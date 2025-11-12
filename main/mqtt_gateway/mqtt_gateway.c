@@ -619,13 +619,21 @@ void mqtt_gateway_get_status(mqtt_gateway_status_t *status)
                                          : 0;
 
     strncpy(status->broker_uri, s_gateway.config.broker_uri, sizeof(status->broker_uri) - 1U);
+    status->broker_uri[sizeof(status->broker_uri) - 1U] = '\0';
     strncpy(status->status_topic, s_gateway.status_topic, sizeof(status->status_topic) - 1U);
+    status->status_topic[sizeof(status->status_topic) - 1U] = '\0';
     strncpy(status->metrics_topic, s_gateway.metrics_topic, sizeof(status->metrics_topic) - 1U);
+    status->metrics_topic[sizeof(status->metrics_topic) - 1U] = '\0';
     strncpy(status->config_topic, s_gateway.config_topic, sizeof(status->config_topic) - 1U);
+    status->config_topic[sizeof(status->config_topic) - 1U] = '\0';
     strncpy(status->can_raw_topic, s_gateway.can_raw_topic, sizeof(status->can_raw_topic) - 1U);
+    status->can_raw_topic[sizeof(status->can_raw_topic) - 1U] = '\0';
     strncpy(status->can_decoded_topic, s_gateway.can_decoded_topic, sizeof(status->can_decoded_topic) - 1U);
+    status->can_decoded_topic[sizeof(status->can_decoded_topic) - 1U] = '\0';
     strncpy(status->can_ready_topic, s_gateway.can_ready_topic, sizeof(status->can_ready_topic) - 1U);
+    status->can_ready_topic[sizeof(status->can_ready_topic) - 1U] = '\0';
     strncpy(status->last_error, s_gateway.last_error, sizeof(status->last_error) - 1U);
+    status->last_error[sizeof(status->last_error) - 1U] = '\0';
 
     mqtt_gateway_unlock_ctx();
 }
