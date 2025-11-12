@@ -267,7 +267,9 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
         }
         shared_lifetime->dispose = event->dispose;
         shared_lifetime->context = event->dispose_context;
-        shared_lifetime->refcount = 0U;
+        // Initialize refcount to 1 (publisher's reference)
+        // This prevents premature disposal if a subscriber releases before we check
+        shared_lifetime->refcount = 1U;
     }
 
     bool success = true;
@@ -305,8 +307,12 @@ bool event_bus_publish(const event_bus_event_t *event, TickType_t timeout)
 
     event_bus_give_lock();
 
-    if (shared_lifetime != NULL && shared_lifetime->refcount == 0U) {
-        event_bus_lifetime_dispose(shared_lifetime);
+    // Release the publisher's reference
+    if (shared_lifetime != NULL) {
+        if (event_bus_lifetime_release(shared_lifetime)) {
+            // If release returns true, we were the last holder - dispose now
+            event_bus_lifetime_dispose(shared_lifetime);
+        }
     }
 
     return success;

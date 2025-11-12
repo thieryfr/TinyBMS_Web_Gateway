@@ -178,7 +178,17 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
 
     int64_t current_time = esp_timer_get_time() / 1000;  // Convert to ms
     ws_client_t *iter = *list;
-    while (iter != NULL && client_count < MAX_BROADCAST_CLIENTS) {
+    size_t total_clients = 0;  // Count all clients, including those beyond limit
+
+    while (iter != NULL) {
+        total_clients++;
+
+        // Check if we've exceeded the broadcast limit
+        if (client_count >= MAX_BROADCAST_CLIENTS) {
+            iter = iter->next;
+            continue;  // Skip remaining clients
+        }
+
         // Check and update rate limiting
         int64_t time_since_reset = current_time - iter->last_reset_time;
 
@@ -203,6 +213,12 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         iter->message_count++;
         client_fds[client_count++] = iter->fd;
         iter = iter->next;
+    }
+
+    // Warn if we have more clients than we can broadcast to
+    if (total_clients > MAX_BROADCAST_CLIENTS) {
+        ESP_LOGW(TAG, "WebSocket client limit reached: %zu total clients, only %d will receive broadcasts",
+                 total_clients, MAX_BROADCAST_CLIENTS);
     }
 
     xSemaphoreGive(g_server_mutex);

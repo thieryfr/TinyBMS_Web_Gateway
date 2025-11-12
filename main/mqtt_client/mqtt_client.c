@@ -548,7 +548,14 @@ esp_err_t mqtt_client_test_connection(const mqtt_client_config_t *config,
                                            pdFALSE,
                                            wait_timeout);
 
+    // Stop the client and wait for pending events to be processed
+    // to avoid use-after-free in event handlers
     (void)esp_mqtt_client_stop(client);
+
+    // Give time for event handlers to complete (500ms should be enough)
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    // Now safe to destroy the client and event group
     esp_mqtt_client_destroy(client);
     vEventGroupDelete(events);
 
