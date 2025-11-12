@@ -1029,8 +1029,24 @@ esp_err_t history_logger_load_archive(const char *filename, size_t limit, histor
     size_t total = 0;
 
     while (fgets(line, sizeof(line), file) != NULL) {
+        size_t line_len = strlen(line);
+
+        // Detect truncation (line doesn't end with newline)
+        if (line_len > 0 && line[line_len - 1] != '\n') {
+            ESP_LOGW(TAG, "Line truncated (>%u bytes), skipping sample",
+                     HISTORY_LOGGER_MAX_LINE_LENGTH);
+
+            // Consume the rest of the line to stay synchronized
+            int c;
+            while ((c = fgetc(file)) != '\n' && c != EOF) {
+                // Discard characters until newline or EOF
+            }
+            continue;
+        }
+
         history_logger_archive_sample_t sample;
         if (!history_logger_parse_line(line, &sample)) {
+            ESP_LOGD(TAG, "Failed to parse line, skipping");
             continue;
         }
 

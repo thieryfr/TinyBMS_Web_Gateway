@@ -512,7 +512,14 @@ static void mqtt_gateway_reload_config(bool restart_client)
     mqtt_gateway_load_topics();
 
     if (restart_client) {
-        if (s_gateway.mqtt_started) {
+        // Check mqtt_started under lock to avoid TOCTOU race
+        bool should_stop = false;
+        if (mqtt_gateway_lock_ctx(pdMS_TO_TICKS(50))) {
+            should_stop = s_gateway.mqtt_started;
+            mqtt_gateway_unlock_ctx();
+        }
+
+        if (should_stop) {
             mqtt_gateway_stop_client();
         }
         mqtt_gateway_start_client();
