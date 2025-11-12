@@ -4,11 +4,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '..', '..');
 const generatedFilePath = path.join(
-  repoRoot,
-  'main',
-  'config_manager',
+  __dirname,
   'generated_tiny_rw_registers.inc',
 );
 
