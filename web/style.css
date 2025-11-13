@@ -1385,6 +1385,47 @@ main {
 }
 
 /* Responsive adjustments for status panel */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+    }
+
+    .header-right {
+        flex: 1 1 100%;
+    }
+}
+
+@media (max-width: 1200px) {
+    .header-right {
+        justify-content: center;
+    }
+
+    .header-right .system-status-panel {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 1200px) {
+    .header-right {
+        justify-content: center;
+    }
+
+    .header-right .system-status-panel {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+    }
+
+    .header-right {
+        flex: 1 1 100%;
+    }
+}
+
 @media (max-width: 1200px) {
     .header-content {
         grid-template-columns: minmax(0, 1fr);
