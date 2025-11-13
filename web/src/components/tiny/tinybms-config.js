@@ -106,9 +106,68 @@ export class TinyBMSConfigManager {
         // Wait a bit for the partial to load
         await new Promise(resolve => setTimeout(resolve, 500));
 
+        this.setupTabs();
         this.attachEventListeners();
         await this.loadRegisters();
         await this.loadConfiguration();
+    }
+
+    /**
+     * Ensure the tab navigation is interactive even without Bootstrap's JS helpers
+     */
+    setupTabs() {
+        const tabList = document.getElementById('tinybms-config-tabs');
+        if (!tabList) return;
+
+        const tabButtons = Array.from(tabList.querySelectorAll('[role="tab"]'));
+        if (!tabButtons.length) return;
+
+        const getPanel = (button) => {
+            const selector = button.getAttribute('data-bs-target') || button.getAttribute('data-target');
+            if (!selector) return null;
+            try {
+                return document.querySelector(selector);
+            } catch (error) {
+                console.warn('TinyBMS tabs: unable to resolve selector', selector, error);
+                return null;
+            }
+        };
+
+        const activate = (button) => {
+            const panel = getPanel(button);
+            if (!panel) return;
+
+            tabButtons.forEach((tab) => {
+                tab.classList.remove('active');
+                tab.setAttribute('aria-selected', 'false');
+                const tabPanel = getPanel(tab);
+                if (tabPanel) {
+                    tabPanel.classList.remove('active', 'show');
+                }
+            });
+
+            button.classList.add('active');
+            button.setAttribute('aria-selected', 'true');
+            panel.classList.add('active', 'show');
+        };
+
+        tabButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                activate(button);
+            });
+
+            button.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                activate(button);
+            });
+        });
+
+        const initiallyActive = tabButtons.find((tab) => tab.classList.contains('active')) ?? tabButtons[0];
+        if (initiallyActive) {
+            activate(initiallyActive);
+        }
     }
 
     /**
