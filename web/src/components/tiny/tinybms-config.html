@@ -97,12 +97,13 @@
   </div>
   <div class="card-body">
     <!-- Sub-navigation tabs -->
-    <ul class="nav nav-tabs mb-4 overflow-auto" id="tinybms-config-tabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="cell-settings-tab" data-bs-toggle="tab" data-bs-target="#cell-settings" type="button" role="tab" aria-controls="cell-settings" aria-selected="true">
-          <i class="ti ti-battery-4 me-2"></i>
-          Settings
-        </button>
+    <div class="tabbed-card__toolbar mb-4">
+      <ul class="nav nav-tabs nav-compact tabbed-card__nav overflow-auto" id="tinybms-config-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="cell-settings-tab" data-bs-toggle="tab" data-bs-target="#cell-settings" type="button" role="tab" aria-controls="cell-settings" aria-selected="true">
+            <i class="ti ti-battery-4 me-2"></i>
+            Settings
+          </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="safety-tab" data-bs-toggle="tab" data-bs-target="#safety" type="button" role="tab" aria-controls="safety" aria-selected="false">
@@ -116,19 +117,30 @@
           Peripherals
         </button>
       </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance" type="button" role="tab" aria-controls="maintenance" aria-selected="false">
-          <i class="ti ti-tool me-2"></i>
-          Maintenance
-        </button>
-      </li>
-    </ul>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance" type="button" role="tab" aria-controls="maintenance" aria-selected="false">
+            <i class="ti ti-tool me-2"></i>
+            Maintenance
+          </button>
+        </li>
+      </ul>
+    </div>
 
     <!-- Tab content -->
     <div class="tab-content" id="tinybms-config-content">
       <!-- Cell Settings Tab -->
       <div class="tab-pane fade show active" id="cell-settings" role="tabpanel" aria-labelledby="cell-settings-tab">
         <form id="tinybms-cell-settings-form">
+          <div class="tab-pane-toolbar d-flex flex-wrap justify-content-end gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="cell-settings-reset">
+              <i class="ti ti-reload me-1"></i>
+              Réinitialiser
+            </button>
+            <button type="submit" class="btn btn-primary">
+              <i class="ti ti-device-floppy me-1"></i>
+              Enregistrer
+            </button>
+          </div>
           <div class="row g-4">
             <!-- Cell Settings (All in One) -->
             <div class="col-12">
@@ -323,19 +335,6 @@
               </div>
             </div>
 
-            <!-- Action buttons -->
-            <div class="col-12">
-              <div class="d-flex gap-2 justify-content-end">
-                <button type="button" class="btn btn-outline-secondary" id="cell-settings-reset">
-                  <i class="ti ti-reload me-1"></i>
-                  Réinitialiser
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  <i class="ti ti-device-floppy me-1"></i>
-                  Upload To BMS
-                </button>
-              </div>
-            </div>
           </div>
         </form>
       </div>
@@ -343,6 +342,16 @@
       <!-- Safety Tab -->
       <div class="tab-pane fade" id="safety" role="tabpanel" aria-labelledby="safety-tab">
         <form id="tinybms-safety-form">
+          <div class="tab-pane-toolbar d-flex flex-wrap justify-content-end gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="safety-reset">
+              <i class="ti ti-reload me-1"></i>
+              Réinitialiser
+            </button>
+            <button type="submit" class="btn btn-primary">
+              <i class="ti ti-device-floppy me-1"></i>
+              Enregistrer
+            </button>
+          </div>
           <div class="row g-4">
             <!-- Safety Settings (All in One) -->
             <div class="col-12">
@@ -515,19 +524,6 @@
               </div>
             </div>
 
-            <!-- Action buttons -->
-            <div class="col-12">
-              <div class="d-flex gap-2 justify-content-end">
-                <button type="button" class="btn btn-outline-secondary" id="safety-reset">
-                  <i class="ti ti-reload me-1"></i>
-                  Réinitialiser
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  <i class="ti ti-device-floppy me-1"></i>
-                  Upload To BMS
-                </button>
-              </div>
-            </div>
           </div>
         </form>
       </div>
@@ -535,6 +531,16 @@
       <!-- Peripherals Tab -->
       <div class="tab-pane fade" id="peripherals" role="tabpanel" aria-labelledby="peripherals-tab">
         <form id="tinybms-peripherals-form">
+          <div class="tab-pane-toolbar d-flex flex-wrap justify-content-end gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="peripherals-reset">
+              <i class="ti ti-reload me-1"></i>
+              Réinitialiser
+            </button>
+            <button type="submit" class="btn btn-primary">
+              <i class="ti ti-device-floppy me-1"></i>
+              Enregistrer
+            </button>
+          </div>
           <div class="row g-4">
             <!-- Peripherals Settings (All in One) -->
             <div class="col-12">
@@ -877,25 +883,18 @@
               </div>
             </div>
 
-            <!-- Action buttons -->
-            <div class="col-12">
-              <div class="d-flex gap-2 justify-content-end">
-                <button type="button" class="btn btn-outline-secondary" id="peripherals-reset">
-                  <i class="ti ti-reload me-1"></i>
-                  Réinitialiser
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  <i class="ti ti-device-floppy me-1"></i>
-                  Upload To BMS
-                </button>
-              </div>
-            </div>
           </div>
         </form>
       </div>
 
       <!-- Maintenance Tab -->
       <div class="tab-pane fade" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
+        <div class="tab-pane-toolbar d-flex flex-wrap justify-content-end gap-2">
+          <button type="button" class="btn btn-primary" id="maintenance-save">
+            <i class="ti ti-device-floppy me-1"></i>
+            Enregistrer
+          </button>
+        </div>
         <div class="row g-4">
           <!-- BMS Configuration -->
           <div class="col-lg-4">
