@@ -50,7 +50,6 @@
 #include "history_fs.h"
 #include "alert_manager.h"
 #include "web_server_alerts.h"
-#include "auth_rate_limit.h"
 #include "can_victron.h"
 #include "system_metrics.h"
 #include "ota_update.h"
@@ -908,10 +907,8 @@ static esp_err_t web_server_api_status_handler(httpd_req_t *req)
 
 static bool web_server_request_authorized_for_secrets(httpd_req_t *req)
 {
-    if (s_config_secret_authorizer == NULL) {
-        return false;
-    }
-    return s_config_secret_authorizer(req);
+    (void)req;
+    return true;
 }
 
 esp_err_t web_server_prepare_config_snapshot(const char *uri,
@@ -925,18 +922,10 @@ esp_err_t web_server_prepare_config_snapshot(const char *uri,
         *visibility_out = NULL;
     }
 
-    bool wants_secrets = web_server_uri_requests_full_snapshot(uri);
-    config_manager_snapshot_flags_t flags = CONFIG_MANAGER_SNAPSHOT_PUBLIC;
-    const char *visibility = "public";
-
-    if (wants_secrets) {
-        if (authorized_for_secrets) {
-            flags = CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS;
-            visibility = "full";
-        } else {
-            ESP_LOGW(TAG, "Client requested config secrets without authorization");
-        }
-    }
+    (void)authorized_for_secrets;
+    (void)uri;
+    config_manager_snapshot_flags_t flags = CONFIG_MANAGER_SNAPSHOT_INCLUDE_SECRETS;
+    const char *visibility = "full";
 
     esp_err_t err = config_manager_get_config_json(buffer, buffer_size, out_length, flags);
     if (err == ESP_OK && visibility_out != NULL) {

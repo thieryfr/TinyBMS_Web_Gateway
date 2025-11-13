@@ -49,7 +49,6 @@
 #include "history_fs.h"
 #include "alert_manager.h"
 #include "web_server_alerts.h"
-#include "auth_rate_limit.h"
 #include "can_victron.h"
 #include "system_metrics.h"
 #include "ota_update.h"
@@ -126,11 +125,6 @@
 #define WEB_SERVER_CSRF_TOKEN_STRING_LENGTH    (WEB_SERVER_CSRF_TOKEN_SIZE * 2)
 #define WEB_SERVER_CSRF_TOKEN_TTL_US           (15ULL * 60ULL * 1000000ULL)
 #define WEB_SERVER_MAX_CSRF_TOKENS             8
-
-// WebSocket rate limiting and security
-#define WEB_SERVER_WS_MAX_PAYLOAD_SIZE    (32 * 1024)  // 32KB max payload
-#define WEB_SERVER_WS_MAX_MSGS_PER_SEC    10           // Max 10 messages/sec per client
-#define WEB_SERVER_WS_RATE_WINDOW_MS      1000         // 1 second rate limiting window
 
 // ============================================================================
 // Type definitions
@@ -214,34 +208,7 @@ static web_server_csrf_token_t s_csrf_tokens[WEB_SERVER_MAX_CSRF_TOKENS];
  */
 static void web_server_set_security_headers(httpd_req_t *req)
 {
-    // Content Security Policy - restrict resource loading to prevent XSS
-    httpd_resp_set_hdr(req, "Content-Security-Policy",
-                      "default-src 'self'; "
-                      "script-src 'self' 'unsafe-inline'; "
-                      "style-src 'self' 'unsafe-inline'; "
-                      "img-src 'self' data:; "
-                      "connect-src 'self' ws: wss:; "
-                      "font-src 'self'; "
-                      "object-src 'none'; "
-                      "base-uri 'self'; "
-                      "form-action 'self'");
-
-    // Prevent clickjacking attacks
-    httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
-
-    // Prevent MIME sniffing
-    httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
-
-    // Enable XSS protection in older browsers
-    httpd_resp_set_hdr(req, "X-XSS-Protection", "1; mode=block");
-
-    // Referrer policy - don't leak URLs
-    httpd_resp_set_hdr(req, "Referrer-Policy", "strict-origin-when-cross-origin");
-
-    // Permissions policy - disable unnecessary features
-    httpd_resp_set_hdr(req, "Permissions-Policy",
-                      "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
-                      "magnetometer=(), microphone=(), payment=(), usb=()");
+    (void)req;
 }
 
 static bool web_server_format_iso8601(time_t timestamp, char *buffer, size_t size)

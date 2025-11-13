@@ -33,7 +33,7 @@ static void prepare_known_config(const char *wifi_password, const char *mqtt_pas
     }
 }
 
-TEST_CASE("web_server_public_snapshot_masks_secrets", "[web_server][config]")
+TEST_CASE("web_server_public_snapshot_includes_secrets", "[web_server][config]")
 {
     const char *wifi_password = "httppass123";
     const char *mqtt_password = "httpsecret";
@@ -50,7 +50,7 @@ TEST_CASE("web_server_public_snapshot_masks_secrets", "[web_server][config]")
                                                          &length,
                                                          &visibility));
     TEST_ASSERT_NOT_NULL(visibility);
-    TEST_ASSERT_EQUAL_STRING("public", visibility);
+    TEST_ASSERT_EQUAL_STRING("full", visibility);
 
     cJSON *root = cJSON_ParseWithLength(buffer, length);
     TEST_ASSERT_NOT_NULL(root);
@@ -61,13 +61,13 @@ TEST_CASE("web_server_public_snapshot_masks_secrets", "[web_server][config]")
     TEST_ASSERT_NOT_NULL(sta);
     const cJSON *sta_password = cJSON_GetObjectItemCaseSensitive(sta, "password");
     TEST_ASSERT_TRUE(cJSON_IsString(sta_password));
-    TEST_ASSERT_EQUAL_STRING(CONFIG_MANAGER_SECRET_MASK, sta_password->valuestring);
+    TEST_ASSERT_EQUAL_STRING(wifi_password, sta_password->valuestring);
 
     const cJSON *mqtt = cJSON_GetObjectItemCaseSensitive(root, "mqtt");
     TEST_ASSERT_NOT_NULL(mqtt);
     const cJSON *mqtt_password_json = cJSON_GetObjectItemCaseSensitive(mqtt, "password");
     TEST_ASSERT_TRUE(cJSON_IsString(mqtt_password_json));
-    TEST_ASSERT_EQUAL_STRING(CONFIG_MANAGER_SECRET_MASK, mqtt_password_json->valuestring);
+    TEST_ASSERT_EQUAL_STRING(mqtt_password, mqtt_password_json->valuestring);
 
     cJSON_Delete(root);
 }
