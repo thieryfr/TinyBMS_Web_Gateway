@@ -10,6 +10,7 @@ export class ConfigRegistersManager {
         this.originalValues = new Map();
         this.dirtyRegisters = new Set();
         this.containerElement = null;
+        this.formTabsInitialized = false;
         this.registerKeyFallback = {
             300: 'fully_charged_voltage_mv',
             301: 'fully_discharged_voltage_mv',
@@ -53,15 +54,84 @@ export class ConfigRegistersManager {
      * @param {string} containerId - ID of the container element
      */
     async init(containerId) {
+        this.setupFormTabs();
+
         this.containerElement = document.getElementById(containerId);
         if (!this.containerElement) {
-            console.error(`Container element '${containerId}' not found`);
+            console.warn(`Configuration registers container '${containerId}' not found; skipping register UI initialisation`);
             return;
         }
 
         await this.loadRegisters();
         this.render();
         this.attachEventListeners();
+    }
+
+    /**
+     * Ensure the configuration form tabs are interactive
+     */
+    setupFormTabs() {
+        if (this.formTabsInitialized) return;
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.setupFormTabs(), { once: true });
+            return;
+        }
+
+        const tabList = document.getElementById('configuration-tablist');
+        if (!tabList) return;
+
+        const tabButtons = Array.from(tabList.querySelectorAll('[role="tab"]'));
+        if (!tabButtons.length) return;
+
+        const getPanel = (button) => {
+            const selector = button.getAttribute('data-bs-target') || button.getAttribute('data-target');
+            if (!selector) return null;
+            try {
+                return document.querySelector(selector);
+            } catch (error) {
+                console.warn('Configuration tabs: unable to resolve selector', selector, error);
+                return null;
+            }
+        };
+
+        const activate = (button) => {
+            const panel = getPanel(button);
+            if (!panel) return;
+
+            tabButtons.forEach((tab) => {
+                tab.classList.remove('active');
+                tab.setAttribute('aria-selected', 'false');
+                const tabPanel = getPanel(tab);
+                if (tabPanel) {
+                    tabPanel.classList.remove('active', 'show');
+                }
+            });
+
+            button.classList.add('active');
+            button.setAttribute('aria-selected', 'true');
+            panel.classList.add('active', 'show');
+        };
+
+        tabButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                activate(button);
+            });
+
+            button.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                activate(button);
+            });
+        });
+
+        const initiallyActive = tabButtons.find((tab) => tab.classList.contains('active')) ?? tabButtons[0];
+        if (initiallyActive) {
+            activate(initiallyActive);
+        }
+
+        this.formTabsInitialized = true;
     }
 
     /**
