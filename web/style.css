@@ -59,6 +59,57 @@ body {
     letter-spacing: -0.011em;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Responsive dashboard grid                                                  */
+/* -------------------------------------------------------------------------- */
+
+.row {
+    --row-gap: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--row-gap);
+    margin: 0;
+    padding: 0;
+}
+
+.row.g-3,
+.row.row-cards {
+    --row-gap: 1.25rem;
+}
+
+.row > [class*='col-'] {
+    grid-column: span 12;
+    min-width: 0;
+}
+
+@media (min-width: 576px) {
+    .row > .col-sm-6 {
+        grid-column: span 6;
+    }
+}
+
+@media (min-width: 768px) {
+    .row > .col-md-4 {
+        grid-column: span 4;
+    }
+}
+
+@media (min-width: 992px) {
+    .row > .col-lg-4 {
+        grid-column: span 4;
+    }
+
+    .row > .col-lg-8 {
+        grid-column: span 8;
+    }
+}
+
+@media (min-width: 1200px) {
+    .row > .col-xl-3 {
+        grid-column: span 3;
+    }
+}
+
 #app {
     display: flex;
     flex-direction: column;
