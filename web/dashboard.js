@@ -2119,6 +2119,12 @@ function updateBatteryDisplay(data) {
     // Update KPI panel
     updateKPI(data);
 
+    const telemetryTimestamp = resolveTimestamp(data, Date.now());
+    const formattedTimestamp = formatTimestampValue(telemetryTimestamp);
+    const relativeTimestamp = formatRelativeTime(telemetryTimestamp);
+    set('telemetry-last-update', formattedTimestamp);
+    set('telemetry-last-update-relative', relativeTimestamp);
+
     // Update voltage
     set('battery-voltage', formatValue(data.pack_voltage_v, ' V'));
     set('battery-minmax', `min ${data.min_cell_mv || 0} mV • max ${data.max_cell_mv || 0} mV`);
