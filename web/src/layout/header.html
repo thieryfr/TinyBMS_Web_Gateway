@@ -1,115 +1,120 @@
 <header class="navbar navbar-expand-md navbar-dark app-header">
   <div class="container-xl">
-    <!-- Logo et titre -->
-    <div class="app-logo">
-      <div class="app-logo-icon">
-        <i class="ti ti-battery-charging-2"></i>
+    <div class="header-content">
+      <div class="header-brand">
+        <!-- Logo et titre -->
+        <div class="app-logo">
+          <div class="app-logo-icon">
+            <i class="ti ti-battery-charging-2"></i>
+          </div>
+          <div class="app-logo-text">
+            <div class="app-logo-title">TinyBMS</div>
+            <div class="app-logo-subtitle">Battery Management</div>
+          </div>
+        </div>
       </div>
-      <div class="app-logo-text">
-        <div class="app-logo-title">TinyBMS</div>
-        <div class="app-logo-subtitle">Battery Management</div>
-      </div>
-    </div>
 
-    <!-- KPI Panel -->
-    <div class="kpi-panel">
-      <div class="kpi-item" data-tooltip="État de charge et santé des batteries">
-        <div class="kpi-icon bg-success-lt">
-          <i class="ti ti-battery-charging"></i>
-        </div>
-        <div class="kpi-content">
-          <div class="kpi-label">SOC / SOH</div>
-          <div class="kpi-value" id="kpi-soc-soh">-- % / -- %</div>
+      <div class="header-metrics">
+        <!-- KPI Panel -->
+        <div class="kpi-panel">
+          <div class="kpi-item" data-tooltip="État de charge et santé des batteries">
+            <div class="kpi-icon bg-success-lt">
+              <i class="ti ti-battery-charging"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">SOC / SOH</div>
+              <div class="kpi-value" id="kpi-soc-soh">-- % / -- %</div>
+            </div>
+          </div>
+          <div class="kpi-item" data-tooltip="Puissance actuelle du pack">
+            <div class="kpi-icon bg-primary-lt">
+              <i class="ti ti-bolt"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Puissance</div>
+              <div class="kpi-value" id="kpi-power">-- W</div>
+            </div>
+          </div>
+          <div class="kpi-item" data-tooltip="Charge restante estimée">
+            <div class="kpi-icon bg-cyan-lt">
+              <i class="ti ti-clock-hour-4"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Restant</div>
+              <div class="kpi-value" id="kpi-time-remaining">-- h</div>
+            </div>
+          </div>
+          <div class="kpi-item" data-tooltip="Tension limite de charge">
+            <div class="kpi-icon bg-info-lt">
+              <i class="ti ti-gauge"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">CVL</div>
+              <div class="kpi-value" id="kpi-cvl">-- V</div>
+            </div>
+          </div>
+          <div class="kpi-item" data-tooltip="Nb. cycles de charge">
+            <div class="kpi-icon bg-warning-lt">
+              <i class="ti ti-refresh"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Cycles</div>
+              <div class="kpi-value" id="kpi-cycles">--</div>
+            </div>
+          </div>
+          <div class="kpi-item" data-tooltip="Statut TinyBMS (Register 50)">
+            <div class="kpi-icon bg-purple-lt">
+              <i class="ti ti-cpu"></i>
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">TinyBMS</div>
+              <div class="kpi-value" id="tinybms-status-badge">--</div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="kpi-item" data-tooltip="Puissance actuelle du pack">
-        <div class="kpi-icon bg-primary-lt">
-          <i class="ti ti-bolt"></i>
+
+      <div class="header-status">
+        <div class="system-status-panel" role="tablist">
+          <button type="button" class="status-module active" data-module="webserver" data-tab="battery" role="tab" aria-label="Batterie">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">Batteries</span>
+          </button>
+          <button type="button" class="status-module" data-module="uart" data-tab="uart-dashboard" role="tab" aria-label="Dashboard UART">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">UART</span>
+          </button>
+          <button type="button" class="status-module" id="tab-can-dashboard-label" data-module="can" data-tab="can-dashboard" role="tab" aria-label="Dashboard CAN">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">CAN</span>
+          </button>
+          <button type="button" class="status-module" data-module="storage" data-tab="history" role="tab" aria-label="Historique">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">History</span>
+          </button>
+          <button type="button" class="status-module" data-module="wifi" data-tab="config" role="tab" aria-label="Configuration">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">Config</span>
+          </button>
+          <button type="button" class="status-module" data-module="mqtt" data-tab="mqtt-dashboard" role="tab" aria-label="Dashboard MQTT">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">MQTT</span>
+          </button>
+          <a class="status-module" href="/code-metrique.html" role="link" aria-label="Métriques du code">
+            <span class="status-led status-led-info"></span>
+            <span class="status-label">Code</span>
+            <span class="status-link-icon" aria-hidden="true"><i class="ti ti-external-link"></i></span>
+          </a>
+          <button type="button" class="status-module" data-module="uart" data-tab="tiny" role="tab" aria-label="Tiny">
+            <span class="status-led status-led-unknown"></span>
+            <span class="status-label">Tiny</span>
+          </button>
+          <button type="button" class="status-module" data-module="alerts" data-tab="alerts" role="tab" aria-label="Alertes">
+            <span class="status-led status-led-ok"></span>
+            <span class="status-label">Alertes</span>
+            <span class="badge bg-danger ms-2 d-none" id="alert-count-badge">0</span>
+          </button>
         </div>
-        <div class="kpi-content">
-          <div class="kpi-label">Puissance</div>
-          <div class="kpi-value" id="kpi-power">-- W</div>
-        </div>
-      </div>
-      <div class="kpi-item" data-tooltip="Charge restante estimée">
-        <div class="kpi-icon bg-cyan-lt">
-          <i class="ti ti-clock-hour-4"></i>
-        </div>
-        <div class="kpi-content">
-          <div class="kpi-label">Restant</div>
-          <div class="kpi-value" id="kpi-time-remaining">-- h</div>
-        </div>
-      </div>
-      <div class="kpi-item" data-tooltip="Tension limite de charge">
-        <div class="kpi-icon bg-info-lt">
-          <i class="ti ti-gauge"></i>
-        </div>
-        <div class="kpi-content">
-          <div class="kpi-label">CVL</div>
-          <div class="kpi-value" id="kpi-cvl">-- V</div>
-        </div>
-      </div>
-      <div class="kpi-item" data-tooltip="Nb. cycles de charge">
-        <div class="kpi-icon bg-warning-lt">
-          <i class="ti ti-refresh"></i>
-        </div>
-        <div class="kpi-content">
-          <div class="kpi-label">Cycles</div>
-          <div class="kpi-value" id="kpi-cycles">--</div>
-        </div>
-      </div>
-      <div class="kpi-item" data-tooltip="Statut TinyBMS (Register 50)">
-        <div class="kpi-icon bg-purple-lt">
-          <i class="ti ti-cpu"></i>
-        </div>
-        <div class="kpi-content">
-          <div class="kpi-label">TinyBMS</div>
-          <div class="kpi-value" id="tinybms-status-badge">--</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="container-xl mt-3">
-    <div class="d-flex justify-content-center">
-      <div class="system-status-panel" role="tablist">
-        <button type="button" class="status-module active" data-module="webserver" data-tab="battery" role="tab" aria-label="Batterie">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Batteries</span>
-        </button>
-        <button type="button" class="status-module" data-module="uart" data-tab="uart-dashboard" role="tab" aria-label="Dashboard UART">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">UART</span>
-        </button>
-        <button type="button" class="status-module" id="tab-can-dashboard-label" data-module="can" data-tab="can-dashboard" role="tab" aria-label="Dashboard CAN">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">CAN</span>
-        </button>
-        <button type="button" class="status-module" data-module="storage" data-tab="history" role="tab" aria-label="Historique">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">History</span>
-        </button>
-        <button type="button" class="status-module" data-module="wifi" data-tab="config" role="tab" aria-label="Configuration">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Config</span>
-        </button>
-        <button type="button" class="status-module" data-module="mqtt" data-tab="mqtt-dashboard" role="tab" aria-label="Dashboard MQTT">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">MQTT</span>
-        </button>
-        <a class="status-module" href="/code-metrique.html" role="link" aria-label="Métriques du code">
-          <span class="status-led status-led-info"></span>
-          <span class="status-label">Code</span>
-          <span class="status-link-icon" aria-hidden="true"><i class="ti ti-external-link"></i></span>
-        </a>
-        <button type="button" class="status-module" data-module="uart" data-tab="tiny" role="tab" aria-label="Tiny">
-          <span class="status-led status-led-unknown"></span>
-          <span class="status-label">Tiny</span>
-        </button>
-        <button type="button" class="status-module" data-module="alerts" data-tab="alerts" role="tab" aria-label="Alertes">
-          <span class="status-led status-led-ok"></span>
-          <span class="status-label">Alertes</span>
-          <span class="badge bg-danger ms-2 d-none" id="alert-count-badge">0</span>
-        </button>
       </div>
     </div>
   </div>

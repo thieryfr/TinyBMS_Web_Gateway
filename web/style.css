@@ -999,11 +999,12 @@ main {
 /* System Status Panel with LED indicators - Now with navigation */
 .system-status-panel {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.625rem;
     padding: 0.875rem 1.25rem;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    align-content: flex-start;
+    justify-content: flex-end;
     background: var(--surface-alt);
     border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1231,6 +1232,37 @@ main {
     letter-spacing: 0.05em;
 }
 
+.header-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+    grid-template-rows: auto auto;
+    align-items: stretch;
+    gap: 1.25rem 1.5rem;
+}
+
+.header-brand {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+
+.header-metrics {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.header-status {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.header-status .system-status-panel {
+    width: 100%;
+    justify-content: flex-end;
+}
+
 /* KPI Panel - Professional Statistics Display */
 .kpi-panel {
     display: grid;
@@ -1238,7 +1270,7 @@ main {
     gap: 1rem 1.25rem;
     align-items: stretch;
     max-width: 900px;
-    margin: 0 auto;
+    margin: 0;
 }
 
 .kpi-item {
@@ -1353,6 +1385,22 @@ main {
 }
 
 /* Responsive adjustments for status panel */
+@media (max-width: 1200px) {
+    .header-content {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .header-status {
+        grid-column: 1;
+        grid-row: auto;
+        justify-content: center;
+    }
+
+    .header-status .system-status-panel {
+        justify-content: center;
+    }
+}
+
 @media (max-width: 1200px) {
     .system-status-panel {
         flex-wrap: wrap;
