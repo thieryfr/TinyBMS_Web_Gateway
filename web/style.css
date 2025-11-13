@@ -1231,6 +1231,35 @@ main {
     letter-spacing: 0.05em;
 }
 
+.header-content {
+    display: flex;
+    align-items: stretch;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    flex: 1 1 640px;
+    min-width: 280px;
+}
+
+.header-right {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    flex: 0 1 420px;
+    min-width: 280px;
+}
+
+.header-right .system-status-panel {
+    width: 100%;
+    justify-content: flex-start;
+    height: 100%;
+}
+
 /* KPI Panel - Professional Statistics Display */
 .kpi-panel {
     display: grid;
@@ -1238,7 +1267,7 @@ main {
     gap: 1rem 1.25rem;
     align-items: stretch;
     max-width: 900px;
-    margin: 0 auto;
+    margin: 0;
 }
 
 .kpi-item {
@@ -1353,6 +1382,26 @@ main {
 }
 
 /* Responsive adjustments for status panel */
+@media (max-width: 1200px) {
+    .header-right {
+        justify-content: center;
+    }
+
+    .header-right .system-status-panel {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+    }
+
+    .header-right {
+        flex: 1 1 100%;
+    }
+}
+
 @media (max-width: 1200px) {
     .system-status-panel {
         flex-wrap: wrap;
