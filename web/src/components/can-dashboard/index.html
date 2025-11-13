@@ -70,9 +70,9 @@
     </div>
   </div>
 
-  <!-- Charts & Bus state -->
+  <!-- Charts Row -->
   <div class="row g-3 mb-3">
-    <div class="col-xxl-8">
+    <div class="col-xl-6 col-xxl-6">
       <div class="card h-100">
         <div class="card-header d-flex flex-wrap align-items-center gap-2">
           <h3 class="card-title mb-0">Analyse du trafic CAN</h3>
@@ -96,42 +96,26 @@
           </div>
         </div>
         <div class="card-body">
-          <div class="mb-4">
-            <h4 class="card-subtitle text-secondary text-uppercase fs-6 mb-2">Heatmap des identifiants</h4>
-            <div id="can-heatmap-chart" class="echart-container" role="img" aria-label="Heatmap des identifiants CAN"></div>
-          </div>
-          <div>
-            <h4 class="card-subtitle text-secondary text-uppercase fs-6 mb-2">Débit par fenêtre</h4>
-            <div id="can-throughput-chart" class="echart-container" role="img" aria-label="Histogramme des débits CAN"></div>
-          </div>
+          <h4 class="card-subtitle text-secondary text-uppercase fs-6 mb-2">Heatmap des identifiants</h4>
+          <div id="can-heatmap-chart" class="echart-container" role="img" aria-label="Heatmap des identifiants CAN"></div>
         </div>
       </div>
     </div>
-    <div class="col-xxl-4">
+    <div class="col-xl-6 col-xxl-6">
       <div class="card h-100">
-        <div class="card-header d-flex align-items-center">
-          <h3 class="card-title mb-0">État du bus</h3>
-          <span id="can-dash-bus-state-badge" class="badge status-badge ms-auto">Inconnu</span>
+        <div class="card-header">
+          <h3 class="card-title mb-0">Débit par fenêtre</h3>
         </div>
         <div class="card-body">
-          <dl class="status-kv">
-            <div><dt>Dernière mise à jour</dt><dd id="can-dash-last-update">--</dd></div>
-            <div><dt>Driver</dt><dd id="can-dash-driver-state">--</dd></div>
-            <div><dt>État courant</dt><dd id="can-dash-bus-state-text">--</dd></div>
-            <div><dt>Fenêtre analyse</dt><dd id="can-dash-bus-window">--</dd></div>
-            <div><dt>Bus-off cumulés</dt><dd id="can-dash-bus-off-count">0</dd></div>
-            <div><dt>Erreurs bus</dt><dd id="can-dash-bus-error-count">0</dd></div>
-            <div><dt>Arbitrages perdus</dt><dd id="can-dash-arbitration-count">0</dd></div>
-            <div><dt>Réceptions manquées</dt><dd id="can-dash-rx-missed-count">0</dd></div>
-          </dl>
+          <div id="can-throughput-chart" class="echart-container" role="img" aria-label="Histogramme des débits CAN"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Tables Row -->
+  <!-- Status Row -->
   <div class="row g-3 mb-3">
-    <div class="col-xl-4">
+    <div class="col-xl-6 col-xxl-6">
       <div class="card h-100">
         <div class="card-header">
           <h3 class="card-title mb-0">Compteurs d'erreurs</h3>
@@ -156,7 +140,31 @@
         </div>
       </div>
     </div>
-    <div class="col-xl-4">
+    <div class="col-xl-6 col-xxl-6">
+      <div class="card h-100">
+        <div class="card-header d-flex align-items-center">
+          <h3 class="card-title mb-0">État du bus</h3>
+          <span id="can-dash-bus-state-badge" class="badge status-badge ms-auto">Inconnu</span>
+        </div>
+        <div class="card-body">
+          <dl class="status-kv">
+            <div><dt>Dernière mise à jour</dt><dd id="can-dash-last-update">--</dd></div>
+            <div><dt>Driver</dt><dd id="can-dash-driver-state">--</dd></div>
+            <div><dt>État courant</dt><dd id="can-dash-bus-state-text">--</dd></div>
+            <div><dt>Fenêtre analyse</dt><dd id="can-dash-bus-window">--</dd></div>
+            <div><dt>Bus-off cumulés</dt><dd id="can-dash-bus-off-count">0</dd></div>
+            <div><dt>Erreurs bus</dt><dd id="can-dash-bus-error-count">0</dd></div>
+            <div><dt>Arbitrages perdus</dt><dd id="can-dash-arbitration-count">0</dd></div>
+            <div><dt>Réceptions manquées</dt><dd id="can-dash-rx-missed-count">0</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tables Row -->
+  <div class="row g-3 mb-3">
+    <div class="col-xl-6 col-xxl-6">
       <div class="card h-100">
         <div class="card-header">
           <h3 class="card-title mb-0">Trafic cumulé</h3>
@@ -180,7 +188,7 @@
         </div>
       </div>
     </div>
-    <div class="col-xl-4">
+    <div class="col-xl-6 col-xxl-6">
       <div class="card h-100">
         <div class="card-header">
           <h3 class="card-title mb-0">Keepalive détaillé</h3>
