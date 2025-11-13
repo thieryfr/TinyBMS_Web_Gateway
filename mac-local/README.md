@@ -19,18 +19,19 @@ Cette application Node.js fournit une interface web locale exécutée sur le Mac
 
 ## 🚀 Installation
 
-```bash
-cd mac-local
+Dans le répertoire mac-local
+cd /home/user/TinyBMS-GW/mac-local
+
+# Installer les dépendances
 npm install
-```
 
-## ▶️ Démarrage du serveur local
+# Lister les registres (sans connexion série nécessaire)
+npm run list-registers
 
-```bash
+# Démarrer le serveur
 npm start
-```
 
-Par défaut, le serveur écoute sur `http://localhost:5173`.
+Par défaut, le serveur écoute sur `http://localhost:5173`
 
 ## 🖥️ Utilisation
 
