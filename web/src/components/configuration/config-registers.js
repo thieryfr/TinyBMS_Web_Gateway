@@ -54,9 +54,11 @@ export class ConfigRegistersManager {
      * @param {string} containerId - ID of the container element
      */
     async init(containerId) {
+        this.setupFormTabs();
+
         this.containerElement = document.getElementById(containerId);
         if (!this.containerElement) {
-            console.error(`Container element '${containerId}' not found`);
+            console.warn(`Configuration registers container '${containerId}' not found; skipping register UI initialisation`);
             return;
         }
 
