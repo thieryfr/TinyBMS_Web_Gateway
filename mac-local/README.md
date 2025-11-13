@@ -54,7 +54,23 @@ La commande affiche un tableau Markdown comprenant l’adresse, la clé, le libe
 
 Les paramètres par défaut (baudrate 115200 bauds) conviennent au TinyBMS. Ils peuvent être ajustés dans `src/server.js` si nécessaire.
 
-## 📁 Structure
+## 📁 Structure du module (10 fichiers, 98K)
+
+mac-local/
+├── README.md                              (Documentation)
+├── package.json                           (Dépendances npm)
+├── public/                                (Interface web)
+│   ├── css/mac-app.css                   (Styles)
+│   ├── index.html                        (Page principale)
+│   └── js/mac-app.js                     (Logique client)
+├── scripts/
+│   └── list-registers.js                 (Utilitaire)
+└── src/                                   (Backend)
+    ├── generated_tiny_rw_registers.inc   (✅ Embarqué - 26K, 34 registres)
+    ├── registers.js                      (Parser de registres)
+    ├── serial.js                         (Communication USB-UART)
+    └── server.js                         (Serveur Express)
+
 
 - `data/registers.json` : catalogue précompilé des registres TinyBMS embarqué avec l'application.
 - `src/registers.js` : charge le catalogue JSON embarqué (ou retombe sur le fichier généré du firmware si présent).
