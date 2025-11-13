@@ -7,11 +7,6 @@
 
 #include "event_bus.h"
 
-// WebSocket rate limiting and security constants
-#define WEB_SERVER_WS_MAX_PAYLOAD_SIZE    (32 * 1024)  // 32KB max payload
-#define WEB_SERVER_WS_MAX_MSGS_PER_SEC    10           // Max 10 messages/sec per client
-#define WEB_SERVER_WS_RATE_WINDOW_MS      1000         // 1 second rate limiting window
-
 /**
  * @brief Initialise the embedded HTTP server and register REST/WebSocket handlers.
  *

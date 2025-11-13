@@ -15,11 +15,11 @@ endmenu
 menu "Security"
     config TINYBMS_WEB_AUTH_BASIC_ENABLE
         bool "Enable HTTP Basic authentication for REST API"
-        default y
+        default n
         help
-            Protect sensitive REST endpoints with HTTP Basic authentication.
-            Credentials are stored in NVS using a salted SHA-256 hash and can
-            be rotated without reflashing the firmware.
+            Previously enabled HTTP Basic authentication on the REST API.
+            This feature is now disabled by default to simplify development
+            access to the web server.
 
     config TINYBMS_WEB_AUTH_USERNAME
         string "Default HTTP Basic username"

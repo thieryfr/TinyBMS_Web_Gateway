@@ -8,7 +8,6 @@
  * - Event streaming (/ws/events)
  * - UART data streaming (/ws/uart)
  * - CAN data streaming (/ws/can)
- * - Rate limiting and payload size validation
  */
 
 #include "web_server.h"
@@ -18,16 +17,12 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "esp_http_server.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
 #include "monitoring.h"
-
-// WebSocket rate limiting and security
-#define WEB_SERVER_WS_RATE_WINDOW_MS      1000         // 1 second rate limiting window
 
 static const char *TAG = "web_server_ws";
 
@@ -38,10 +33,6 @@ static const char *TAG = "web_server_ws";
 typedef struct ws_client {
     int fd;
     struct ws_client *next;
-    // Rate limiting
-    int64_t last_reset_time;      // Timestamp (ms) of rate window start
-    uint32_t message_count;        // Messages sent in current window
-    uint32_t total_violations;     // Total rate limit violations
 } ws_client_t;
 
 // ============================================================================
@@ -107,8 +98,6 @@ static void ws_client_list_add(ws_client_t **list, int fd)
 
     client->fd = fd;
     client->next = *list;
-    // Initialize rate limiting (calloc already zeroed message_count and total_violations)
-    client->last_reset_time = esp_timer_get_time() / 1000;  // Convert to ms
     *list = client;
 
     xSemaphoreGive(g_server_mutex);
@@ -149,14 +138,6 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         return;
     }
 
-    // Validate payload size to prevent DoS attacks
-    if (length > WEB_SERVER_WS_MAX_PAYLOAD_SIZE) {
-        ESP_LOGW(TAG, "WebSocket broadcast: payload too large (%zu bytes > %d max), dropping",
-                 length, WEB_SERVER_WS_MAX_PAYLOAD_SIZE);
-        return;
-    }
-
-    // Calculer la longueur du payload (sans le '\0' final si présent)
     size_t payload_length = length;
     if (payload_length > 0 && payload[payload_length - 1] == '\0') {
         payload_length -= 1;
@@ -166,64 +147,30 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         return;
     }
 
-    // Copier la liste des FDs sous mutex pour minimiser la section critique
     #define MAX_BROADCAST_CLIENTS 32
     int client_fds[MAX_BROADCAST_CLIENTS];
     size_t client_count = 0;
+    size_t total_clients = 0;
 
     if (xSemaphoreTake(g_server_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         ESP_LOGW(TAG, "WebSocket broadcast: failed to acquire mutex (timeout), event dropped");
         return;
     }
 
-    int64_t current_time = esp_timer_get_time() / 1000;  // Convert to ms
-    ws_client_t *iter = *list;
-    size_t total_clients = 0;  // Count all clients, including those beyond limit
-
-    while (iter != NULL) {
+    for (ws_client_t *iter = *list; iter != NULL; iter = iter->next) {
         total_clients++;
-
-        // Check if we've exceeded the broadcast limit
-        if (client_count >= MAX_BROADCAST_CLIENTS) {
-            iter = iter->next;
-            continue;  // Skip remaining clients
+        if (client_count < MAX_BROADCAST_CLIENTS) {
+            client_fds[client_count++] = iter->fd;
         }
-
-        // Check and update rate limiting
-        int64_t time_since_reset = current_time - iter->last_reset_time;
-
-        // Reset rate window if expired
-        if (time_since_reset >= WEB_SERVER_WS_RATE_WINDOW_MS) {
-            iter->last_reset_time = current_time;
-            iter->message_count = 0;
-        }
-
-        // Check rate limit
-        if (iter->message_count >= WEB_SERVER_WS_MAX_MSGS_PER_SEC) {
-            iter->total_violations++;
-            if (iter->total_violations % 10 == 1) {  // Log every 10th violation to avoid spam
-                ESP_LOGW(TAG, "WebSocket client fd=%d rate limited (%u msgs in window, %u total violations)",
-                         iter->fd, iter->message_count, iter->total_violations);
-            }
-            iter = iter->next;
-            continue;  // Skip this client
-        }
-
-        // Client is within rate limit, include in broadcast
-        iter->message_count++;
-        client_fds[client_count++] = iter->fd;
-        iter = iter->next;
     }
 
-    // Warn if we have more clients than we can broadcast to
+    xSemaphoreGive(g_server_mutex);
+
     if (total_clients > MAX_BROADCAST_CLIENTS) {
         ESP_LOGW(TAG, "WebSocket client limit reached: %zu total clients, only %d will receive broadcasts",
                  total_clients, MAX_BROADCAST_CLIENTS);
     }
 
-    xSemaphoreGive(g_server_mutex);
-
-    // Diffuser hors section critique pour éviter les blocages
     httpd_ws_frame_t frame = {
         .final = true,
         .fragmented = false,
@@ -236,7 +183,6 @@ static void ws_client_list_broadcast(ws_client_t **list, const char *payload, si
         esp_err_t err = httpd_ws_send_frame_async(g_server, client_fds[i], &frame);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Failed to send to websocket client %d: %s", client_fds[i], esp_err_to_name(err));
-            // Retirer le client en échec de la liste
             ws_client_list_remove(list, client_fds[i]);
         }
     }
@@ -318,13 +264,6 @@ static esp_err_t web_server_ws_receive(httpd_req_t *req, ws_client_t **list)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to get frame length: %s", esp_err_to_name(err));
         return err;
-    }
-
-    // Validate incoming payload size to prevent DoS attacks
-    if (frame.len > WEB_SERVER_WS_MAX_PAYLOAD_SIZE) {
-        ESP_LOGW(TAG, "WebSocket receive: payload too large (%zu bytes > %d max), rejecting",
-                 frame.len, WEB_SERVER_WS_MAX_PAYLOAD_SIZE);
-        return ESP_ERR_INVALID_SIZE;
     }
 
     if (frame.len > 0) {
