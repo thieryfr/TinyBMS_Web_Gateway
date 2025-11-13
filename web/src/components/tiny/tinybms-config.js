@@ -229,6 +229,11 @@ export class TinyBMSConfigManager {
             uploadConfigBtn.addEventListener('click', () => this.uploadConfigToBMS());
         }
 
+        const maintenanceSaveBtn = document.getElementById('maintenance-save');
+        if (maintenanceSaveBtn) {
+            maintenanceSaveBtn.addEventListener('click', () => this.uploadConfigToBMS());
+        }
+
         const updateFirmwareBtn = document.getElementById('update-bms-firmware');
         if (updateFirmwareBtn) {
             updateFirmwareBtn.addEventListener('click', () => this.updateFirmware());
