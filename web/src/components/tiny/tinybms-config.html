@@ -34,6 +34,31 @@
     color: white !important;
   }
 
+  #tinybms-config-tabs {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  #tinybms-config-tabs .nav-item {
+    flex: 0 0 auto;
+  }
+
+  #tinybms-config-tabs .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  @media (min-width: 992px) {
+    #tinybms-config-tabs {
+      flex-wrap: nowrap;
+    }
+  }
+
   #tinybms-config-content .field-with-current {
     display: flex;
     align-items: center;
@@ -66,17 +91,17 @@
         Configuration TinyBMS
       </h3>
       <p class="card-subtitle text-secondary mb-0 mt-2">
-        Configurez les paramètres cellules, sécurité et périphériques.
+        Configurez les paramètres, sécurité, périphériques et maintenance.
       </p>
     </div>
   </div>
   <div class="card-body">
     <!-- Sub-navigation tabs -->
-    <ul class="nav nav-tabs nav-fill mb-4" id="tinybms-config-tabs" role="tablist">
+    <ul class="nav nav-tabs mb-4 overflow-auto" id="tinybms-config-tabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="cell-settings-tab" data-bs-toggle="tab" data-bs-target="#cell-settings" type="button" role="tab" aria-controls="cell-settings" aria-selected="true">
           <i class="ti ti-battery-4 me-2"></i>
-          Cell Settings
+          Settings
         </button>
       </li>
       <li class="nav-item" role="presentation">
@@ -109,7 +134,7 @@
             <div class="col-12">
               <h4 class="text-secondary text-uppercase fs-6 mb-3">
                 <i class="ti ti-battery-4 me-2"></i>
-                Cell Settings
+                Settings
               </h4>
               <div class="card bg-dark border border-secondary">
                 <div class="card-body">
